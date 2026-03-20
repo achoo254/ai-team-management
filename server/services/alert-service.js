@@ -1,90 +1,71 @@
 const { getDb } = require('../db/database');
 const config = require('../config');
 
-const { highDailyCostCents, weeklyPaceCostCents, sessionSpikeCount, inactivityDays } = config.alerts;
-
-/** Insert alert if not already exists for same seat+type+date */
-function insertAlert(db, seatEmail, type, message) {
+/** Insert alert if not already exists for same seat+type today */
+function insertIfNew(db, seatEmail, type, message) {
   const today = new Date().toISOString().split('T')[0];
   const existing = db.prepare(
     'SELECT id FROM alerts WHERE seat_email = ? AND type = ? AND date(created_at) = ?'
   ).get(seatEmail, type, today);
-
   if (existing) return false;
-
-  db.prepare(
-    'INSERT INTO alerts (seat_email, type, message) VALUES (?, ?, ?)'
-  ).run(seatEmail, type, message);
-
+  db.prepare('INSERT INTO alerts (seat_email, type, message) VALUES (?, ?, ?)').run(seatEmail, type, message);
   return true;
 }
 
 /**
- * Check all alert rules and insert new alerts as needed
- * @returns {Promise<{ created: number }>}
+ * Check alert rules based on manual usage logs (session-based, not cost-based)
+ * Rules:
+ * - session_spike: >10 sessions/day per seat
+ * - limit_warning: >30 sessions/week per seat
+ * - no_activity: no logs in >3 days for a seat
  */
-async function checkAlerts() {
+function checkAlerts() {
   const db = getDb();
   let created = 0;
-  const today = new Date().toISOString().split('T')[0];
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-  const inactivityCutoff = new Date(Date.now() - inactivityDays * 86400000).toISOString().split('T')[0];
 
-  // high_usage: today's cost > threshold per seat
-  const dailyUsage = db.prepare(`
-    SELECT seat_email, estimated_cost_cents
-    FROM usage_logs
-    WHERE date = ?
-  `).all(today);
+  // Rule 1: Session spike today (>10 sessions)
+  const dailySessions = db.prepare(`
+    SELECT seat_email, SUM(sessions) as total
+    FROM usage_logs WHERE date = date('now')
+    GROUP BY seat_email HAVING total >= ?
+  `).all(config.alerts.sessionSpikeCount);
 
-  for (const row of dailyUsage) {
-    if (row.estimated_cost_cents > highDailyCostCents) {
-      const msg = `High daily cost: $${(row.estimated_cost_cents / 100).toFixed(2)} (threshold: $${(highDailyCostCents / 100).toFixed(2)})`;
-      if (insertAlert(db, row.seat_email, 'high_usage', msg)) created++;
-    }
+  for (const row of dailySessions) {
+    const msg = `Seat ${row.seat_email}: ${row.total} sessions hôm nay (ngưỡng: ${config.alerts.sessionSpikeCount})`;
+    if (insertIfNew(db, row.seat_email, 'session_spike', msg)) created++;
   }
 
-  // limit_warning: weekly pace per seat
-  const weeklyUsage = db.prepare(`
-    SELECT seat_email, SUM(estimated_cost_cents) as weekly_cost
-    FROM usage_logs
-    WHERE date >= ?
-    GROUP BY seat_email
-  `).all(sevenDaysAgo);
+  // Rule 2: Weekly pace (>30 sessions/week)
+  const weeklySessions = db.prepare(`
+    SELECT seat_email, SUM(sessions) as total
+    FROM usage_logs WHERE date >= date('now', '-7 days')
+    GROUP BY seat_email HAVING total >= 30
+  `).all();
 
-  for (const row of weeklyUsage) {
-    if (row.weekly_cost > weeklyPaceCostCents) {
-      const msg = `Weekly pace exceeded: $${(row.weekly_cost / 100).toFixed(2)} (threshold: $${(weeklyPaceCostCents / 100).toFixed(2)})`;
-      if (insertAlert(db, row.seat_email, 'limit_warning', msg)) created++;
-    }
+  for (const row of weeklySessions) {
+    const msg = `Seat ${row.seat_email}: ${row.total} sessions tuần này. Nên giảm tải.`;
+    if (insertIfNew(db, row.seat_email, 'limit_warning', msg)) created++;
   }
 
-  // session_spike: today sessions > threshold
-  for (const row of dailyUsage) {
-    const sessions = db.prepare(
-      'SELECT sessions FROM usage_logs WHERE seat_email = ? AND date = ?'
-    ).get(row.seat_email, today);
-
-    if (sessions && sessions.sessions > sessionSpikeCount) {
-      const msg = `Session spike: ${sessions.sessions} sessions today (threshold: ${sessionSpikeCount})`;
-      if (insertAlert(db, row.seat_email, 'session_spike', msg)) created++;
-    }
-  }
-
-  // no_activity: seats with no usage in last N days
+  // Rule 3: No activity >N days
   const allSeats = db.prepare('SELECT email FROM seats').all();
+  const cutoff = new Date(Date.now() - config.alerts.inactivityDays * 86400000).toISOString().split('T')[0];
+
   for (const seat of allSeats) {
     const recent = db.prepare(
       'SELECT id FROM usage_logs WHERE seat_email = ? AND date >= ? LIMIT 1'
-    ).get(seat.email, inactivityCutoff);
-
+    ).get(seat.email, cutoff);
     if (!recent) {
-      const msg = `No activity for ${inactivityDays}+ days`;
-      if (insertAlert(db, seat.email, 'no_activity', msg)) created++;
+      // Only alert if seat has ever been used
+      const ever = db.prepare('SELECT id FROM usage_logs WHERE seat_email = ? LIMIT 1').get(seat.email);
+      if (ever) {
+        const msg = `Seat ${seat.email}: không có hoạt động ${config.alerts.inactivityDays}+ ngày`;
+        if (insertIfNew(db, seat.email, 'no_activity', msg)) created++;
+      }
     }
   }
 
-  return { created };
+  return { alertsCreated: created };
 }
 
 module.exports = { checkAlerts };

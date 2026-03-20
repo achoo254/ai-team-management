@@ -31,19 +31,15 @@ function createTables() {
       seat_email TEXT NOT NULL,
       date TEXT NOT NULL,
       sessions INTEGER DEFAULT 0,
-      commits INTEGER DEFAULT 0,
-      lines_added INTEGER DEFAULT 0,
-      lines_removed INTEGER DEFAULT 0,
-      pull_requests INTEGER DEFAULT 0,
       input_tokens INTEGER DEFAULT 0,
-      output_tokens INTEGER DEFAULT 0,
-      cache_read_tokens INTEGER DEFAULT 0,
-      cache_creation_tokens INTEGER DEFAULT 0,
-      estimated_cost_cents REAL DEFAULT 0,
-      terminal_type TEXT,
-      raw_json TEXT,
+      tokens_before REAL DEFAULT 0,
+      tokens_after REAL DEFAULT 0,
+      purpose TEXT DEFAULT '',
+      project TEXT DEFAULT '',
+      user_name TEXT DEFAULT '',
+      user_id INTEGER,
       synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(seat_email, date)
+      UNIQUE(seat_email, date, user_id)
     );
 
     CREATE TABLE IF NOT EXISTS schedules (

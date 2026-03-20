@@ -1,87 +1,61 @@
-const { getClaudeCodeUsage } = require('./anthropic-service');
 const { getDb } = require('../db/database');
 
-/** Format date as YYYY-MM-DD */
-function formatDate(d) {
-  return d.toISOString().split('T')[0];
-}
-
-/** Get yesterday's date string */
-function yesterday() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return formatDate(d);
-}
-
 /**
- * Sum token fields from model_breakdown array
- * @param {Array} breakdown
- * @returns {{ input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens }}
+ * Manual usage log entry — user self-reports their session
+ * @param {{ seatEmail, userId, userName, date, sessions, tokensBefore, tokensAfter, purpose, project }} data
  */
-function sumTokens(breakdown = []) {
-  return breakdown.reduce(
-    (acc, m) => {
-      acc.input_tokens += m.input_tokens || 0;
-      acc.output_tokens += m.output_tokens || 0;
-      acc.cache_read_tokens += m.cache_read_tokens || 0;
-      acc.cache_creation_tokens += m.cache_creation_tokens || 0;
-      return acc;
-    },
-    { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }
-  );
-}
-
-/**
- * Sync usage data from Anthropic API into usage_logs table
- * @param {string} [date] - ISO date (defaults to yesterday)
- * @returns {Promise<{ synced: number, date: string }>}
- */
-async function syncUsageData(date) {
-  const targetDate = date || yesterday();
-  const records = await getClaudeCodeUsage(targetDate);
+function logUsage(data) {
   const db = getDb();
+  const { seatEmail, userId, userName, date, sessions = 1, tokensBefore, tokensAfter, purpose, project } = data;
+
+  // Calculate delta tokens (approximate from % before/after)
+  const deltaTokens = (tokensAfter || 0) - (tokensBefore || 0);
+
+  const stmt = db.prepare(`
+    INSERT INTO usage_logs
+      (seat_email, date, sessions, input_tokens, purpose, project, user_name, user_id, tokens_before, tokens_after, synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `);
+
+  stmt.run(seatEmail, date, sessions, deltaTokens, purpose || '', project || '', userName || '', userId || null, tokensBefore || 0, tokensAfter || 0);
+  return { success: true, date, seatEmail };
+}
+
+/**
+ * Import CSV from Claude Console export
+ * Expected CSV columns: user_email, date, sessions, lines_accepted, accept_rate
+ * @param {Array<object>} rows - parsed CSV rows
+ */
+function importCsv(rows) {
+  const db = getDb();
+  let imported = 0;
 
   const upsert = db.prepare(`
-    INSERT INTO usage_logs
-      (seat_email, date, sessions, input_tokens, output_tokens,
-       cache_read_tokens, cache_creation_tokens, estimated_cost_cents, raw_json, synced_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    INSERT INTO usage_logs (seat_email, date, sessions, input_tokens, purpose, project, user_name, synced_at)
+    VALUES (?, ?, ?, 0, 'csv-import', '', ?, CURRENT_TIMESTAMP)
     ON CONFLICT(seat_email, date) DO UPDATE SET
-      sessions = excluded.sessions,
-      input_tokens = excluded.input_tokens,
-      output_tokens = excluded.output_tokens,
-      cache_read_tokens = excluded.cache_read_tokens,
-      cache_creation_tokens = excluded.cache_creation_tokens,
-      estimated_cost_cents = excluded.estimated_cost_cents,
-      raw_json = excluded.raw_json,
+      sessions = sessions + excluded.sessions,
       synced_at = CURRENT_TIMESTAMP
   `);
 
-  const syncTx = db.transaction((rows) => {
-    for (const row of rows) {
-      const email = row.actor?.email_address;
-      if (!email) continue;
+  const importTx = db.transaction((csvRows) => {
+    for (const row of csvRows) {
+      // Map user email to seat email via users table
+      const user = db.prepare(`
+        SELECT u.name, s.email as seat_email
+        FROM users u JOIN seats s ON s.id = u.seat_id
+        WHERE u.email = ?
+      `).get(row.user_email || row.email);
 
-      const tokens = sumTokens(row.model_breakdown);
-      const costCents = (row.estimated_cost || 0) * 100;
+      if (!user) continue;
 
-      upsert.run(
-        email,
-        targetDate,
-        row.sessions || 0,
-        tokens.input_tokens,
-        tokens.output_tokens,
-        tokens.cache_read_tokens,
-        tokens.cache_creation_tokens,
-        costCents,
-        JSON.stringify(row)
-      );
+      upsert.run(user.seat_email, row.date, parseInt(row.sessions) || 1, user.name);
+      imported++;
     }
   });
 
-  syncTx(records);
-
-  return { synced: records.length, date: targetDate };
+  importTx(rows);
+  return { imported, total: rows.length };
 }
 
-module.exports = { syncUsageData };
+module.exports = { logUsage, importCsv };

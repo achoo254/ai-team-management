@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
-const cron = require('node-cron');
 const config = require('./config');
 const { initializeDb } = require('./db/migrations');
 const { closeDb } = require('./db/database');
@@ -26,6 +25,7 @@ app.use('/api/seats', require('./routes/seat-routes'));
 app.use('/api/schedules', require('./routes/schedule-routes'));
 app.use('/api/alerts', require('./routes/alert-routes'));
 app.use('/api/admin', require('./routes/admin-routes'));
+app.use('/api/usage-log', require('./routes/usage-log-routes'));
 
 // SPA fallback — serve index.html for non-API routes
 app.use((req, res, next) => {
@@ -33,18 +33,6 @@ app.use((req, res, next) => {
     return res.sendFile(path.join(__dirname, '../public/index.html'));
   }
   next();
-});
-
-// Daily usage sync cron job
-const { syncUsageData } = require('./services/usage-sync-service');
-cron.schedule(config.syncCron, async () => {
-  console.log('[CRON] Starting daily usage sync...');
-  try {
-    await syncUsageData();
-    console.log('[CRON] Usage sync completed');
-  } catch (err) {
-    console.error('[CRON] Usage sync failed:', err.message);
-  }
 });
 
 // Start server
