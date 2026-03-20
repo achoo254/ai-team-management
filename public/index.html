@@ -71,6 +71,7 @@
 
   <!-- View containers — partials injected here before Alpine starts -->
   <div id="view-dashboard"></div>
+  <div id="view-log-usage"></div>
   <div id="view-seats"></div>
   <div id="view-schedule"></div>
   <div id="view-alerts"></div>
@@ -90,7 +91,7 @@
    * then start Alpine manually so it processes the fully-populated DOM.
    */
   (async () => {
-    const views = ['dashboard', 'seats', 'schedule', 'alerts', 'admin', 'modal'];
+    const views = ['dashboard', 'log-usage', 'seats', 'schedule', 'alerts', 'admin', 'modal'];
     await Promise.all(views.map(async (v) => {
       try {
         const res = await fetch('/views/view-' + v + '.html');
