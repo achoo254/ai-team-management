@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Đăng nhập — AI Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="flex min-h-screen">
+
+  <!-- Left dark panel -->
+  <div class="hidden md:flex w-1/2 bg-[#1A1A2E] flex-col justify-between p-12">
+    <div>
+      <div class="flex items-center gap-3 mb-12">
+        <div class="w-9 h-9 rounded-lg bg-teal-600 flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+          </svg>
+        </div>
+        <span class="text-white font-semibold text-lg">AI Manager</span>
+      </div>
+      <h1 class="text-white text-3xl font-bold leading-tight mb-4">
+        Quản lý tài khoản<br />Claude AI cho team
+      </h1>
+      <p class="text-gray-400 text-base leading-relaxed">
+        Theo dõi usage, phân ca sử dụng và quản lý cảnh báo chi phí cho toàn bộ team một cách hiệu quả.
+      </p>
+    </div>
+    <div class="flex gap-6">
+      <div class="text-center">
+        <div class="text-teal-400 text-2xl font-bold font-mono">5</div>
+        <div class="text-gray-500 text-xs mt-1">Seats đang hoạt động</div>
+      </div>
+      <div class="text-center">
+        <div class="text-teal-400 text-2xl font-bold font-mono">2</div>
+        <div class="text-gray-500 text-xs mt-1">Teams</div>
+      </div>
+      <div class="text-center">
+        <div class="text-teal-400 text-2xl font-bold font-mono">24/7</div>
+        <div class="text-gray-500 text-xs mt-1">Giám sát</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right form panel -->
+  <div class="flex-1 flex items-center justify-center bg-gray-50 p-8">
+    <div class="w-full max-w-sm">
+      <div class="mb-8">
+        <h2 class="text-2xl font-bold text-gray-900">Đăng nhập</h2>
+        <p class="text-gray-500 mt-1 text-sm">Nhập thông tin tài khoản của bạn</p>
+      </div>
+
+      <div id="error-msg" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm"></div>
+
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <input id="email" type="email" required placeholder="ten@company.com"
+            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+          <input id="password" type="password" required placeholder="••••••••"
+            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white" />
+        </div>
+        <button type="submit" id="submit-btn"
+          class="w-full bg-teal-700 hover:bg-teal-800 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">
+          Đăng nhập
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // If already logged in, redirect to dashboard
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => { if (r.ok) window.location.href = '/'; })
+      .catch(() => {});
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const errEl = document.getElementById('error-msg');
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Đang đăng nhập...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          errEl.textContent = data.message || 'Email hoặc mật khẩu không đúng';
+          errEl.classList.remove('hidden');
+        }
+      } catch {
+        errEl.textContent = 'Lỗi kết nối. Vui lòng thử lại.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Đăng nhập';
+      }
+    });
+  </script>
+</body>
+</html>

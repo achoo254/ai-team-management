@@ -1,0 +1,44 @@
+<!-- Seats view partial -->
+<div x-show="currentView === 'seats'">
+  <div class="mb-6">
+    <h1 class="text-xl font-bold text-gray-900">Seats</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Danh sách tài khoản Claude AI</p>
+  </div>
+
+  <div class="grid grid-cols-3 gap-4">
+    <template x-for="seat in seats" :key="seat.id">
+      <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div class="min-w-0">
+            <div class="font-medium text-gray-900 text-sm truncate mono" x-text="seat.email"></div>
+            <div class="text-gray-400 text-xs mt-0.5" x-text="seat.label || ''"></div>
+          </div>
+          <span :class="teamBadgeClass(seat.team)"
+            class="ml-2 px-2 py-0.5 rounded-md text-xs font-medium border shrink-0"
+            x-text="seat.team"></span>
+        </div>
+
+        <div class="text-xs text-gray-400 mb-2 font-medium mono">
+          <span x-text="(seat.users || []).length"></span>/<span x-text="seat.max_users"></span> người dùng
+        </div>
+
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="u in (seat.users || [])" :key="u.id">
+            <div class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1">
+              <div class="w-5 h-5 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold shrink-0"
+                x-text="userInitial(u.name)"></div>
+              <span class="text-xs text-gray-700" x-text="u.name"></span>
+            </div>
+          </template>
+          <div x-show="(seat.users || []).length === 0"
+            class="text-xs text-gray-400 italic">Chưa có người dùng</div>
+        </div>
+      </div>
+    </template>
+
+    <div x-show="seats.length === 0 && !loading"
+      class="col-span-3 text-center py-12 text-gray-400 text-sm">
+      Chưa có seats nào
+    </div>
+  </div>
+</div>

@@ -1,0 +1,80 @@
+<!-- Admin view partial -->
+<div x-show="currentView === 'admin'">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-xl font-bold text-gray-900">Quản trị</h1>
+      <p class="text-gray-500 text-sm mt-0.5">Quản lý người dùng và cài đặt hệ thống</p>
+    </div>
+    <div class="flex gap-2">
+      <button @click="syncData()" :disabled="syncLoading"
+        class="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50">
+        <svg class="w-4 h-4" :class="syncLoading ? 'animate-spin' : ''"
+          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        <span x-text="syncLoading ? 'Đang đồng bộ...' : 'Đồng bộ dữ liệu'"></span>
+      </button>
+      <button x-show="isAdmin()" @click="openNewUserModal()"
+        class="flex items-center gap-2 bg-teal-700 hover:bg-teal-800 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Thêm người dùng
+      </button>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-100 bg-gray-50 text-xs text-gray-400 mono uppercase">
+            <th class="px-5 py-3 text-left font-semibold">Tên</th>
+            <th class="px-5 py-3 text-left font-semibold">Email</th>
+            <th class="px-5 py-3 text-left font-semibold">Team</th>
+            <th class="px-5 py-3 text-left font-semibold">Seat</th>
+            <th class="px-5 py-3 text-left font-semibold">Vai trò</th>
+            <th class="px-5 py-3 text-center font-semibold">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="u in adminUsers" :key="u.id">
+            <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+              <td class="px-5 py-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold shrink-0"
+                    x-text="userInitial(u.name)"></div>
+                  <span class="font-medium text-gray-900" x-text="u.name"></span>
+                </div>
+              </td>
+              <td class="px-5 py-3 mono text-xs text-gray-500" x-text="u.email"></td>
+              <td class="px-5 py-3">
+                <span :class="teamBadgeClass(u.team)"
+                  class="px-2 py-0.5 rounded-md text-xs font-medium border"
+                  x-text="u.team"></span>
+              </td>
+              <td class="px-5 py-3 mono text-xs text-gray-500" x-text="u.seat_email || '—'"></td>
+              <td class="px-5 py-3">
+                <span :class="u.role === 'admin'
+                    ? 'bg-purple-50 text-purple-600 border-purple-200'
+                    : 'bg-gray-50 text-gray-600 border-gray-200'"
+                  class="px-2 py-0.5 rounded-md text-xs font-medium border"
+                  x-text="u.role === 'admin' ? 'Admin' : 'User'"></span>
+              </td>
+              <td class="px-5 py-3 text-center">
+                <button x-show="isAdmin()" @click="openEditUserModal(u)"
+                  class="text-teal-700 hover:text-teal-900 text-xs font-medium mr-3">Sửa</button>
+                <button x-show="isAdmin()" @click="deleteUser(u.id)"
+                  class="text-red-500 hover:text-red-700 text-xs font-medium">Xoá</button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="adminUsers.length === 0 && !loading">
+            <td colspan="6" class="px-5 py-8 text-center text-gray-400 text-sm">Chưa có người dùng</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
