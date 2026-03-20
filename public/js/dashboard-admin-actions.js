@@ -1,6 +1,6 @@
 /**
  * dashboard-admin-actions.js
- * Admin-specific Alpine.js methods: user CRUD, seat assignment, data sync.
+ * Admin-specific Alpine.js methods: user CRUD, data sync.
  * Spread into dashboardApp() via ...dashboardAdminActions.
  */
 
@@ -8,12 +8,12 @@ const dashboardAdminActions = {
   async loadAdmin() {
     this.loading = true;
     try {
-      const [users, seats] = await Promise.all([
+      const [usersData, seatsData] = await Promise.all([
         api.get('/api/admin/users'),
         api.get('/api/seats')
       ]);
-      this.adminUsers = users;
-      this.seats = seats;
+      this.adminUsers = usersData.users || [];
+      this.seats = seatsData.seats || [];
     } catch (e) {
       this.error = e.message;
     } finally {
@@ -22,7 +22,7 @@ const dashboardAdminActions = {
   },
 
   openNewUserModal() {
-    this.editUserModal = { name: '', email: '', password: '', role: 'user', team: 'DEV', seatId: '' };
+    this.editUserModal = { name: '', email: '', password: '', role: 'user', team: 'dev', seatId: '' };
   },
 
   openEditUserModal(u) {
@@ -53,13 +53,13 @@ const dashboardAdminActions = {
     }
   },
 
-  async syncData() {
+  async checkAlerts() {
     this.syncLoading = true;
     try {
-      await api.post('/api/admin/sync');
-      alert('Đồng bộ thành công!');
+      const result = await api.post('/api/admin/check-alerts');
+      alert('Kiểm tra hoàn tất: ' + (result.alertsCreated || 0) + ' cảnh báo mới');
     } catch (e) {
-      alert('Lỗi đồng bộ: ' + e.message);
+      alert('Lỗi: ' + e.message);
     } finally {
       this.syncLoading = false;
     }

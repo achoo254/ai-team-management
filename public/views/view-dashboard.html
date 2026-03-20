@@ -9,28 +9,28 @@
   <div class="grid grid-cols-4 gap-4 mb-8">
     <div class="bg-white rounded-xl border border-gray-200 p-5">
       <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Sessions hôm nay</div>
-      <div class="text-3xl font-bold text-gray-900 mono" x-text="fmtNum(summary?.sessions_today)">—</div>
+      <div class="text-3xl font-bold text-gray-900 mono" x-text="summary?.sessionsToday ?? '—'"></div>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-5">
-      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Tokens tuần này</div>
-      <div class="text-3xl font-bold text-gray-900 mono" x-text="fmtNum(summary?.tokens_week)">—</div>
+      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Logs tuần này</div>
+      <div class="text-3xl font-bold text-gray-900 mono" x-text="summary?.logsThisWeek ?? '—'"></div>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-5">
-      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Chi phí tháng</div>
-      <div class="text-3xl font-bold text-gray-900 mono" x-text="fmtCost(summary?.cost_month)">—</div>
+      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Logs tháng này</div>
+      <div class="text-3xl font-bold text-gray-900 mono" x-text="summary?.logsThisMonth ?? '—'"></div>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 p-5">
       <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Cảnh báo active</div>
       <div class="text-3xl font-bold mono"
-        :class="(summary?.active_alerts || 0) > 0 ? 'text-red-500' : 'text-gray-900'"
-        x-text="summary?.active_alerts ?? 0">—</div>
+        :class="(summary?.activeAlerts || 0) > 0 ? 'text-red-500' : 'text-gray-900'"
+        x-text="summary?.activeAlerts ?? 0"></div>
     </div>
   </div>
 
   <!-- Usage by seat table -->
   <div class="bg-white rounded-xl border border-gray-200">
     <div class="px-5 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-900 text-sm">Sử dụng theo Seat</h2>
+      <h2 class="font-semibold text-gray-900 text-sm">Sử dụng theo Seat (7 ngày)</h2>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
@@ -38,10 +38,10 @@
           <tr class="border-b border-gray-100 text-xs text-gray-400 mono uppercase">
             <th class="px-5 py-3 text-left font-semibold">Seat</th>
             <th class="px-5 py-3 text-left font-semibold">Team</th>
+            <th class="px-5 py-3 text-left font-semibold">Users</th>
             <th class="px-5 py-3 text-right font-semibold">Sessions</th>
-            <th class="px-5 py-3 text-right font-semibold">Tokens</th>
-            <th class="px-5 py-3 text-right font-semibold">Chi phí</th>
-            <th class="px-5 py-3 text-center font-semibold">Trạng thái</th>
+            <th class="px-5 py-3 text-right font-semibold">Logs</th>
+            <th class="px-5 py-3 text-center font-semibold">Last Active</th>
           </tr>
         </thead>
         <tbody>
@@ -49,24 +49,17 @@
             <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
               <td class="px-5 py-3 font-medium text-gray-800 mono text-xs" x-text="row.seat_email"></td>
               <td class="px-5 py-3">
-                <span :class="teamBadgeClass(row.team)" class="px-2 py-0.5 rounded-md text-xs font-medium border" x-text="row.team"></span>
+                <span :class="row.team === 'dev' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-green-50 text-green-600 border-green-200'"
+                  class="px-2 py-0.5 rounded-md text-xs font-medium border uppercase" x-text="row.team"></span>
               </td>
-              <td class="px-5 py-3 text-right mono text-gray-700" x-text="fmtNum(row.total_sessions)"></td>
-              <td class="px-5 py-3 text-right mono text-gray-700" x-text="fmtNum(row.total_tokens)"></td>
-              <td class="px-5 py-3 text-right mono font-medium text-gray-900" x-text="fmtCost(row.total_cost)"></td>
-              <td class="px-5 py-3 text-center">
-                <span :class="{
-                  'bg-green-50 text-green-600 border-green-200': seatStatus(row) === 'normal',
-                  'bg-orange-50 text-orange-600 border-orange-200': seatStatus(row) === 'warning',
-                  'bg-red-50 text-red-600 border-red-200': seatStatus(row) === 'critical'
-                }" class="px-2 py-0.5 rounded-md text-xs font-medium border"
-                  x-text="seatStatus(row) === 'normal' ? 'Bình thường' : seatStatus(row) === 'warning' ? 'Cảnh báo' : 'Nghiêm trọng'">
-                </span>
-              </td>
+              <td class="px-5 py-3 text-gray-600 text-xs" x-text="(row.users || []).join(', ')"></td>
+              <td class="px-5 py-3 text-right mono font-semibold text-gray-900" x-text="row.total_sessions"></td>
+              <td class="px-5 py-3 text-right mono text-gray-700" x-text="row.total_logs"></td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500" x-text="row.last_active || 'Chưa có'"></td>
             </tr>
           </template>
           <tr x-show="usageBySeat.length === 0 && !loading">
-            <td colspan="6" class="px-5 py-8 text-center text-gray-400 text-sm">Chưa có dữ liệu</td>
+            <td colspan="6" class="px-5 py-8 text-center text-gray-400 text-sm">Chưa có dữ liệu. Hãy log usage!</td>
           </tr>
         </tbody>
       </table>

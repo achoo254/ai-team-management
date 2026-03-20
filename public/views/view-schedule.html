@@ -2,7 +2,7 @@
 <div x-show="currentView === 'schedule'">
   <div class="mb-6">
     <h1 class="text-xl font-bold text-gray-900">Lịch phân ca</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Phân công sử dụng seat theo ngày trong tuần</p>
+    <p class="text-gray-500 text-sm mt-0.5">Phân công sử dụng seat theo ngày (chỉ seats 3 người)</p>
   </div>
 
   <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -10,39 +10,38 @@
       <thead>
         <tr class="border-b border-gray-100 bg-gray-50">
           <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500 mono uppercase w-44">Seat</th>
-          <template x-for="day in DAYS" :key="day">
+          <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 mono uppercase w-16">Ca</th>
+          <template x-for="(day, i) in DAYS" :key="i">
             <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 mono uppercase"
               x-text="day"></th>
           </template>
         </tr>
       </thead>
       <tbody>
-        <template x-for="seat in seats" :key="seat.id">
-          <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-            <td class="px-5 py-3">
-              <div class="font-medium text-gray-800 mono text-xs truncate" x-text="seat.email"></div>
-              <span :class="teamBadgeClass(seat.team)"
-                class="mt-1 inline-block px-1.5 py-0.5 rounded text-xs border"
-                x-text="seat.team"></span>
-            </td>
-            <template x-for="dayKey in DAY_KEYS" :key="dayKey">
-              <td class="px-3 py-3 text-center">
-                <template x-if="getScheduleEntry(seat.id, dayKey)">
-                  <span class="inline-block px-2 py-1 rounded-md text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200"
-                    x-text="getScheduleEntry(seat.id, dayKey).user_name"></span>
-                </template>
-                <template x-if="!getScheduleEntry(seat.id, dayKey)">
-                  <span class="text-gray-300 text-xs">—</span>
-                </template>
+        <template x-for="seat in seats.filter(s => s.max_users >= 3)" :key="seat.id">
+          <template x-for="slot in ['morning', 'afternoon']" :key="seat.id + '_' + slot">
+            <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+              <td x-show="slot === 'morning'" rowspan="2" class="px-5 py-3 border-r border-gray-100">
+                <div class="font-medium text-gray-800 mono text-xs truncate" x-text="seat.email"></div>
+                <span :class="seat.team === 'dev' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-green-50 text-green-600 border-green-200'"
+                  class="mt-1 inline-block px-1.5 py-0.5 rounded text-xs border uppercase"
+                  x-text="seat.team"></span>
               </td>
-            </template>
-          </tr>
+              <td class="px-3 py-2 text-center text-xs text-gray-400" x-text="slot === 'morning' ? 'Sáng' : 'Chiều'"></td>
+              <template x-for="dayIdx in [0,1,2,3,4]" :key="dayIdx">
+                <td class="px-3 py-2 text-center">
+                  <template x-if="getScheduleEntry(seat.id, dayIdx, slot)">
+                    <span class="inline-block px-2 py-1 rounded-md text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200"
+                      x-text="getScheduleEntry(seat.id, dayIdx, slot)?.user_name"></span>
+                  </template>
+                  <template x-if="!getScheduleEntry(seat.id, dayIdx, slot)">
+                    <span class="text-gray-300 text-xs">—</span>
+                  </template>
+                </td>
+              </template>
+            </tr>
+          </template>
         </template>
-        <tr x-show="seats.length === 0 && !loading">
-          <td colspan="6" class="px-5 py-8 text-center text-gray-400 text-sm">
-            Chưa có dữ liệu lịch phân ca
-          </td>
-        </tr>
       </tbody>
     </table>
   </div>

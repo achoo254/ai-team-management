@@ -1,8 +1,6 @@
 /**
  * dashboard-app.js
  * Main Alpine.js application store for the AI Manager SPA.
- * Handles auth, view routing, and data loading for all views.
- * Pure utility helpers live in dashboard-helpers.js (spread in via ...dashboardHelpers).
  */
 
 function dashboardApp() {
@@ -34,16 +32,15 @@ function dashboardApp() {
     adminUsers: [],
 
     // UI state
-    editScheduleCell: null,      // { seatId, dayOfWeek, slot }
-    editUserModal: null,          // user object or {} for new
-    assignUserModal: null,        // { seatId }
+    editUserModal: null,
     syncLoading: false,
-    scheduleAssignMap: {},        // seatId -> { MON: userName, ... }
+    scheduleAssignMap: {},
 
     // --- Lifecycle ---
     async init() {
       try {
-        this.user = await api.get('/api/auth/me');
+        const data = await api.get('/api/auth/me');
+        this.user = data.user || data;
       } catch {
         window.location.href = '/login.html';
         return;
@@ -74,12 +71,12 @@ function dashboardApp() {
     async loadDashboard() {
       this.loading = true;
       try {
-        const [sum, usage] = await Promise.all([
+        const [sumData, usageData] = await Promise.all([
           api.get('/api/dashboard/summary'),
           api.get('/api/dashboard/usage/by-seat')
         ]);
-        this.summary = sum;
-        this.usageBySeat = usage;
+        this.summary = sumData;
+        this.usageBySeat = usageData.seats || [];
       } catch (e) {
         this.error = e.message;
       } finally {
@@ -91,7 +88,8 @@ function dashboardApp() {
     async loadSeats() {
       this.loading = true;
       try {
-        this.seats = await api.get('/api/seats');
+        const data = await api.get('/api/seats');
+        this.seats = data.seats || [];
       } catch (e) {
         this.error = e.message;
       } finally {
@@ -101,26 +99,22 @@ function dashboardApp() {
 
     // --- Schedules ---
     DAYS: ['T2', 'T3', 'T4', 'T5', 'T6'],
-    DAY_KEYS: ['MON', 'TUE', 'WED', 'THU', 'FRI'],
 
     async loadSchedules() {
       this.loading = true;
       try {
-        const [seats, today] = await Promise.all([
-          api.get('/api/seats'),
-          api.get('/api/schedules/today')
-        ]);
-        // Only seats with max_users == 3 shown in schedule view
-        this.seats = seats;
-        this.schedulesToday = today;
-        // Build assignment map: seatId -> { MON: {userId, userName}, ... }
+        const seatData = await api.get('/api/seats');
+        this.seats = seatData.seats || [];
+        // Build assignment map per seat
         this.scheduleAssignMap = {};
-        for (const seat of seats) {
-          const seatSchedules = await api.get('/api/schedules?seatId=' + seat.id);
+        for (const seat of this.seats) {
+          if (seat.max_users < 3) continue;
+          const schedData = await api.get('/api/schedules?seatId=' + seat.id);
+          const entries = schedData.schedules || [];
           const map = {};
-          for (const s of seatSchedules) {
-            if (!map[s.day_of_week]) map[s.day_of_week] = [];
-            map[s.day_of_week].push(s);
+          for (const s of entries) {
+            const key = s.day_of_week + '_' + s.slot;
+            map[key] = s;
           }
           this.scheduleAssignMap[seat.id] = map;
         }
@@ -131,22 +125,22 @@ function dashboardApp() {
       }
     },
 
-    getScheduleEntry(seatId, dayKey) {
+    getScheduleEntry(seatId, dayIndex, slot) {
       const map = this.scheduleAssignMap[seatId];
-      if (!map || !map[dayKey]) return null;
-      return map[dayKey][0] || null;
+      if (!map) return null;
+      return map[dayIndex + '_' + slot] || null;
     },
 
     // --- Alerts ---
     async loadAlerts() {
       this.loading = true;
       try {
-        const [unresolved, resolved] = await Promise.all([
+        const [unData, resData] = await Promise.all([
           api.get('/api/alerts?resolved=0'),
           api.get('/api/alerts?resolved=1')
         ]);
-        this.alerts = unresolved;
-        this.resolvedAlerts = resolved;
+        this.alerts = unData.alerts || [];
+        this.resolvedAlerts = resData.alerts || [];
       } catch (e) {
         this.error = e.message;
       } finally {

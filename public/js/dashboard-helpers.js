@@ -1,16 +1,11 @@
 /**
  * dashboard-helpers.js
  * Pure utility/formatting helpers shared across the dashboard Alpine app.
- * Loaded before dashboard-app.js.
  */
 
 const dashboardHelpers = {
   isAdmin() {
     return this.user && this.user.role === 'admin';
-  },
-
-  fmtCost(val) {
-    return '$' + (val || 0).toFixed(2);
   },
 
   fmtNum(val) {
@@ -22,22 +17,27 @@ const dashboardHelpers = {
   },
 
   teamBadgeClass(team) {
-    return team === 'MKT'
-      ? 'bg-green-50 text-green-600 border border-green-200'
-      : 'bg-blue-50 text-blue-600 border border-blue-200';
+    const t = (team || '').toLowerCase();
+    return t === 'mkt'
+      ? 'bg-green-50 text-green-600 border-green-200'
+      : 'bg-blue-50 text-blue-600 border-blue-200';
   },
 
   alertBorderClass(type) {
-    return type === 'critical' ? 'border-red-400' : 'border-orange-400';
+    if (type === 'session_spike' || type === 'limit_warning') return 'border-orange-400';
+    if (type === 'high_usage') return 'border-red-400';
+    return 'border-gray-300';
   },
 
-  alertIconClass(type) {
-    return type === 'critical' ? 'text-red-500' : 'text-orange-500';
+  alertIconBgClass(type) {
+    if (type === 'session_spike' || type === 'limit_warning') return 'bg-orange-50 text-orange-500';
+    if (type === 'high_usage') return 'bg-red-50 text-red-500';
+    return 'bg-gray-50 text-gray-500';
   },
 
   seatStatus(row) {
-    if (row.total_cost > 200) return 'critical';
-    if (row.total_cost > 100) return 'warning';
+    if (row.total_sessions > 20) return 'critical';
+    if (row.total_sessions > 10) return 'warning';
     return 'normal';
   },
 
