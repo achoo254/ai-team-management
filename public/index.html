@@ -56,17 +56,27 @@
 </aside>
 
 <!-- ========== MAIN CONTENT ========== -->
-<main class="ml-64 min-h-screen p-8">
+<main class="ml-64 min-h-screen p-8 relative">
   <div x-show="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center justify-between">
     <span x-text="error"></span>
     <button @click="error = null" class="text-red-400 hover:text-red-600 ml-4 font-bold">✕</button>
   </div>
-  <div x-show="loading" class="flex items-center gap-3 text-gray-400 text-sm mb-6">
-    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-    </svg>
-    Đang tải...
+  <!-- Loading overlay — covers content area to prevent UI jank -->
+  <div x-show="loading"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="absolute inset-0 bg-white/70 backdrop-blur-sm z-30 flex items-center justify-center rounded-xl">
+    <div class="flex items-center gap-3 text-gray-500">
+      <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <span class="text-sm font-medium">Đang tải...</span>
+    </div>
   </div>
 
   <!-- View containers — partials injected here before Alpine starts -->

@@ -40,8 +40,8 @@ function dashboardApp() {
     scheduleDragFrom: null, // drag source cell info
 
     // Log usage state
-    myLogs: [],
-    logForm: { weekStart: getCurrentWeekStart(), weeklyAllPct: 0, weeklySonnetPct: 0 },
+    logWeekStart: getCurrentWeekStart(),
+    logSeats: [],   // [{ seatEmail, seatLabel, team, weeklyAllPct, weeklySonnetPct }]
     logError: null,
     logSuccess: null,
     logSubmitting: false,
@@ -76,7 +76,7 @@ function dashboardApp() {
     _loaders() {
       return {
         'dashboard':  () => this.loadDashboard(),
-        'log-usage':  () => this.loadMyLogs(),
+        'log-usage':  () => this.loadLogWeek(),
         'seats':      () => this.loadSeats(),
         'schedule':   () => this.loadSchedules(),
         'alerts':     () => this.loadAlerts(),
@@ -127,37 +127,41 @@ function dashboardApp() {
     renderCharts() {
       if (!this.dashData || typeof Chart === 'undefined') return;
       // Destroy old charts
-      Object.values(this._charts).forEach(c => c.destroy());
+      Object.values(this._charts).forEach(c => { try { c.destroy(); } catch {} });
       this._charts = {};
 
       const d = this.dashData;
+      if (!d.usagePerSeat || !d.usageTrend || !d.teamUsage) return;
       const chartDefaults = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { display: false } }
       };
 
+      // Helper: only create chart if canvas has valid 2d context
+      const safeChart = (id, config) => {
+        const el = document.getElementById(id);
+        if (!el || !el.getContext || !el.getContext('2d')) return null;
+        try { return new Chart(el, config); } catch (e) { console.warn('Chart init failed:', id, e); return null; }
+      };
+
       // 1. Seat usage bar chart
-      const barEl = document.getElementById('chart-seat-usage');
-      if (barEl) {
-        this._charts.bar = new Chart(barEl, {
-          type: 'bar',
-          data: {
-            labels: d.usagePerSeat.map(s => s.label),
-            datasets: [
-              { label: 'All Models %', data: d.usagePerSeat.map(s => s.all_pct), backgroundColor: '#0d9488', borderRadius: 4 },
-              { label: 'Sonnet %', data: d.usagePerSeat.map(s => s.sonnet_pct), backgroundColor: '#5eead4', borderRadius: 4 }
-            ]
-          },
-          options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
-            scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } } }
-        });
-      }
+      this._charts.bar = safeChart('chart-seat-usage', {
+        type: 'bar',
+        data: {
+          labels: d.usagePerSeat.map(s => s.label),
+          datasets: [
+            { label: 'All Models %', data: d.usagePerSeat.map(s => s.all_pct), backgroundColor: '#0d9488', borderRadius: 4 },
+            { label: 'Sonnet %', data: d.usagePerSeat.map(s => s.sonnet_pct), backgroundColor: '#5eead4', borderRadius: 4 }
+          ]
+        },
+        options: { ...chartDefaults, plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+          scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } } }
+      });
 
       // 2. Usage trend line chart
-      const lineEl = document.getElementById('chart-usage-trend');
-      if (lineEl && d.usageTrend.length > 0) {
-        this._charts.line = new Chart(lineEl, {
+      if (d.usageTrend.length > 0) {
+        this._charts.line = safeChart('chart-usage-trend', {
           type: 'line',
           data: {
             labels: d.usageTrend.map(t => fmtDateVN(t.week_start)),
@@ -172,9 +176,8 @@ function dashboardApp() {
       }
 
       // 3. Team usage doughnut
-      const doughEl = document.getElementById('chart-team-usage');
-      if (doughEl && d.teamUsage.length > 0) {
-        this._charts.doughnut = new Chart(doughEl, {
+      if (d.teamUsage.length > 0) {
+        this._charts.doughnut = safeChart('chart-team-usage', {
           type: 'doughnut',
           data: {
             labels: d.teamUsage.map(t => t.team.toUpperCase()),
@@ -484,11 +487,22 @@ function dashboardApp() {
     },
 
     // --- Log Usage ---
-    async loadMyLogs() {
+    changeLogWeek(delta) {
+      this.logWeekStart = shiftWeek(this.logWeekStart, delta);
+      this.loadLogWeek();
+    },
+
+    async loadLogWeek() {
       this.loading = true;
       try {
-        const data = await api.get('/api/usage-log/mine');
-        this.myLogs = data.logs || [];
+        const data = await api.get('/api/usage-log/week?weekStart=' + this.logWeekStart);
+        this.logSeats = (data.seats || []).map(s => ({
+          seatEmail: s.seatEmail,
+          seatLabel: s.seatLabel,
+          team: s.team,
+          weeklyAllPct: s.weeklyAllPct ?? 0,
+          weeklySonnetPct: s.weeklySonnetPct ?? 0,
+        }));
       } catch (e) {
         this.error = e.message;
       } finally {
@@ -501,10 +515,13 @@ function dashboardApp() {
       this.logSuccess = null;
       this.logSubmitting = true;
       try {
-        await api.post('/api/usage-log', this.logForm);
+        const entries = this.logSeats.map(s => ({
+          seatEmail: s.seatEmail,
+          weeklyAllPct: s.weeklyAllPct,
+          weeklySonnetPct: s.weeklySonnetPct,
+        }));
+        await api.post('/api/usage-log/bulk', { weekStart: this.logWeekStart, entries });
         this.logSuccess = 'Ghi nhận thành công!';
-        this.logForm = { weekStart: getCurrentWeekStart(), weeklyAllPct: 0, weeklySonnetPct: 0 };
-        await this.loadMyLogs();
       } catch (e) {
         this.logError = e.message;
       } finally {

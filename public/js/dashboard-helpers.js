@@ -19,6 +19,32 @@ function fmtDateVN(dateStr) {
   return d + '/' + m + '/' + y;
 }
 
+/** Format week range from Monday date: "Tuần 17/03 - 23/03" */
+function fmtWeekRange(mondayStr) {
+  if (!mondayStr) return '';
+  const mon = new Date(mondayStr + 'T00:00:00');
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const pad = n => String(n).padStart(2, '0');
+  return 'Tuần ' + pad(mon.getDate()) + '/' + pad(mon.getMonth() + 1) +
+    ' - ' + pad(sun.getDate()) + '/' + pad(sun.getMonth() + 1);
+}
+
+/** Snap any date to its week's Monday */
+function snapToMonday(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDay();
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  return d.toISOString().split('T')[0];
+}
+
+/** Shift a Monday date string by N weeks, return YYYY-MM-DD */
+function shiftWeek(mondayStr, delta) {
+  const d = new Date(mondayStr + 'T00:00:00');
+  d.setDate(d.getDate() + delta * 7);
+  return d.toISOString().split('T')[0];
+}
+
 const dashboardHelpers = {
   isAdmin() {
     return this.user && this.user.role === 'admin';
@@ -61,6 +87,8 @@ const dashboardHelpers = {
     if (row.weekly_all_pct >= 50) return 'warning';
     return 'normal';
   },
+
+  fmtWeekRange(mondayStr) { return fmtWeekRange(mondayStr); },
 
   timeAgo(dateStr) {
     if (!dateStr) return '';

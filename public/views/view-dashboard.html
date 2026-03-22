@@ -81,12 +81,8 @@
     <div class="bg-white rounded-xl border border-gray-200 p-5">
       <h3 class="text-sm font-semibold text-gray-900 mb-4">Theo Team</h3>
       <div style="height:220px" class="flex items-center justify-center">
-        <template x-if="dashData?.teamUsage?.length > 0">
-          <canvas id="chart-team-usage"></canvas>
-        </template>
-        <template x-if="!dashData?.teamUsage?.length">
-          <div class="text-xs text-gray-300">Chưa có dữ liệu</div>
-        </template>
+        <canvas id="chart-team-usage" x-show="dashData?.teamUsage?.length > 0"></canvas>
+        <div x-show="!dashData?.teamUsage?.length" class="text-xs text-gray-300">Chưa có dữ liệu</div>
       </div>
     </div>
   </div>
@@ -97,12 +93,8 @@
     <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
       <h3 class="text-sm font-semibold text-gray-900 mb-4">Xu hướng sử dụng (8 tuần)</h3>
       <div style="height:200px">
-        <template x-if="dashData?.usageTrend?.length > 0">
-          <canvas id="chart-usage-trend"></canvas>
-        </template>
-        <template x-if="!dashData?.usageTrend?.length">
-          <div class="flex items-center justify-center h-full text-xs text-gray-300">Chưa có dữ liệu</div>
-        </template>
+        <canvas id="chart-usage-trend" x-show="dashData?.usageTrend?.length > 0"></canvas>
+        <div x-show="!dashData?.usageTrend?.length" class="flex items-center justify-center h-full text-xs text-gray-300">Chưa có dữ liệu</div>
       </div>
     </div>
 
