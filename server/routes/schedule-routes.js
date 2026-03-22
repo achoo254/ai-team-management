@@ -1,70 +1,82 @@
 const router = require('express').Router();
-const { getDb } = require('../db/database');
+const Schedule = require('../models/schedule-model');
+const User = require('../models/user-model');
 const { authenticate, requireAdmin } = require('../middleware/auth-middleware');
 
 router.use(authenticate);
 
 // GET /api/schedules?seatId=
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const db = getDb();
     const { seatId } = req.query;
+    let query = {};
+    if (seatId) query.seat_id = seatId;
 
-    const sql = seatId
-      ? 'SELECT sc.*, u.name as user_name, s.label as seat_label FROM schedules sc JOIN users u ON u.id = sc.user_id JOIN seats s ON s.id = sc.seat_id WHERE sc.seat_id = ? ORDER BY sc.day_of_week, sc.slot'
-      : 'SELECT sc.*, u.name as user_name, s.label as seat_label FROM schedules sc JOIN users u ON u.id = sc.user_id JOIN seats s ON s.id = sc.seat_id ORDER BY sc.seat_id, sc.day_of_week, sc.slot';
+    const schedules = await Schedule.find(query)
+      .populate('user_id', 'name')
+      .populate('seat_id', 'label')
+      .sort({ seat_id: 1, day_of_week: 1, slot: 1 })
+      .lean();
 
-    const schedules = seatId ? db.prepare(sql).all(seatId) : db.prepare(sql).all();
-    res.json({ schedules });
+    const result = schedules.map(sc => ({
+      ...sc,
+      id: sc._id,
+      user_name: sc.user_id?.name,
+      seat_label: sc.seat_id?.label,
+      user_id: sc.user_id?._id,
+      seat_id: sc.seat_id?._id,
+    }));
+
+    res.json({ schedules: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET /api/schedules/today
-router.get('/today', (req, res) => {
+router.get('/today', async (req, res) => {
   try {
-    const db = getDb();
-    // JS day: 0=Sun, SQLite stores 0-6
     const dayOfWeek = new Date().getDay();
 
-    const schedules = db.prepare(`
-      SELECT sc.*, u.name as user_name, u.email as user_email, s.label as seat_label, s.email as seat_email
-      FROM schedules sc
-      JOIN users u ON u.id = sc.user_id
-      JOIN seats s ON s.id = sc.seat_id
-      WHERE sc.day_of_week = ?
-      ORDER BY sc.seat_id, sc.slot
-    `).all(dayOfWeek);
+    const schedules = await Schedule.find({ day_of_week: dayOfWeek })
+      .populate('user_id', 'name email')
+      .populate('seat_id', 'label email')
+      .sort({ seat_id: 1, slot: 1 })
+      .lean();
 
-    res.json({ schedules, dayOfWeek });
+    const result = schedules.map(sc => ({
+      ...sc,
+      id: sc._id,
+      user_name: sc.user_id?.name,
+      user_email: sc.user_id?.email,
+      seat_label: sc.seat_id?.label,
+      seat_email: sc.seat_id?.email,
+      user_id: sc.user_id?._id,
+      seat_id: sc.seat_id?._id,
+    }));
+
+    res.json({ schedules: result, dayOfWeek });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // PUT /api/schedules/:seatId — replace all schedules for a seat
-router.put('/:seatId', requireAdmin, (req, res) => {
+router.put('/:seatId', requireAdmin, async (req, res) => {
   try {
-    const db = getDb();
     const { seatId } = req.params;
     const entries = req.body; // array of { userId, dayOfWeek, slot }
 
     if (!Array.isArray(entries)) return res.status(400).json({ error: 'Body must be an array' });
 
-    const upsert = db.prepare(`
-      INSERT INTO schedules (seat_id, user_id, day_of_week, slot)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(seat_id, day_of_week, slot) DO UPDATE SET user_id = excluded.user_id
-    `);
+    for (const e of entries) {
+      await Schedule.findOneAndUpdate(
+        { seat_id: seatId, day_of_week: e.dayOfWeek, slot: e.slot },
+        { user_id: e.userId },
+        { upsert: true, new: true }
+      );
+    }
 
-    const tx = db.transaction(() => {
-      for (const e of entries) {
-        upsert.run(seatId, e.userId, e.dayOfWeek, e.slot);
-      }
-    });
-
-    tx();
     res.json({ message: 'Schedules updated', count: entries.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -72,52 +84,50 @@ router.put('/:seatId', requireAdmin, (req, res) => {
 });
 
 // PATCH /api/schedules/swap — swap or move a person between two cells
-router.patch('/swap', requireAdmin, (req, res) => {
+router.patch('/swap', requireAdmin, async (req, res) => {
   try {
-    const db = getDb();
     const { from, to } = req.body;
-    // from/to: { seatId, dayOfWeek, slot }
     if (!from || !to) return res.status(400).json({ error: 'from and to are required' });
 
-    const getEntry = db.prepare(
-      'SELECT * FROM schedules WHERE seat_id = ? AND day_of_week = ? AND slot = ?'
-    );
-    const upsert = db.prepare(`
-      INSERT INTO schedules (seat_id, user_id, day_of_week, slot)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(seat_id, day_of_week, slot) DO UPDATE SET user_id = excluded.user_id
-    `);
-    const remove = db.prepare(
-      'DELETE FROM schedules WHERE seat_id = ? AND day_of_week = ? AND slot = ?'
-    );
-
-    const fromEntry = getEntry.get(from.seatId, from.dayOfWeek, from.slot);
-    const toEntry = getEntry.get(to.seatId, to.dayOfWeek, to.slot);
+    const fromEntry = await Schedule.findOne({
+      seat_id: from.seatId, day_of_week: from.dayOfWeek, slot: from.slot,
+    }).lean();
+    const toEntry = await Schedule.findOne({
+      seat_id: to.seatId, day_of_week: to.dayOfWeek, slot: to.slot,
+    }).lean();
 
     if (!fromEntry) return res.status(400).json({ error: 'Source cell has no assignment' });
 
     // Validate: user must belong to target seat
-    const userBelongsToSeat = db.prepare('SELECT 1 FROM users WHERE id = ? AND seat_id = ?');
-    if (!userBelongsToSeat.get(fromEntry.user_id, to.seatId)) {
+    const userBelongs = await User.findOne({ _id: fromEntry.user_id, seat_id: to.seatId }).lean();
+    if (!userBelongs) {
       return res.status(400).json({ error: 'Người dùng không thuộc seat đích' });
     }
-    if (toEntry && !userBelongsToSeat.get(toEntry.user_id, from.seatId)) {
-      return res.status(400).json({ error: 'Người dùng ở ô đích không thuộc seat nguồn' });
+    if (toEntry) {
+      const toUserBelongs = await User.findOne({ _id: toEntry.user_id, seat_id: from.seatId }).lean();
+      if (!toUserBelongs) {
+        return res.status(400).json({ error: 'Người dùng ở ô đích không thuộc seat nguồn' });
+      }
     }
 
-    const tx = db.transaction(() => {
-      // Move from → to
-      upsert.run(to.seatId, fromEntry.user_id, to.dayOfWeek, to.slot);
-      if (toEntry) {
-        // Swap: move to → from
-        upsert.run(from.seatId, toEntry.user_id, from.dayOfWeek, from.slot);
-      } else {
-        // Move: clear source
-        remove.run(from.seatId, from.dayOfWeek, from.slot);
-      }
-    });
+    // Move from → to
+    await Schedule.findOneAndUpdate(
+      { seat_id: to.seatId, day_of_week: to.dayOfWeek, slot: to.slot },
+      { user_id: fromEntry.user_id, seat_id: to.seatId, day_of_week: to.dayOfWeek, slot: to.slot },
+      { upsert: true }
+    );
+    if (toEntry) {
+      // Swap: move to → from
+      await Schedule.findOneAndUpdate(
+        { seat_id: from.seatId, day_of_week: from.dayOfWeek, slot: from.slot },
+        { user_id: toEntry.user_id },
+        { upsert: true }
+      );
+    } else {
+      // Move: clear source
+      await Schedule.deleteOne({ seat_id: from.seatId, day_of_week: from.dayOfWeek, slot: from.slot });
+    }
 
-    tx();
     res.json({ message: toEntry ? 'Swapped' : 'Moved' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -125,26 +135,23 @@ router.patch('/swap', requireAdmin, (req, res) => {
 });
 
 // DELETE /api/schedules/all — clear all schedule entries
-router.delete('/all', requireAdmin, (req, res) => {
+router.delete('/all', requireAdmin, async (req, res) => {
   try {
-    const db = getDb();
-    const result = db.prepare('DELETE FROM schedules').run();
-    res.json({ message: 'All schedules cleared', count: result.changes });
+    const result = await Schedule.deleteMany({});
+    res.json({ message: 'All schedules cleared', count: result.deletedCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // DELETE /api/schedules/entry — remove a single schedule cell
-router.delete('/entry', requireAdmin, (req, res) => {
+router.delete('/entry', requireAdmin, async (req, res) => {
   try {
-    const db = getDb();
     const { seatId, dayOfWeek, slot } = req.body;
     if (seatId == null || dayOfWeek == null || !slot) {
       return res.status(400).json({ error: 'seatId, dayOfWeek, slot required' });
     }
-    db.prepare('DELETE FROM schedules WHERE seat_id = ? AND day_of_week = ? AND slot = ?')
-      .run(seatId, dayOfWeek, slot);
+    await Schedule.deleteOne({ seat_id: seatId, day_of_week: dayOfWeek, slot });
     res.json({ message: 'Entry removed' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -152,22 +159,21 @@ router.delete('/entry', requireAdmin, (req, res) => {
 });
 
 // POST /api/schedules/assign — assign a user to a specific cell
-router.post('/assign', requireAdmin, (req, res) => {
+router.post('/assign', requireAdmin, async (req, res) => {
   try {
-    const db = getDb();
     const { seatId, userId, dayOfWeek, slot } = req.body;
     if (seatId == null || userId == null || dayOfWeek == null || !slot) {
       return res.status(400).json({ error: 'seatId, userId, dayOfWeek, slot required' });
     }
     // Validate user belongs to seat
-    const user = db.prepare('SELECT 1 FROM users WHERE id = ? AND seat_id = ?').get(userId, seatId);
+    const user = await User.findOne({ _id: userId, seat_id: seatId }).lean();
     if (!user) return res.status(400).json({ error: 'Người dùng không thuộc seat này' });
 
-    db.prepare(`
-      INSERT INTO schedules (seat_id, user_id, day_of_week, slot)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(seat_id, day_of_week, slot) DO UPDATE SET user_id = excluded.user_id
-    `).run(seatId, userId, dayOfWeek, slot);
+    await Schedule.findOneAndUpdate(
+      { seat_id: seatId, day_of_week: dayOfWeek, slot },
+      { user_id: userId },
+      { upsert: true }
+    );
     res.json({ message: 'Assigned' });
   } catch (err) {
     res.status(500).json({ error: err.message });

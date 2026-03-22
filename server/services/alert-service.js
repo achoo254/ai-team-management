@@ -1,15 +1,23 @@
-const { getDb } = require('../db/database');
+const Alert = require('../models/alert-model');
+const UsageLog = require('../models/usage-log-model');
+const Seat = require('../models/seat-model');
 const config = require('../config');
-const { getCurrentWeekStart } = require('./usage-sync-service');
 
 /** Insert alert if not already exists for same seat+type today */
-function insertIfNew(db, seatEmail, type, message) {
-  const today = new Date().toISOString().split('T')[0];
-  const existing = db.prepare(
-    'SELECT id FROM alerts WHERE seat_email = ? AND type = ? AND date(created_at) = ?'
-  ).get(seatEmail, type, today);
+async function insertIfNew(seatEmail, type, message) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const existing = await Alert.findOne({
+    seat_email: seatEmail,
+    type,
+    created_at: { $gte: today, $lt: tomorrow },
+  }).lean();
+
   if (existing) return false;
-  db.prepare('INSERT INTO alerts (seat_email, type, message) VALUES (?, ?, ?)').run(seatEmail, type, message);
+  await Alert.create({ seat_email: seatEmail, type, message });
   return true;
 }
 
@@ -18,43 +26,41 @@ function insertIfNew(db, seatEmail, type, message) {
  * - high_usage: latest log for any seat has weekly_all_pct >= 80
  * - no_activity: seat has no log in last N weeks but has been used before
  */
-function checkAlerts() {
-  const db = getDb();
+async function checkAlerts() {
   let created = 0;
 
-  // Rule 1: High usage — latest week log with weekly_all_pct >= threshold
-  const highUsage = db.prepare(`
-    SELECT l.seat_email, MAX(l.weekly_all_pct) as weekly_all_pct
-    FROM usage_logs l
-    INNER JOIN (
-      SELECT seat_email, MAX(week_start) as max_week
-      FROM usage_logs GROUP BY seat_email
-    ) latest ON l.seat_email = latest.seat_email AND l.week_start = latest.max_week
-    GROUP BY l.seat_email
-    HAVING MAX(l.weekly_all_pct) >= ?
-  `).all(config.alerts.highUsagePct);
+  // Rule 1: High usage — aggregate latest week per seat, filter >= threshold
+  const highUsage = await UsageLog.aggregate([
+    { $sort: { week_start: -1 } },
+    { $group: {
+      _id: '$seat_email',
+      max_week: { $first: '$week_start' },
+      weekly_all_pct: { $first: '$weekly_all_pct' },
+    }},
+    { $match: { weekly_all_pct: { $gte: config.alerts.highUsagePct } } },
+  ]);
 
   for (const row of highUsage) {
-    const msg = `Seat ${row.seat_email}: ${row.weekly_all_pct}% usage (ngưỡng: ${config.alerts.highUsagePct}%)`;
-    if (insertIfNew(db, row.seat_email, 'high_usage', msg)) created++;
+    const msg = `Seat ${row._id}: ${row.weekly_all_pct}% usage (ngưỡng: ${config.alerts.highUsagePct}%)`;
+    if (await insertIfNew(row._id, 'high_usage', msg)) created++;
   }
 
-  // Rule 2: No activity — seat has no log in last N weeks
-  const now = new Date();
-  const cutoffDate = new Date(now);
+  // Rule 2: No activity
+  const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - (config.alerts.inactivityWeeks * 7));
   const cutoffWeek = cutoffDate.toISOString().split('T')[0];
-  const allSeats = db.prepare('SELECT email FROM seats').all();
+  const allSeats = await Seat.find({}, 'email').lean();
 
   for (const seat of allSeats) {
-    const recent = db.prepare(
-      'SELECT id FROM usage_logs WHERE seat_email = ? AND week_start >= ? LIMIT 1'
-    ).get(seat.email, cutoffWeek);
+    const recent = await UsageLog.findOne({
+      seat_email: seat.email,
+      week_start: { $gte: cutoffWeek },
+    }).lean();
     if (!recent) {
-      const ever = db.prepare('SELECT id FROM usage_logs WHERE seat_email = ? LIMIT 1').get(seat.email);
+      const ever = await UsageLog.findOne({ seat_email: seat.email }).lean();
       if (ever) {
         const msg = `Seat ${seat.email}: không có log tuần này`;
-        if (insertIfNew(db, seat.email, 'no_activity', msg)) created++;
+        if (await insertIfNew(seat.email, 'no_activity', msg)) created++;
       }
     }
   }

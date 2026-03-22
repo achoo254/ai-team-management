@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const config = require('../config');
 
 /** Verify JWT token from cookie or Authorization header */
@@ -22,4 +23,13 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { authenticate, requireAdmin };
+/** Validate :id param is a valid ObjectId */
+function validateObjectId(req, res, next) {
+  const id = req.params.id || req.params.seatId || req.params.userId;
+  if (id && !mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: 'Invalid ID format' });
+  }
+  next();
+}
+
+module.exports = { authenticate, requireAdmin, validateObjectId };

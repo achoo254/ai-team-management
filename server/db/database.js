@@ -1,26 +1,19 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const mongoose = require('mongoose');
+const config = require('../config');
 
-const DB_PATH = path.join(__dirname, '../../data/dashboard.db');
-
-let db;
-
-/** Get or create SQLite database singleton */
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-  }
-  return db;
-}
-
-/** Close database connection */
-function closeDb() {
-  if (db) {
-    db.close();
-    db = null;
+async function connectDb() {
+  try {
+    await mongoose.connect(config.mongoUri);
+    console.log('[DB] MongoDB connected');
+  } catch (err) {
+    console.error('[DB] MongoDB connection error:', err.message);
+    process.exit(1);
   }
 }
 
-module.exports = { getDb, closeDb };
+async function closeDb() {
+  await mongoose.connection.close();
+  console.log('[DB] MongoDB disconnected');
+}
+
+module.exports = { connectDb, closeDb };

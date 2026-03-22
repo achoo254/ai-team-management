@@ -1,5 +1,8 @@
 const config = require('../config');
-const { getDb } = require('../db/database');
+const Seat = require('../models/seat-model');
+const User = require('../models/user-model');
+const UsageLog = require('../models/usage-log-model');
+const Team = require('../models/team-model');
 const { getCurrentWeekStart } = require('./usage-sync-service');
 
 /** Format yyyy-MM-dd to dd/MM/yyyy */
@@ -34,36 +37,51 @@ function buildInlineKeyboard() {
   };
 }
 
+/** Build a simple text progress bar */
+function buildProgressBar(pct) {
+  const filled = Math.round(pct / 10);
+  const empty = 10 - filled;
+  return '▓'.repeat(filled) + '░'.repeat(empty);
+}
+
 /** Send weekly usage report to Telegram */
 async function sendWeeklyReport() {
   if (!config.telegram.botToken || !config.telegram.chatId) return;
 
-  const db = getDb();
   const weekStart = getCurrentWeekStart();
 
-  // Get seats with usage + assigned users
-  const rows = db.prepare(`
-    SELECT s.id as seat_id, s.email, s.label, s.team,
-           COALESCE(u.weekly_all_pct, 0) as all_pct,
-           COALESCE(u.weekly_sonnet_pct, 0) as sonnet_pct
-    FROM seats s
-    LEFT JOIN usage_logs u ON u.seat_email = s.email AND u.week_start = ?
-    ORDER BY s.team, all_pct DESC
-  `).all(weekStart);
+  const seats = await Seat.find().sort({ team: 1 }).lean();
+  const logs = await UsageLog.find({ week_start: weekStart }).lean();
+  const users = await User.find({ active: true }, 'name seat_id').lean();
+  const teamRows = await Team.find({}, 'name label').sort({ name: 1 }).lean();
 
-  const users = db.prepare(`
-    SELECT name, seat_id, active FROM users WHERE active = 1 ORDER BY seat_id, name
-  `).all();
-
-  // Group users by seat_id
-  const usersBySeat = {};
-  for (const u of users) {
-    if (!usersBySeat[u.seat_id]) usersBySeat[u.seat_id] = [];
-    usersBySeat[u.seat_id].push(u.name);
+  // Build lookup: seat_email -> log data (highest pct)
+  const logBySeat = {};
+  for (const l of logs) {
+    if (!logBySeat[l.seat_email] || l.weekly_all_pct > logBySeat[l.seat_email].weekly_all_pct) {
+      logBySeat[l.seat_email] = l;
+    }
   }
 
-  // Get dynamic team labels from teams table
-  const teamRows = db.prepare('SELECT name, label FROM teams ORDER BY name').all();
+  // Build rows similar to old SQL result
+  const rows = seats.map(s => ({
+    seat_id: s._id,
+    email: s.email,
+    label: s.label,
+    team: s.team,
+    all_pct: logBySeat[s.email]?.weekly_all_pct || 0,
+    sonnet_pct: logBySeat[s.email]?.weekly_sonnet_pct || 0,
+  }));
+
+  // Group users by seat_id (string key for ObjectId)
+  const usersBySeat = {};
+  for (const u of users) {
+    const key = String(u.seat_id);
+    if (!usersBySeat[key]) usersBySeat[key] = [];
+    usersBySeat[key].push(u.name);
+  }
+
+  // Dynamic team labels
   const teamLabels = {};
   for (const t of teamRows) teamLabels[t.name] = t.label;
 
@@ -77,12 +95,12 @@ async function sendWeeklyReport() {
   // Build HTML message
   let msg = `📊 <b>Báo cáo Usage tuần ${fmtDate(weekStart)}</b>\n\n`;
 
-  for (const [team, seats] of Object.entries(teams)) {
+  for (const [team, teamSeats] of Object.entries(teams)) {
     const label = teamLabels[team] || team;
     msg += `<b>📌 ${esc(label)} Team</b>\n`;
     msg += `${'─'.repeat(24)}\n`;
 
-    for (const s of seats) {
+    for (const s of teamSeats) {
       const warn = s.all_pct >= 80 ? '🔴' : s.all_pct >= 50 ? '🟡' : '🟢';
       const bar = buildProgressBar(s.all_pct);
       msg += `\n${warn} <b>${esc(s.label)}</b> <code>${esc(s.email)}</code>\n`;
@@ -90,7 +108,7 @@ async function sendWeeklyReport() {
       msg += `   Sonnet: <b>${s.sonnet_pct}%</b>\n`;
 
       // Show assigned users
-      const members = usersBySeat[s.seat_id];
+      const members = usersBySeat[String(s.seat_id)];
       if (members && members.length > 0) {
         msg += `   👥 ${members.map(n => esc(n)).join(', ')}\n`;
       }
@@ -114,45 +132,30 @@ async function sendWeeklyReport() {
   await sendMessage(msg);
 }
 
-/** Build a simple text progress bar */
-function buildProgressBar(pct) {
-  const filled = Math.round(pct / 10);
-  const empty = 10 - filled;
-  return '▓'.repeat(filled) + '░'.repeat(empty);
-}
-
 /** Send reminder to log usage before weekly report */
 async function sendLogReminder() {
   const { botToken, chatId } = config.telegram;
   if (!botToken || !chatId) return;
 
-  const db = getDb();
   const weekStart = getCurrentWeekStart();
 
-  // Find seats that haven't logged this week
-  const missing = db.prepare(`
-    SELECT s.id as seat_id, s.label, s.email
-    FROM seats s
-    WHERE s.email NOT IN (
-      SELECT DISTINCT seat_email FROM usage_logs WHERE week_start = ?
-    )
-  `).all(weekStart);
+  const loggedEmails = await UsageLog.distinct('seat_email', { week_start: weekStart });
+  const missing = await Seat.find({ email: { $nin: loggedEmails } }).lean();
 
   if (missing.length === 0) return;
 
-  const users = db.prepare(`
-    SELECT name, seat_id FROM users WHERE active = 1 ORDER BY seat_id, name
-  `).all();
+  const users = await User.find({ active: true }, 'name seat_id').lean();
   const usersBySeat = {};
   for (const u of users) {
-    if (!usersBySeat[u.seat_id]) usersBySeat[u.seat_id] = [];
-    usersBySeat[u.seat_id].push(u.name);
+    const key = String(u.seat_id);
+    if (!usersBySeat[key]) usersBySeat[key] = [];
+    usersBySeat[key].push(u.name);
   }
 
   let msg = `⏰ <b>Nhắc log usage tuần ${fmtDate(weekStart)}</b>\n\n`;
   msg += `<b>Các seat chưa log:</b>\n`;
   for (const s of missing) {
-    const members = usersBySeat[s.seat_id];
+    const members = usersBySeat[String(s._id)];
     const memberStr = members ? ` (${members.map(n => esc(n)).join(', ')})` : '';
     msg += `• <b>${esc(s.label)}</b>${memberStr}\n`;
   }

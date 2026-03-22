@@ -2,6 +2,7 @@ require('dotenv').config();
 
 module.exports = {
   port: process.env.PORT || 3000,
+  mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/ai_team_management_db',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
   // Alert thresholds (percentage-based)

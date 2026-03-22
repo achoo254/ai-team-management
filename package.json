@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "db:reset": "node -e \"require('fs').rmSync('data/dashboard.db',{force:true});require('./server/db/migrations').initializeDb(require('./server/db/database').getDb());require('./server/db/database').closeDb();console.log('DB reset done')\"",
+    "db:reset": "node server/scripts/db-reset.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -14,7 +14,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -22,6 +21,7 @@
     "firebase": "^12.11.0",
     "firebase-admin": "^13.7.0",
     "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.3.1",
     "node-cron": "^4.2.1"
   }
 }

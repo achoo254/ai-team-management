@@ -1,4 +1,4 @@
-const { getDb } = require('../db/database');
+const UsageLog = require('../models/usage-log-model');
 
 /** Get Monday of current week as YYYY-MM-DD */
 function getCurrentWeekStart() {
@@ -11,14 +11,16 @@ function getCurrentWeekStart() {
 
 /**
  * Log weekly usage percentages for a seat
- * @param {{ seatEmail: string, userId: number, weekStart: string, weeklyAllPct: number, weeklySonnetPct: number }} data
+ * @param {{ seatEmail: string, userId: string, weekStart: string, weeklyAllPct: number, weeklySonnetPct: number }} data
  */
-function logUsage({ seatEmail, userId, weekStart, weeklyAllPct, weeklySonnetPct }) {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO usage_logs (seat_email, week_start, weekly_all_pct, weekly_sonnet_pct, user_id)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(seatEmail, weekStart, weeklyAllPct, weeklySonnetPct, userId);
+async function logUsage({ seatEmail, userId, weekStart, weeklyAllPct, weeklySonnetPct }) {
+  await UsageLog.create({
+    seat_email: seatEmail,
+    week_start: weekStart,
+    weekly_all_pct: weeklyAllPct,
+    weekly_sonnet_pct: weeklySonnetPct,
+    user_id: userId,
+  });
   return { success: true, weekStart, seatEmail };
 }
 

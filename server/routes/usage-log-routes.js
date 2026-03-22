@@ -1,16 +1,16 @@
 const router = require('express').Router();
-const { getDb } = require('../db/database');
+const User = require('../models/user-model');
+const UsageLog = require('../models/usage-log-model');
 const { authenticate } = require('../middleware/auth-middleware');
 const { logUsage, getCurrentWeekStart } = require('../services/usage-sync-service');
 
 router.use(authenticate);
 
 // POST /api/usage-log — log weekly usage percentages
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const db = getDb();
-    const user = db.prepare('SELECT u.*, s.email as seat_email FROM users u JOIN seats s ON s.id = u.seat_id WHERE u.id = ?').get(req.user.id);
-    if (!user) return res.status(400).json({ error: 'User has no assigned seat' });
+    const user = await User.findById(req.user.id).populate('seat_id', 'email').lean();
+    if (!user || !user.seat_id) return res.status(400).json({ error: 'User has no assigned seat' });
 
     const { weekStart, weeklyAllPct, weeklySonnetPct } = req.body;
     const week = weekStart || getCurrentWeekStart();
@@ -23,9 +23,9 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: 'weekStart phải là ngày thứ Hai (YYYY-MM-DD)' });
     }
 
-    const result = logUsage({
-      seatEmail: user.seat_email,
-      userId: user.id,
+    const result = await logUsage({
+      seatEmail: user.seat_id.email,
+      userId: user._id,
       weekStart: week,
       weeklyAllPct: allPct,
       weeklySonnetPct: sonnetPct,
@@ -33,7 +33,7 @@ router.post('/', (req, res) => {
 
     res.status(201).json(result);
   } catch (err) {
-    if (err.message.includes('UNIQUE')) {
+    if (err.code === 11000) {
       return res.status(409).json({ error: 'Bạn đã log cho tuần này rồi.' });
     }
     res.status(500).json({ error: err.message });
@@ -41,13 +41,14 @@ router.post('/', (req, res) => {
 });
 
 // GET /api/usage-log/mine — get my usage logs
-router.get('/mine', (req, res) => {
+router.get('/mine', async (req, res) => {
   try {
-    const db = getDb();
-    const logs = db.prepare(
-      'SELECT * FROM usage_logs WHERE user_id = ? ORDER BY week_start DESC LIMIT 20'
-    ).all(req.user.id);
-    res.json({ logs });
+    const logs = await UsageLog.find({ user_id: req.user.id })
+      .sort({ week_start: -1 })
+      .limit(20)
+      .lean();
+    const result = logs.map(l => ({ ...l, id: l._id }));
+    res.json({ logs: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -3,8 +3,8 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const config = require('./config');
+const { connectDb, closeDb } = require('./db/database');
 const { initializeDb } = require('./db/migrations');
-const { closeDb } = require('./db/database');
 
 const cron = require('node-cron');
 const { sendWeeklyReport, sendLogReminder } = require('./services/telegram-service');
@@ -16,10 +16,6 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '../public')));
-
-// Initialize database
-initializeDb();
-console.log('[DB] Database initialized with seed data');
 
 // Routes
 app.use('/api/auth', require('./routes/auth-routes'));
@@ -49,17 +45,22 @@ cron.schedule('0 17 * * 5', () => {
   sendWeeklyReport().catch(err => console.error('[Telegram]', err.message));
 }, { timezone: 'Asia/Ho_Chi_Minh' });
 
-// Start server
-const server = app.listen(config.port, () => {
-  console.log(`[Server] AI Manager running on http://localhost:${config.port}`);
-});
+// Async startup
+(async () => {
+  await connectDb();
+  await initializeDb();
+  console.log('[DB] MongoDB initialized with seed data');
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  server.close(() => {
-    closeDb();
-    process.exit(0);
+  const server = app.listen(config.port, () => {
+    console.log(`[Server] AI Manager running on http://localhost:${config.port}`);
   });
-});
+
+  process.on('SIGTERM', async () => {
+    server.close(async () => {
+      await closeDb();
+      process.exit(0);
+    });
+  });
+})();
 
 module.exports = app;

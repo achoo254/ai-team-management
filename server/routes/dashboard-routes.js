@@ -1,29 +1,37 @@
 const router = require('express').Router();
-const { getDb } = require('../db/database');
+const Seat = require('../models/seat-model');
+const User = require('../models/user-model');
+const UsageLog = require('../models/usage-log-model');
+const Alert = require('../models/alert-model');
+const Schedule = require('../models/schedule-model');
 const { authenticate } = require('../middleware/auth-middleware');
 
 router.use(authenticate);
 
 // GET /api/dashboard/summary — percentage-based summary
-router.get('/summary', (req, res) => {
+router.get('/summary', async (req, res) => {
   try {
-    const db = getDb();
+    const latestLog = await UsageLog.findOne().sort({ week_start: -1 }).lean();
+    const latestWeek = latestLog?.week_start;
 
-    const avgAll = db.prepare(`
-      SELECT COALESCE(ROUND(AVG(weekly_all_pct)), 0) as val
-      FROM usage_logs WHERE week_start = (SELECT MAX(week_start) FROM usage_logs)
-    `).get().val;
+    let avgAll = 0, avgSonnet = 0;
+    if (latestWeek) {
+      const result = await UsageLog.aggregate([
+        { $match: { week_start: latestWeek } },
+        { $group: {
+          _id: null,
+          avgAll: { $avg: '$weekly_all_pct' },
+          avgSonnet: { $avg: '$weekly_sonnet_pct' },
+        }},
+      ]);
+      if (result.length > 0) {
+        avgAll = Math.round(result[0].avgAll) || 0;
+        avgSonnet = Math.round(result[0].avgSonnet) || 0;
+      }
+    }
 
-    const avgSonnet = db.prepare(`
-      SELECT COALESCE(ROUND(AVG(weekly_sonnet_pct)), 0) as val
-      FROM usage_logs WHERE week_start = (SELECT MAX(week_start) FROM usage_logs)
-    `).get().val;
-
-    const activeAlerts = db.prepare(
-      'SELECT COUNT(*) as total FROM alerts WHERE resolved = 0'
-    ).get().total;
-
-    const totalLogs = db.prepare('SELECT COUNT(*) as total FROM usage_logs').get().total;
+    const activeAlerts = await Alert.countDocuments({ resolved: false });
+    const totalLogs = await UsageLog.countDocuments();
 
     res.json({ avgAllPct: avgAll, avgSonnetPct: avgSonnet, activeAlerts, totalLogs });
   } catch (err) {
@@ -32,49 +40,48 @@ router.get('/summary', (req, res) => {
 });
 
 // GET /api/dashboard/usage/by-seat — latest weekly % per seat
-router.get('/usage/by-seat', (req, res) => {
+router.get('/usage/by-seat', async (req, res) => {
   try {
-    const db = getDb();
+    // Get latest week per seat_email with max pct
+    const latestUsage = await UsageLog.aggregate([
+      { $sort: { week_start: -1 } },
+      { $group: {
+        _id: '$seat_email',
+        weekly_all_pct: { $first: '$weekly_all_pct' },
+        weekly_sonnet_pct: { $first: '$weekly_sonnet_pct' },
+        last_logged: { $first: '$week_start' },
+      }},
+    ]);
 
-    const rows = db.prepare(`
-      SELECT
-        s.id as seat_id, s.email as seat_email, s.label, s.team,
-        COALESCE(u.weekly_all_pct, 0) as weekly_all_pct,
-        COALESCE(u.weekly_sonnet_pct, 0) as weekly_sonnet_pct,
-        u.last_logged
-      FROM seats s
-      LEFT JOIN (
-        SELECT l.seat_email,
-               MAX(l.weekly_all_pct) as weekly_all_pct,
-               MAX(l.weekly_sonnet_pct) as weekly_sonnet_pct,
-               l.week_start as last_logged
-        FROM usage_logs l
-        INNER JOIN (
-          SELECT seat_email, MAX(week_start) as max_week
-          FROM usage_logs GROUP BY seat_email
-        ) latest ON l.seat_email = latest.seat_email AND l.week_start = latest.max_week
-        GROUP BY l.seat_email
-      ) u ON u.seat_email = s.email
-      ORDER BY weekly_all_pct DESC
-    `).all();
+    const usageMap = {};
+    for (const u of latestUsage) usageMap[u._id] = u;
 
-    // Get users per seat
-    const users = db.prepare(`
-      SELECT u.name, s.email as seat_email
-      FROM users u JOIN seats s ON s.id = u.seat_id
-      WHERE u.active = 1
-    `).all();
+    const seats = await Seat.find().lean();
+    const users = await User.find({ active: true, seat_id: { $ne: null } }, 'name seat_id').lean();
 
-    const usersBySeat = {};
+    // Build usersBySeatEmail via seat lookup
+    const seatIdToEmail = {};
+    for (const s of seats) seatIdToEmail[String(s._id)] = s.email;
+
+    const usersBySeatEmail = {};
     for (const u of users) {
-      if (!usersBySeat[u.seat_email]) usersBySeat[u.seat_email] = [];
-      usersBySeat[u.seat_email].push(u.name);
+      const seatEmail = seatIdToEmail[String(u.seat_id)];
+      if (seatEmail) {
+        if (!usersBySeatEmail[seatEmail]) usersBySeatEmail[seatEmail] = [];
+        usersBySeatEmail[seatEmail].push(u.name);
+      }
     }
 
-    const enriched = rows.map(r => ({
-      ...r,
-      users: usersBySeat[r.seat_email] || [],
-    }));
+    const enriched = seats.map(s => ({
+      seat_id: s._id,
+      seat_email: s.email,
+      label: s.label,
+      team: s.team,
+      weekly_all_pct: usageMap[s.email]?.weekly_all_pct || 0,
+      weekly_sonnet_pct: usageMap[s.email]?.weekly_sonnet_pct || 0,
+      last_logged: usageMap[s.email]?.last_logged || null,
+      users: usersBySeatEmail[s.email] || [],
+    })).sort((a, b) => b.weekly_all_pct - a.weekly_all_pct);
 
     res.json({ seats: enriched });
   } catch (err) {
@@ -83,72 +90,88 @@ router.get('/usage/by-seat', (req, res) => {
 });
 
 // GET /api/dashboard/enhanced — all metrics for the new dashboard
-router.get('/enhanced', (req, res) => {
+router.get('/enhanced', async (req, res) => {
   try {
-    const db = getDb();
     const dayOfWeek = new Date().getDay();
 
     // Team counts
-    const totalUsers = db.prepare('SELECT COUNT(*) as v FROM users').get().v;
-    const activeUsers = db.prepare('SELECT COUNT(*) as v FROM users WHERE active = 1').get().v;
-    const totalSeats = db.prepare('SELECT COUNT(*) as v FROM seats').get().v;
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ active: true });
+    const totalSeats = await Seat.countDocuments();
 
     // Today's schedule
-    const todaySchedules = db.prepare(`
-      SELECT sc.slot, u.name, s.label as seat_label
-      FROM schedules sc
-      JOIN users u ON u.id = sc.user_id
-      JOIN seats s ON s.id = sc.seat_id
-      WHERE sc.day_of_week = ?
-      ORDER BY sc.seat_id, sc.slot
-    `).all(dayOfWeek);
+    const schedules = await Schedule.find({ day_of_week: dayOfWeek })
+      .populate('user_id', 'name')
+      .populate('seat_id', 'label')
+      .sort({ seat_id: 1, slot: 1 })
+      .lean();
+
+    const todaySchedules = schedules.map(sc => ({
+      slot: sc.slot,
+      name: sc.user_id?.name,
+      seat_label: sc.seat_id?.label,
+    }));
 
     // Alerts summary
-    const unresolvedAlerts = db.prepare('SELECT COUNT(*) as v FROM alerts WHERE resolved = 0').get().v;
+    const unresolvedAlerts = await Alert.countDocuments({ resolved: false });
 
     // Usage per seat (latest week)
-    const usagePerSeat = db.prepare(`
-      SELECT s.label, s.team,
-        COALESCE(u.weekly_all_pct, 0) as all_pct,
-        COALESCE(u.weekly_sonnet_pct, 0) as sonnet_pct
-      FROM seats s
-      LEFT JOIN (
-        SELECT l.seat_email, MAX(l.weekly_all_pct) as weekly_all_pct,
-               MAX(l.weekly_sonnet_pct) as weekly_sonnet_pct
-        FROM usage_logs l
-        INNER JOIN (SELECT seat_email, MAX(week_start) as mw FROM usage_logs GROUP BY seat_email) lt
-          ON l.seat_email = lt.seat_email AND l.week_start = lt.mw
-        GROUP BY l.seat_email
-      ) u ON u.seat_email = s.email
-      ORDER BY s.id
-    `).all();
+    const latestUsage = await UsageLog.aggregate([
+      { $sort: { week_start: -1 } },
+      { $group: {
+        _id: '$seat_email',
+        weekly_all_pct: { $first: '$weekly_all_pct' },
+        weekly_sonnet_pct: { $first: '$weekly_sonnet_pct' },
+      }},
+    ]);
+    const usageMap = {};
+    for (const u of latestUsage) usageMap[u._id] = u;
+
+    const seats = await Seat.find().sort({ _id: 1 }).lean();
+    const usagePerSeat = seats.map(s => ({
+      label: s.label,
+      team: s.team,
+      all_pct: usageMap[s.email]?.weekly_all_pct || 0,
+      sonnet_pct: usageMap[s.email]?.weekly_sonnet_pct || 0,
+    }));
 
     // Usage trend (last 8 weeks)
-    const usageTrend = db.prepare(`
-      SELECT week_start, ROUND(AVG(weekly_all_pct)) as avg_all, ROUND(AVG(weekly_sonnet_pct)) as avg_sonnet
-      FROM usage_logs
-      GROUP BY week_start
-      ORDER BY week_start DESC
-      LIMIT 8
-    `).all().reverse();
+    const usageTrend = await UsageLog.aggregate([
+      { $group: {
+        _id: '$week_start',
+        avg_all: { $avg: '$weekly_all_pct' },
+        avg_sonnet: { $avg: '$weekly_sonnet_pct' },
+      }},
+      { $sort: { _id: -1 } },
+      { $limit: 8 },
+      { $project: {
+        week_start: '$_id',
+        avg_all: { $round: ['$avg_all', 0] },
+        avg_sonnet: { $round: ['$avg_sonnet', 0] },
+        _id: 0,
+      }},
+    ]);
+    usageTrend.reverse();
 
     // Team usage breakdown
-    const teamUsage = db.prepare(`
-      SELECT s.team, ROUND(AVG(COALESCE(u.weekly_all_pct, 0))) as avg_pct
-      FROM seats s
-      LEFT JOIN (
-        SELECT l.seat_email, MAX(l.weekly_all_pct) as weekly_all_pct
-        FROM usage_logs l
-        INNER JOIN (SELECT seat_email, MAX(week_start) as mw FROM usage_logs GROUP BY seat_email) lt
-          ON l.seat_email = lt.seat_email AND l.week_start = lt.mw
-        GROUP BY l.seat_email
-      ) u ON u.seat_email = s.email
-      GROUP BY s.team
-    `).all();
+    const seatTeamMap = {};
+    for (const s of seats) seatTeamMap[s.email] = s.team;
+
+    const teamUsageCalc = {};
+    for (const s of seats) {
+      const team = s.team;
+      if (!teamUsageCalc[team]) teamUsageCalc[team] = { total: 0, count: 0 };
+      teamUsageCalc[team].total += usageMap[s.email]?.weekly_all_pct || 0;
+      teamUsageCalc[team].count++;
+    }
+    const teamUsage = Object.entries(teamUsageCalc).map(([team, data]) => ({
+      team,
+      avg_pct: Math.round(data.total / data.count) || 0,
+    }));
 
     res.json({
       totalUsers, activeUsers, totalSeats, unresolvedAlerts,
-      todaySchedules, usagePerSeat, usageTrend, teamUsage
+      todaySchedules, usagePerSeat, usageTrend, teamUsage,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
