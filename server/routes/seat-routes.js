@@ -47,8 +47,9 @@ router.post('/', requireAdmin, async (req, res) => {
 // PUT /api/seats/:id
 router.put('/:id', requireAdmin, validateObjectId, async (req, res) => {
   try {
-    const { label, team, max_users } = req.body;
+    const { email, label, team, max_users } = req.body;
     const update = {};
+    if (email) update.email = email;
     if (label) update.label = label;
     if (team) update.team = team;
     if (max_users !== undefined) update.max_users = max_users;
