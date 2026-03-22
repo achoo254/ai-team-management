@@ -57,12 +57,22 @@
                   x-text="seat.team"></span>
               </td>
               <td class="px-5 py-3">
-                <input type="number" x-model.number="seat.weeklyAllPct" min="0" max="100"
-                  class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                <template x-if="isAdmin()">
+                  <input type="number" x-model.number="seat.weeklyAllPct" min="0" max="100"
+                    class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                </template>
+                <template x-if="!isAdmin()">
+                  <span class="block text-center mono" :class="usagePctClass(seat.weeklyAllPct)" x-text="seat.weeklyAllPct + '%'"></span>
+                </template>
               </td>
               <td class="px-5 py-3">
-                <input type="number" x-model.number="seat.weeklySonnetPct" min="0" max="100"
-                  class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                <template x-if="isAdmin()">
+                  <input type="number" x-model.number="seat.weeklySonnetPct" min="0" max="100"
+                    class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                </template>
+                <template x-if="!isAdmin()">
+                  <span class="block text-center mono" :class="usagePctClass(seat.weeklySonnetPct)" x-text="seat.weeklySonnetPct + '%'"></span>
+                </template>
               </td>
             </tr>
           </template>
@@ -72,11 +82,13 @@
         </tbody>
       </table>
     </div>
-    <div class="px-5 py-4 border-t border-gray-100 flex justify-end">
-      <button @click="submitLog()" :disabled="logSubmitting || logSeats.length === 0"
-        class="bg-teal-700 hover:bg-teal-800 text-white font-medium px-6 py-2.5 rounded-lg transition-colors text-sm disabled:opacity-50">
-        <span x-text="logSubmitting ? 'Đang lưu...' : 'Lưu tất cả'"></span>
-      </button>
-    </div>
+    <template x-if="isAdmin()">
+      <div class="px-5 py-4 border-t border-gray-100 flex justify-end">
+        <button @click="submitLog()" :disabled="logSubmitting || logSeats.length === 0"
+          class="bg-teal-700 hover:bg-teal-800 text-white font-medium px-6 py-2.5 rounded-lg transition-colors text-sm disabled:opacity-50">
+          <span x-text="logSubmitting ? 'Đang lưu...' : 'Lưu tất cả'"></span>
+        </button>
+      </div>
+    </template>
   </div>
 </div>

@@ -1,13 +1,13 @@
 const router = require('express').Router();
 const Seat = require('../models/seat-model');
 const UsageLog = require('../models/usage-log-model');
-const { authenticate } = require('../middleware/auth-middleware');
+const { authenticate, requireAdmin } = require('../middleware/auth-middleware');
 const { getCurrentWeekStart } = require('../services/usage-sync-service');
 
 router.use(authenticate);
 
-// POST /api/usage-log/bulk — log usage for multiple seats at once
-router.post('/bulk', async (req, res) => {
+// POST /api/usage-log/bulk — log usage for multiple seats (admin only)
+router.post('/bulk', requireAdmin, async (req, res) => {
   try {
     const { weekStart, entries } = req.body;
     const week = weekStart || getCurrentWeekStart();
