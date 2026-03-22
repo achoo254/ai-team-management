@@ -9,7 +9,7 @@ const usageLogSchema = new mongoose.Schema({
   logged_at: { type: Date, default: Date.now },
 });
 
-// Compound unique index matching SQLite UNIQUE(seat_email, week_start, user_id)
+// Compound unique index ensuring one log per seat/week/user
 usageLogSchema.index({ seat_email: 1, week_start: 1, user_id: 1 }, { unique: true });
 // Performance index
 usageLogSchema.index({ seat_email: 1, week_start: 1 });

@@ -303,8 +303,8 @@ try {
 - Verify token on every protected endpoint
 
 ### Database
-- Foreign key constraints enforced (`PRAGMA foreign_keys = ON`)
-- No SQL injection via prepared statements
+- Foreign key relationships enforced via Mongoose schema references
+- Input validation prevents injection attacks
 - No sensitive data in logs (passwords, tokens)
 
 ### API
@@ -337,9 +337,9 @@ try {
 ## Performance Guidelines
 
 ### Database
-- Index frequently queried columns (e.g., seat_email, user_id, week_start)
+- Index frequently queried columns (e.g., user_id, week_start, seat_id, day_of_week)
 - Batch inserts where possible
-- Use WAL mode (already set in `database.js`)
+- Mongoose connection pooling enabled by default
 
 ### Frontend
 - Minimize fetch requests (batch operations if possible)
