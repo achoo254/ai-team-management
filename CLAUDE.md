@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Internal dashboard for managing Claude AI team accounts at inet.vn. Tracks 5 Claude Teams seats shared among 13 people (7 Dev + 6 MKT). Features: seat management, usage logging (weekly percentage-based), scheduling (morning/afternoon slots), alerts (high usage, inactivity), and Telegram notifications.
+Internal dashboard for managing Claude Teams accounts. Features: seat management, usage logging (weekly percentage-based), scheduling (morning/afternoon slots), alerts (high usage, inactivity), and Telegram notifications.
 
 ## Commands
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Claude Teams Management Dashboard is a full-stack web application built with Express.js backend, MongoDB database, and vanilla JavaScript frontend. It manages 5 Claude Teams seats (account licenses) shared among 13 team members (7 developers, 6 marketers) at inet.vn.
+Claude Teams Management Dashboard is a full-stack web application built with Express.js backend, MongoDB database, and vanilla JavaScript frontend. It manages Claude Teams seats (account licenses) shared among team members.
 
 **Architecture Type**: Monolithic with clear separation between backend API and frontend SPA.
 

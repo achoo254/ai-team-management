@@ -1,228 +1,230 @@
 # Claude Teams Management Dashboard
 
-Internal dashboard for managing 5 Claude Teams seats shared among 13 people (7 Dev + 6 MKT) at inet.vn. Centralizes seat allocation, usage tracking, scheduling, alerting, and Telegram notifications.
+Dashboard quản lý tài khoản Claude Teams nội bộ. Tập trung quản lý phân bổ seat, theo dõi mức sử dụng, lịch trình, cảnh báo và thông báo qua Telegram.
 
-## Quick Start
+> [English version (README.en.md)](./README.en.md)
 
-### Prerequisites
+## Bắt đầu nhanh
+
+### Yêu cầu
 - Node.js 18+
-- pnpm (recommended) or npm
-- MongoDB instance (local or cloud)
-- Firebase project with service account JSON
-- (Optional) Telegram bot for notifications
+- pnpm (khuyến nghị) hoặc npm
+- MongoDB (local hoặc cloud)
+- Firebase project với service account JSON
+- (Tuỳ chọn) Telegram bot cho thông báo
 
-### Setup
+### Cài đặt
 
-1. Clone the repository and install dependencies:
+1. Clone repo và cài dependencies:
 ```bash
 pnpm install
 ```
 
-2. Create `.env` file from `.env.example`:
+2. Tạo file `.env` từ `.env.example`:
 ```bash
 cp .env.example .env
 ```
 
-3. Fill in required environment variables:
-   - `JWT_SECRET`: Random 32+ character string
-   - `MONGO_URI`: MongoDB connection string
-   - `FIREBASE_SERVICE_ACCOUNT_PATH`: Path to Firebase service account JSON
+3. Điền các biến môi trường bắt buộc:
+   - `JWT_SECRET`: Chuỗi ngẫu nhiên 32+ ký tự
+   - `MONGO_URI`: Chuỗi kết nối MongoDB
+   - `FIREBASE_SERVICE_ACCOUNT_PATH`: Đường dẫn file JSON Firebase service account
 
-4. Reset database with seed data:
+4. Reset database với dữ liệu mẫu:
 ```bash
 pnpm run db:reset
 ```
 
-5. Start development server:
+5. Khởi động server phát triển:
 ```bash
 pnpm dev
 ```
 
-Access the app at `http://localhost:3000`
+Truy cập ứng dụng tại `http://localhost:3000`
 
-## Commands
+## Lệnh
 
-| Command | Purpose |
+| Lệnh | Mục đích |
 |---------|---------|
-| `pnpm install` | Install dependencies |
-| `pnpm dev` | Start with auto-reload (development) |
-| `pnpm start` | Start production server |
-| `pnpm run db:reset` | Drop MongoDB + re-seed with sample data |
+| `pnpm install` | Cài dependencies |
+| `pnpm dev` | Chạy với auto-reload (phát triển) |
+| `pnpm start` | Chạy server production |
+| `pnpm run db:reset` | Xoá MongoDB + seed lại dữ liệu mẫu |
 
-## Tech Stack
+## Công nghệ
 
-| Layer | Technology |
+| Tầng | Công nghệ |
 |-------|-----------|
 | **Runtime** | Node.js 18+ |
 | **Backend** | Express 5 |
-| **Database** | MongoDB (via Mongoose) |
-| **Auth** | Firebase Admin SDK + JWT |
+| **Cơ sở dữ liệu** | MongoDB (via Mongoose) |
+| **Xác thực** | Firebase Admin SDK + JWT |
 | **Frontend** | Vanilla JS (ES6+) SPA |
 | **Styling** | Tailwind CSS (CDN) |
-| **Framework** | Alpine.js (optional interactivity) |
-| **Async Tasks** | node-cron |
-| **Notifications** | Telegram Bot API |
+| **Framework** | Alpine.js |
+| **Tác vụ định kỳ** | node-cron |
+| **Thông báo** | Telegram Bot API |
 
-## Environment Variables
+## Biến môi trường
 
-### Required
-- `JWT_SECRET` — JWT signing key (min 32 characters)
-- `MONGO_URI` — MongoDB connection string
-- `FIREBASE_SERVICE_ACCOUNT_PATH` — Path to Firebase service account JSON file
+### Bắt buộc
+- `JWT_SECRET` — Khoá ký JWT (tối thiểu 32 ký tự)
+- `MONGO_URI` — Chuỗi kết nối MongoDB
+- `FIREBASE_SERVICE_ACCOUNT_PATH` — Đường dẫn file JSON Firebase service account
 
-### Optional
-- `PORT` — Server port (default: 3000)
-- `TELEGRAM_BOT_TOKEN` — Telegram bot token for notifications
-- `TELEGRAM_CHAT_ID` — Telegram chat ID for alerts
-- `TELEGRAM_TOPIC_ID` — Telegram topic ID (optional)
-- `APP_URL` — Public URL for links in messages (default: http://localhost:3000)
+### Tuỳ chọn
+- `PORT` — Cổng server (mặc định: 3000)
+- `TELEGRAM_BOT_TOKEN` — Token bot Telegram cho thông báo
+- `TELEGRAM_CHAT_ID` — Chat ID Telegram cho cảnh báo
+- `TELEGRAM_TOPIC_ID` — Topic ID Telegram (tuỳ chọn)
+- `APP_URL` — URL công khai cho link trong tin nhắn (mặc định: http://localhost:3000)
 
-See `.env.example` for full reference.
+Xem `.env.example` để tham khảo đầy đủ.
 
-## Architecture Overview
+## Tổng quan kiến trúc
 
 ### Backend (Express 5)
-- **Auth**: Google sign-in via Firebase, JWT cookie-based authentication
-- **API**: 8 route files with 28 REST endpoints
-- **Models**: 6 Mongoose collections (seats, users, usage_logs, schedules, alerts, teams)
-- **Services**: Business logic for alerts, Telegram notifications, and usage tracking
-- **Cron Jobs**: Friday 15:00 & 17:00 Asia/Saigon for reminders and reports
+- **Xác thực**: Đăng nhập Google qua Firebase, xác thực JWT qua cookie
+- **API**: 8 file route với 28 REST endpoint
+- **Models**: 6 Mongoose collection (seats, users, usage_logs, schedules, alerts, teams)
+- **Services**: Logic nghiệp vụ cho cảnh báo, thông báo Telegram, theo dõi sử dụng
+- **Cron Jobs**: Thứ 6 lúc 15:00 & 17:00 (Asia/Saigon) cho nhắc nhở và báo cáo
 
 ### Frontend (Vanilla JS SPA)
-- Single page application loaded from `public/index.html`
-- 8 dynamic view partials loaded on demand
-- Alpine.js for lightweight interactivity
-- Tailwind CSS for styling
-- No build step required
+- Ứng dụng trang đơn từ `public/index.html`
+- 8 view partial được tải động
+- Alpine.js cho tương tác nhẹ
+- Tailwind CSS cho giao diện
+- Không cần bước build
 
-### Database (MongoDB)
+### Cơ sở dữ liệu (MongoDB)
 ```
 Collections:
-  - seats: Claude Teams accounts with capacity
-  - users: Team members and their assignments
-  - usage_logs: Weekly usage percentages per user
-  - schedules: Time-based slot assignments (day + morning/afternoon)
-  - alerts: High usage and inactivity notifications
-  - teams: Team definitions (dev/mkt) with metadata
+  - seats: Tài khoản Claude Teams
+  - users: Thành viên và phân công
+  - usage_logs: Phần trăm sử dụng hàng tuần
+  - schedules: Phân lịch theo khung giờ (ngày + sáng/chiều)
+  - alerts: Thông báo sử dụng cao & không hoạt động
+  - teams: Định nghĩa đội nhóm
 ```
 
-## Project Structure
+## Cấu trúc dự án
 
 ```
 quan-ly-team-claude/
 ├── server/
 │   ├── index.js                    # Express app, async startup, cron jobs
-│   ├── config.js                   # Environment configuration
+│   ├── config.js                   # Cấu hình môi trường
 │   ├── db/
-│   │   ├── database.js             # Mongoose connection
-│   │   └── migrations.js           # Database seed data
+│   │   ├── database.js             # Kết nối Mongoose
+│   │   └── migrations.js           # Dữ liệu seed
 │   ├── models/                     # Mongoose schemas (6 models)
 │   ├── middleware/
-│   │   └── auth-middleware.js      # JWT auth, role checks
+│   │   └── auth-middleware.js      # JWT auth, kiểm tra quyền
 │   ├── routes/                     # REST API routes (8 files, 28 endpoints)
-│   ├── services/                   # Business logic
+│   ├── services/                   # Logic nghiệp vụ
 │   ├── lib/
 │   │   └── firebase-admin-init.js  # Firebase Admin SDK setup
 │   └── scripts/
-│       └── db-reset.js             # Database reset utility
+│       └── db-reset.js             # Tiện ích reset DB
 │
 ├── public/
 │   ├── index.html                  # SPA shell
-│   ├── login.html                  # Google sign-in page
+│   ├── login.html                  # Trang đăng nhập Google
 │   ├── js/
 │   │   ├── api-client.js           # Fetch wrapper
-│   │   ├── dashboard-app.js        # Main Alpine.js app
-│   │   ├── dashboard-helpers.js    # UI utilities
-│   │   └── dashboard-admin-actions.js # Admin functions
+│   │   ├── dashboard-app.js        # Alpine.js app chính
+│   │   ├── dashboard-helpers.js    # Tiện ích UI
+│   │   └── dashboard-admin-actions.js # Chức năng admin
 │   └── views/                      # HTML partials (8 views)
 │
 ├── docs/
-│   ├── codebase-summary.md         # Detailed technical overview
-│   ├── code-standards.md           # Coding conventions
-│   └── project-overview-pdr.md     # Requirements & features
+│   ├── codebase-summary.md         # Tổng quan kỹ thuật
+│   ├── code-standards.md           # Quy ước code
+│   └── project-overview-pdr.md     # Tính năng & yêu cầu
 │
-├── .env.example                    # Environment template
+├── .env.example                    # Mẫu biến môi trường
 ├── package.json                    # Dependencies
-└── CLAUDE.md                       # Development guidance
+└── CLAUDE.md                       # Hướng dẫn phát triển
 ```
 
-## Key Features
+## Tính năng chính
 
-### Seat Management
-Create, update, and delete Claude Teams seats. Assign to development or marketing team. Track seat capacity and current users.
+### Quản lý Seat
+Tạo, cập nhật và xoá seat Claude Teams. Phân công vào nhóm. Theo dõi dung lượng seat và người dùng hiện tại.
 
-### Usage Logging
-Users log weekly usage percentage (0-100%) for all models and per-model breakdown. Stored per-user per-week with compound indexing for fast retrieval.
+### Ghi nhận mức sử dụng
+Người dùng ghi nhận phần trăm sử dụng hàng tuần (0-100%) cho tất cả model và chi tiết từng model. Lưu trữ theo người dùng theo tuần.
 
-### Scheduling
-Define morning (8:00-12:00) and afternoon (13:00-17:00) time slots. Assign users to day-of-week + slot combinations. Prevents double-booking on same seat.
+### Lịch trình
+Phân lịch khung giờ sáng (8:00-12:00) và chiều (13:00-17:00). Gán người dùng theo ngày + khung giờ. Ngăn trùng lịch trên cùng seat.
 
-### Alerts
-Automatic alerts triggered for high usage (>80%) or user inactivity (>1 week). Admins can create, view, and resolve alerts.
+### Cảnh báo
+Tự động cảnh báo khi sử dụng cao (>80%) hoặc không hoạt động (>1 tuần). Admin có thể tạo, xem và giải quyết cảnh báo.
 
-### Telegram Notifications
-- **Friday 15:00**: Reminder to log past week usage
-- **Friday 17:00**: Weekly summary with usage stats, alerts, and inactive users
+### Thông báo Telegram
+- **Thứ 6 15:00**: Nhắc ghi nhận mức sử dụng tuần qua
+- **Thứ 6 17:00**: Tổng kết tuần với thống kê và cảnh báo
 
-### Authentication
-Google sign-in via Firebase client SDK. Server verifies and issues JWT cookie (24-hour expiry). All endpoints require authentication; admin operations require admin role.
+### Xác thực
+Đăng nhập Google qua Firebase. Server xác minh và cấp JWT cookie (hết hạn 24h). Tất cả endpoint yêu cầu xác thực; thao tác admin yêu cầu quyền admin.
 
-## Common Tasks
+## Tác vụ thường dùng
 
 ### Reset Database
 ```bash
 pnpm run db:reset
 ```
-Drops MongoDB and re-seeds with sample data (5 seats, 13 users, 2 teams).
+Xoá MongoDB và seed lại dữ liệu mẫu.
 
-### View Logs
-Development server logs to console. Check terminal for requests, database operations, and cron job execution.
+### Xem Logs
+Server phát triển in log ra console. Kiểm tra terminal để xem request, thao tác DB và cron job.
 
 ### Test API
-Use curl, Postman, or the browser network tab. All endpoints require authentication (JWT cookie or Bearer token).
+Dùng curl, Postman hoặc network tab trình duyệt. Tất cả endpoint yêu cầu xác thực (JWT cookie hoặc Bearer token).
 
-### Enable Telegram
-Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`. Cron jobs will automatically send notifications on Friday schedule.
+### Bật Telegram
+Đặt `TELEGRAM_BOT_TOKEN` và `TELEGRAM_CHAT_ID` trong `.env`. Cron job sẽ tự động gửi thông báo vào thứ 6.
 
-## Troubleshooting
+## Xử lý sự cố
 
-| Issue | Solution |
+| Vấn đề | Giải pháp |
 |-------|----------|
-| Cannot connect to MongoDB | Check `MONGO_URI` in `.env` and verify MongoDB is running |
-| "Invalid Firebase token" | Verify `FIREBASE_SERVICE_ACCOUNT_PATH` points to correct JSON file |
-| Google sign-in fails | Check Firebase project configuration and API keys |
-| Telegram notifications not sent | Verify `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set |
-| Server won't start | Check for port conflicts; default is 3000. Set `PORT` env var if needed |
+| Không kết nối được MongoDB | Kiểm tra `MONGO_URI` trong `.env` và xác nhận MongoDB đang chạy |
+| "Invalid Firebase token" | Kiểm tra `FIREBASE_SERVICE_ACCOUNT_PATH` trỏ đúng file JSON |
+| Đăng nhập Google thất bại | Kiểm tra cấu hình Firebase project và API keys |
+| Telegram không gửi | Kiểm tra `TELEGRAM_BOT_TOKEN` và `TELEGRAM_CHAT_ID` đã được đặt |
+| Server không khởi động | Kiểm tra xung đột cổng; mặc định 3000. Đặt biến `PORT` nếu cần |
 
-## Documentation
+## Tài liệu
 
-- **[Codebase Summary](./docs/codebase-summary.md)** — Technical deep dive with all API endpoints
-- **[Code Standards](./docs/code-standards.md)** — Naming conventions, patterns, best practices
-- **[Project Overview & PDR](./docs/project-overview-pdr.md)** — Features, requirements, roadmap
-- **[System Architecture](./docs/system-architecture.md)** — Infrastructure, data flow, components
+- **[Codebase Summary](./docs/codebase-summary.md)** — Tổng quan kỹ thuật chi tiết
+- **[Code Standards](./docs/code-standards.md)** — Quy ước đặt tên, mẫu thiết kế
+- **[Project Overview & PDR](./docs/project-overview-pdr.md)** — Tính năng, yêu cầu, lộ trình
+- **[System Architecture](./docs/system-architecture.md)** — Hạ tầng, luồng dữ liệu
 
-## Development Notes
+## Ghi chú phát triển
 
-- **Module System**: CommonJS throughout (no ES6 imports)
-- **Code Style**: 2-space indentation, async/await for all async operations
-- **File Size**: Keep files under 200 LOC; consider splitting if larger
-- **Error Handling**: Try-catch in all async handlers; meaningful error messages
-- **Security**: JWT stored in httpOnly cookie; Firebase Admin SDK for verification
+- **Hệ thống module**: CommonJS xuyên suốt (không dùng ES6 imports)
+- **Code Style**: Thụt lề 2 dấu cách, async/await cho tất cả thao tác bất đồng bộ
+- **Kích thước file**: Giữ dưới 200 LOC; cân nhắc tách nếu lớn hơn
+- **Xử lý lỗi**: Try-catch trong tất cả handler bất đồng bộ
+- **Bảo mật**: JWT lưu trong httpOnly cookie; Firebase Admin SDK xác minh
 
-## Future Improvements
+## Cải tiến tương lai
 
-- Advanced analytics (trends, per-model breakdown)
-- Auto-assignment of users to available seats
-- Predictive alerts based on usage trends
-- Slack notifications alongside Telegram
-- Audit logs (who did what and when)
-- Mobile-responsive design refinements
-- Dark mode toggle
+- Phân tích nâng cao (xu hướng, chi tiết từng model)
+- Tự động gán người dùng vào seat trống
+- Cảnh báo dự đoán theo xu hướng sử dụng
+- Thông báo Slack song song Telegram
+- Nhật ký kiểm toán (ai làm gì, khi nào)
+- Cải thiện responsive cho mobile
+- Chế độ tối
 
-## License
+## Giấy phép
 
-Internal/Private — inet.vn
+Private
 
-## Support
+## Hỗ trợ
 
-For issues or questions, contact the development team.
+Nếu có vấn đề hoặc câu hỏi, liên hệ đội phát triển.

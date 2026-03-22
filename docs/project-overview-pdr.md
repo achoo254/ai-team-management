@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Internal dashboard for managing 5 Claude Teams seats shared among 13 people (7 Dev + 6 MKT) at inet.vn. Centralizes seat allocation, usage tracking, scheduling, alerting, and notifications.
+Internal dashboard for managing Claude Teams accounts. Centralizes seat allocation, usage tracking, scheduling, alerting, and notifications.
 
 ## Target Users
 
