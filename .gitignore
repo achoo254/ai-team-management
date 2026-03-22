@@ -4,3 +4,4 @@ data/
 .env
 *.pen
 *-firebase-adminsdk-*.json
+.idea
