@@ -6,6 +6,9 @@ const config = require('./config');
 const { initializeDb } = require('./db/migrations');
 const { closeDb } = require('./db/database');
 
+const cron = require('node-cron');
+const { sendWeeklyReport, sendLogReminder } = require('./services/telegram-service');
+
 const app = express();
 
 // Middleware
@@ -25,6 +28,7 @@ app.use('/api/seats', require('./routes/seat-routes'));
 app.use('/api/schedules', require('./routes/schedule-routes'));
 app.use('/api/alerts', require('./routes/alert-routes'));
 app.use('/api/admin', require('./routes/admin-routes'));
+app.use('/api/teams', require('./routes/team-routes'));
 app.use('/api/usage-log', require('./routes/usage-log-routes'));
 
 // SPA fallback — serve index.html for non-API routes
@@ -34,6 +38,16 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Telegram reminder — Friday 15:00 Asia/Saigon
+cron.schedule('0 15 * * 5', () => {
+  sendLogReminder().catch(err => console.error('[Telegram]', err.message));
+}, { timezone: 'Asia/Ho_Chi_Minh' });
+
+// Telegram weekly report — Friday 17:00 Asia/Saigon
+cron.schedule('0 17 * * 5', () => {
+  sendWeeklyReport().catch(err => console.error('[Telegram]', err.message));
+}, { timezone: 'Asia/Ho_Chi_Minh' });
 
 // Start server
 const server = app.listen(config.port, () => {

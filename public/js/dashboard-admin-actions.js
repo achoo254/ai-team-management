@@ -22,11 +22,11 @@ const dashboardAdminActions = {
   },
 
   openNewUserModal() {
-    this.editUserModal = { name: '', email: '', password: '', role: 'user', team: 'dev', seatId: '' };
+    this.editUserModal = { name: '', email: '', role: 'user', team: 'dev', seatId: '', active: true };
   },
 
   openEditUserModal(u) {
-    this.editUserModal = { ...u, password: '' };
+    this.editUserModal = { ...u, active: !!u.active };
   },
 
   async saveUser() {
@@ -53,6 +53,38 @@ const dashboardAdminActions = {
     }
   },
 
+  async toggleUserActive(userId, currentActive) {
+    try {
+      await api.put('/api/admin/users/' + userId, { active: !currentActive });
+      await this.loadAdmin();
+    } catch (e) {
+      alert('Lỗi: ' + e.message);
+    }
+  },
+
+  async bulkSetActive(active) {
+    const label = active ? 'kích hoạt' : 'tắt';
+    if (!confirm('Bạn có chắc muốn ' + label + ' tất cả tài khoản?')) return;
+    try {
+      await api.patch('/api/admin/users/bulk-active', { active });
+      await this.loadAdmin();
+    } catch (e) {
+      alert('Lỗi: ' + e.message);
+    }
+  },
+
+  async sendTelegramReport() {
+    try {
+      this.syncLoading = true;
+      await api.post('/api/admin/send-report');
+      alert('Đã gửi báo cáo qua Telegram!');
+    } catch (e) {
+      alert('Lỗi: ' + e.message);
+    } finally {
+      this.syncLoading = false;
+    }
+  },
+
   async checkAlerts() {
     this.syncLoading = true;
     try {
@@ -63,5 +95,5 @@ const dashboardAdminActions = {
     } finally {
       this.syncLoading = false;
     }
-  }
+  },
 };

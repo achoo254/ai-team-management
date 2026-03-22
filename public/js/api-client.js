@@ -49,6 +49,7 @@ const api = (() => {
     get:    (url)        => request('GET',    url),
     post:   (url, data)  => request('POST',   url, data),
     put:    (url, data)  => request('PUT',    url, data),
-    delete: (url)        => request('DELETE', url)
+    patch:  (url, data)  => request('PATCH',  url, data),
+    delete: (url, data)  => request('DELETE', url, data)
   };
 })();

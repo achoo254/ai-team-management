@@ -1,22 +1,23 @@
 const router = require('express').Router();
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { getDb } = require('../db/database');
 const config = require('../config');
+const admin = require('../lib/firebase-admin-init');
 const { authenticate } = require('../middleware/auth-middleware');
 
-// POST /api/auth/login
-router.post('/login', (req, res) => {
+// POST /api/auth/google
+router.post('/google', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ error: 'idToken required' });
+
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const email = decoded.email;
+    if (!email) return res.status(401).json({ error: 'Google account has no email' });
 
     const db = getDb();
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const valid = bcrypt.compareSync(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user) return res.status(401).json({ error: 'User not registered in system' });
 
     const token = jwt.sign(
       { id: user.id, email: user.email, name: user.name, role: user.role, team: user.team },
@@ -32,6 +33,9 @@ router.post('/login', (req, res) => {
 
     res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, team: user.team } });
   } catch (err) {
+    if (err.code === 'auth/id-token-expired') {
+      return res.status(401).json({ error: 'Token expired, please sign in again' });
+    }
     res.status(500).json({ error: err.message });
   }
 });

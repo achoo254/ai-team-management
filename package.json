@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
+    "build": "esbuild server/index.js --bundle --platform=node --outfile=dist/server/index.js --minify --external:better-sqlite3",
+    "start:prod": "node dist/server/index.js",
+    "db:reset": "node -e \"require('fs').rmSync('data/dashboard.db',{force:true});require('./server/db/migrations').initializeDb(require('./server/db/database').getDb());require('./server/db/database').closeDb();console.log('DB reset done')\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -13,13 +16,17 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "firebase": "^12.11.0",
+    "firebase-admin": "^13.7.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }

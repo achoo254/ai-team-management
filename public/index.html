@@ -29,7 +29,7 @@
   </div>
   <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
     <template x-for="item in NAV_ITEMS" :key="item.key">
-      <button @click="navigate(item.key)"
+      <button x-show="!item.adminOnly || isAdmin()" @click="navigate(item.key)"
         :class="currentView === item.key ? 'bg-teal-700/30 text-teal-400 border-teal-700/40' : 'text-gray-400 hover:bg-white/5 hover:text-white border-transparent'"
         class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all border">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,6 +74,7 @@
   <div id="view-log-usage"></div>
   <div id="view-seats"></div>
   <div id="view-schedule"></div>
+  <div id="view-teams"></div>
   <div id="view-alerts"></div>
   <div id="view-admin"></div>
 </main>
@@ -91,7 +92,7 @@
    * then start Alpine manually so it processes the fully-populated DOM.
    */
   (async () => {
-    const views = ['dashboard', 'log-usage', 'seats', 'schedule', 'alerts', 'admin', 'modal'];
+    const views = ['dashboard', 'log-usage', 'seats', 'schedule', 'teams', 'alerts', 'admin', 'modal'];
     await Promise.all(views.map(async (v) => {
       try {
         const res = await fetch('/views/view-' + v + '.html');

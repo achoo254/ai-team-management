@@ -5,32 +5,131 @@
     <p class="text-gray-500 text-sm mt-0.5">Tổng quan sử dụng AI của team</p>
   </div>
 
-  <!-- Stat cards -->
-  <div class="grid grid-cols-4 gap-4 mb-8">
-    <div class="bg-white rounded-xl border border-gray-200 p-5">
-      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Sessions hôm nay</div>
-      <div class="text-3xl font-bold text-gray-900 mono" x-text="summary?.sessionsToday ?? '—'"></div>
+  <!-- Stat cards row -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <!-- Active Users -->
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs font-semibold text-gray-400 uppercase">Thành viên</div>
+        <div class="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
+          <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="text-2xl font-bold text-gray-900 mono" x-text="(dashData?.activeUsers ?? '—') + '/' + (dashData?.totalUsers ?? '—')"></div>
+      <div class="text-xs text-gray-400 mt-0.5">đang hoạt động</div>
     </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-5">
-      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Logs tuần này</div>
-      <div class="text-3xl font-bold text-gray-900 mono" x-text="summary?.logsThisWeek ?? '—'"></div>
+
+    <!-- Seats -->
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs font-semibold text-gray-400 uppercase">Seats</div>
+        <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1"/>
+          </svg>
+        </div>
+      </div>
+      <div class="text-2xl font-bold text-gray-900 mono" x-text="dashData?.totalSeats ?? '—'"></div>
+      <div class="text-xs text-gray-400 mt-0.5">tài khoản Claude</div>
     </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-5">
-      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Logs tháng này</div>
-      <div class="text-3xl font-bold text-gray-900 mono" x-text="summary?.logsThisMonth ?? '—'"></div>
+
+    <!-- Avg Usage -->
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs font-semibold text-gray-400 uppercase">Avg All Models</div>
+        <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+          <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="text-2xl font-bold mono" :class="usagePctClass(summary?.avgAllPct)" x-text="(summary?.avgAllPct ?? 0) + '%'"></div>
+      <div class="mt-1.5 w-full bg-gray-100 rounded-full h-1.5">
+        <div class="h-1.5 rounded-full transition-all" :class="summary?.avgAllPct >= 80 ? 'bg-red-500' : summary?.avgAllPct >= 50 ? 'bg-yellow-500' : 'bg-teal-500'"
+          :style="'width:' + (summary?.avgAllPct || 0) + '%'"></div>
+      </div>
     </div>
+
+    <!-- Alerts -->
+    <div class="bg-white rounded-xl border border-gray-200 p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-xs font-semibold text-gray-400 uppercase">Cảnh báo</div>
+        <div class="w-8 h-8 rounded-lg" :class="(dashData?.unresolvedAlerts || 0) > 0 ? 'bg-red-50' : 'bg-gray-50'"
+          style="display:flex;align-items:center;justify-content:center">
+          <svg class="w-4 h-4" :class="(dashData?.unresolvedAlerts || 0) > 0 ? 'text-red-500' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="text-2xl font-bold mono" :class="(dashData?.unresolvedAlerts || 0) > 0 ? 'text-red-500' : 'text-gray-900'"
+        x-text="dashData?.unresolvedAlerts ?? 0"></div>
+      <div class="text-xs text-gray-400 mt-0.5">chưa xử lý</div>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+    <!-- Seat usage bar -->
+    <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+      <h3 class="text-sm font-semibold text-gray-900 mb-4">Sử dụng theo Seat</h3>
+      <div style="height:220px"><canvas id="chart-seat-usage"></canvas></div>
+    </div>
+
+    <!-- Team usage doughnut -->
     <div class="bg-white rounded-xl border border-gray-200 p-5">
-      <div class="text-xs font-semibold text-gray-400 mono uppercase tracking-wider mb-2">Cảnh báo active</div>
-      <div class="text-3xl font-bold mono"
-        :class="(summary?.activeAlerts || 0) > 0 ? 'text-red-500' : 'text-gray-900'"
-        x-text="summary?.activeAlerts ?? 0"></div>
+      <h3 class="text-sm font-semibold text-gray-900 mb-4">Theo Team</h3>
+      <div style="height:220px" class="flex items-center justify-center">
+        <template x-if="dashData?.teamUsage?.length > 0">
+          <canvas id="chart-team-usage"></canvas>
+        </template>
+        <template x-if="!dashData?.teamUsage?.length">
+          <div class="text-xs text-gray-300">Chưa có dữ liệu</div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trend + Today schedule row -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+    <!-- Usage trend -->
+    <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+      <h3 class="text-sm font-semibold text-gray-900 mb-4">Xu hướng sử dụng (8 tuần)</h3>
+      <div style="height:200px">
+        <template x-if="dashData?.usageTrend?.length > 0">
+          <canvas id="chart-usage-trend"></canvas>
+        </template>
+        <template x-if="!dashData?.usageTrend?.length">
+          <div class="flex items-center justify-center h-full text-xs text-gray-300">Chưa có dữ liệu</div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Today schedule -->
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <h3 class="text-sm font-semibold text-gray-900 mb-3">Lịch hôm nay</h3>
+      <template x-if="dashData?.todaySchedules?.length > 0">
+        <div class="space-y-2">
+          <template x-for="(sc, i) in dashData.todaySchedules" :key="i">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="w-10 text-gray-400 shrink-0" x-text="sc.slot === 'morning' ? 'Sáng' : 'Chiều'"></span>
+              <span class="px-2 py-0.5 rounded bg-teal-50 text-teal-700 font-medium" x-text="sc.name"></span>
+              <span class="text-gray-300 ml-auto truncate" x-text="sc.seat_label"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+      <template x-if="!dashData?.todaySchedules?.length">
+        <div class="text-xs text-gray-300 py-4 text-center">Không có lịch hôm nay</div>
+      </template>
     </div>
   </div>
 
   <!-- Usage by seat table -->
   <div class="bg-white rounded-xl border border-gray-200">
     <div class="px-5 py-4 border-b border-gray-100">
-      <h2 class="font-semibold text-gray-900 text-sm">Sử dụng theo Seat (7 ngày)</h2>
+      <h2 class="font-semibold text-gray-900 text-sm">Chi tiết sử dụng theo Seat</h2>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
@@ -39,27 +138,43 @@
             <th class="px-5 py-3 text-left font-semibold">Seat</th>
             <th class="px-5 py-3 text-left font-semibold">Team</th>
             <th class="px-5 py-3 text-left font-semibold">Users</th>
-            <th class="px-5 py-3 text-right font-semibold">Sessions</th>
-            <th class="px-5 py-3 text-right font-semibold">Logs</th>
-            <th class="px-5 py-3 text-center font-semibold">Last Active</th>
+            <th class="px-5 py-3 text-right font-semibold">All Models %</th>
+            <th class="px-5 py-3 text-right font-semibold">Sonnet %</th>
+            <th class="px-5 py-3 text-center font-semibold">Last Logged</th>
           </tr>
         </thead>
         <tbody>
           <template x-for="row in usageBySeat" :key="row.seat_email">
             <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-              <td class="px-5 py-3 font-medium text-gray-800 mono text-xs" x-text="row.seat_email"></td>
+              <td class="px-5 py-3 font-medium text-gray-800 mono text-xs" x-text="row.label || row.seat_email"></td>
               <td class="px-5 py-3">
                 <span :class="row.team === 'dev' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-green-50 text-green-600 border-green-200'"
                   class="px-2 py-0.5 rounded-md text-xs font-medium border uppercase" x-text="row.team"></span>
               </td>
               <td class="px-5 py-3 text-gray-600 text-xs" x-text="(row.users || []).join(', ')"></td>
-              <td class="px-5 py-3 text-right mono font-semibold text-gray-900" x-text="row.total_sessions"></td>
-              <td class="px-5 py-3 text-right mono text-gray-700" x-text="row.total_logs"></td>
-              <td class="px-5 py-3 text-center text-xs text-gray-500" x-text="row.last_active || 'Chưa có'"></td>
+              <td class="px-5 py-3 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <div class="w-16 bg-gray-100 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full" :class="row.weekly_all_pct >= 80 ? 'bg-red-500' : row.weekly_all_pct >= 50 ? 'bg-yellow-500' : 'bg-teal-500'"
+                      :style="'width:' + row.weekly_all_pct + '%'"></div>
+                  </div>
+                  <span class="mono font-semibold text-xs w-8 text-right" :class="usagePctClass(row.weekly_all_pct)" x-text="row.weekly_all_pct + '%'"></span>
+                </div>
+              </td>
+              <td class="px-5 py-3 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <div class="w-16 bg-gray-100 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full" :class="row.weekly_sonnet_pct >= 80 ? 'bg-red-500' : row.weekly_sonnet_pct >= 50 ? 'bg-yellow-500' : 'bg-teal-500'"
+                      :style="'width:' + row.weekly_sonnet_pct + '%'"></div>
+                  </div>
+                  <span class="mono font-semibold text-xs w-8 text-right" :class="usagePctClass(row.weekly_sonnet_pct)" x-text="row.weekly_sonnet_pct + '%'"></span>
+                </div>
+              </td>
+              <td class="px-5 py-3 text-center text-xs text-gray-500" x-text="row.last_logged ? fmtDateVN(row.last_logged) : '—'"></td>
             </tr>
           </template>
           <tr x-show="usageBySeat.length === 0 && !loading">
-            <td colspan="6" class="px-5 py-8 text-center text-gray-400 text-sm">Chưa có dữ liệu. Hãy log usage!</td>
+            <td colspan="6" class="px-5 py-8 text-center text-gray-400 text-sm">Chưa có dữ liệu</td>
           </tr>
         </tbody>
       </table>

@@ -6,113 +6,233 @@
   <title>Đăng nhập — AI Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>body { font-family: 'Inter', sans-serif; }</style>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    @keyframes pulse-ring { 0% { transform: scale(0.9); opacity: 0.6; } 100% { transform: scale(1.4); opacity: 0; } }
+    .float-1 { animation: float 6s ease-in-out infinite; }
+    .float-2 { animation: float 5s ease-in-out 1s infinite; }
+    .float-3 { animation: float 7s ease-in-out 2s infinite; }
+    .pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .float-1,.float-2,.float-3,.pulse-ring { animation: none; } }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/11.9.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.9.0/firebase-auth-compat.js"></script>
 </head>
-<body class="flex min-h-screen">
+<body class="flex min-h-screen bg-[#0F172A]">
 
-  <!-- Left dark panel -->
-  <div class="hidden md:flex w-1/2 bg-[#1A1A2E] flex-col justify-between p-12">
-    <div>
-      <div class="flex items-center gap-3 mb-12">
-        <div class="w-9 h-9 rounded-lg bg-teal-600 flex items-center justify-center">
+  <!-- Left panel — Hero visual -->
+  <div class="hidden lg:flex w-[55%] relative overflow-hidden flex-col justify-between p-12">
+    <!-- Gradient background -->
+    <div class="absolute inset-0 bg-gradient-to-br from-[#0F172A] via-[#1e293b] to-[#0d9488]/20"></div>
+    <!-- Grid pattern overlay -->
+    <div class="absolute inset-0 opacity-[0.03]" style="background-image: url('data:image/svg+xml,%3Csvg width=&quot;40&quot; height=&quot;40&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;%3E%3Cpath d=&quot;M0 0h40v40H0z&quot; fill=&quot;none&quot; stroke=&quot;white&quot; stroke-width=&quot;0.5&quot;/%3E%3C/svg%3E');"></div>
+
+    <!-- Floating elements -->
+    <div class="absolute top-20 right-20 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-32 left-16 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
+
+    <!-- Content -->
+    <div class="relative z-10">
+      <div class="flex items-center gap-3 mb-16">
+        <div class="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center shadow-lg shadow-teal-600/30">
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
           </svg>
         </div>
-        <span class="text-white font-semibold text-lg">AI Manager</span>
+        <span class="text-white font-bold text-lg tracking-tight">AI Manager</span>
       </div>
-      <h1 class="text-white text-3xl font-bold leading-tight mb-4">
-        Quản lý tài khoản<br />Claude AI cho team
+
+      <h1 class="text-white text-4xl font-extrabold leading-[1.15] mb-5 max-w-md">
+        Quản lý tài khoản
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-300">Claude AI</span>
+        cho team
       </h1>
-      <p class="text-gray-400 text-base leading-relaxed">
+      <p class="text-slate-400 text-base leading-relaxed max-w-sm">
         Theo dõi usage, phân ca sử dụng và quản lý cảnh báo chi phí cho toàn bộ team một cách hiệu quả.
       </p>
     </div>
-    <div class="flex gap-6">
-      <div class="text-center">
-        <div class="text-teal-400 text-2xl font-bold font-mono">5</div>
-        <div class="text-gray-500 text-xs mt-1">Seats đang hoạt động</div>
+
+    <!-- Visual cards — floating dashboard preview -->
+    <div class="relative z-10 mb-8">
+      <!-- Card cluster -->
+      <div class="flex gap-3 items-end">
+        <!-- Mini stat card 1 -->
+        <div class="float-1 bg-white/[0.07] backdrop-blur border border-white/10 rounded-xl p-4 w-36">
+          <div class="text-[10px] font-semibold text-slate-500 uppercase mb-1.5">Avg Usage</div>
+          <div class="text-2xl font-bold text-teal-400 font-mono">42%</div>
+          <div class="mt-2 w-full bg-white/10 rounded-full h-1">
+            <div class="h-1 rounded-full bg-teal-400 w-[42%]"></div>
+          </div>
+        </div>
+        <!-- Mini stat card 2 -->
+        <div class="float-2 bg-white/[0.07] backdrop-blur border border-white/10 rounded-xl p-4 w-36">
+          <div class="text-[10px] font-semibold text-slate-500 uppercase mb-1.5">Active</div>
+          <div class="text-2xl font-bold text-cyan-400 font-mono">13</div>
+          <div class="flex gap-0.5 mt-2">
+            <div class="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
+            <div class="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
+            <div class="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
+            <div class="w-1.5 h-1.5 rounded-full bg-teal-400"></div>
+            <div class="w-1.5 h-1.5 rounded-full bg-cyan-400"></div>
+          </div>
+        </div>
+        <!-- Mini stat card 3 -->
+        <div class="float-3 bg-white/[0.07] backdrop-blur border border-white/10 rounded-xl p-4 w-36">
+          <div class="text-[10px] font-semibold text-slate-500 uppercase mb-1.5">Seats</div>
+          <div class="text-2xl font-bold text-white font-mono">5</div>
+          <div class="text-[10px] text-green-400 mt-2 flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Tất cả hoạt động
+          </div>
+        </div>
       </div>
-      <div class="text-center">
-        <div class="text-teal-400 text-2xl font-bold font-mono">2</div>
-        <div class="text-gray-500 text-xs mt-1">Teams</div>
+    </div>
+
+    <!-- Bottom stats -->
+    <div class="relative z-10 flex gap-8 border-t border-white/10 pt-6">
+      <div>
+        <div class="text-teal-400 text-xl font-bold font-mono">5</div>
+        <div class="text-slate-500 text-xs mt-0.5">Tài khoản</div>
       </div>
-      <div class="text-center">
-        <div class="text-teal-400 text-2xl font-bold font-mono">24/7</div>
-        <div class="text-gray-500 text-xs mt-1">Giám sát</div>
+      <div>
+        <div class="text-teal-400 text-xl font-bold font-mono">2</div>
+        <div class="text-slate-500 text-xs mt-0.5">Teams</div>
+      </div>
+      <div>
+        <div class="text-teal-400 text-xl font-bold font-mono">24/7</div>
+        <div class="text-slate-500 text-xs mt-0.5">Giám sát</div>
+      </div>
+      <div>
+        <div class="text-teal-400 text-xl font-bold font-mono">13</div>
+        <div class="text-slate-500 text-xs mt-0.5">Thành viên</div>
       </div>
     </div>
   </div>
 
-  <!-- Right form panel -->
-  <div class="flex-1 flex items-center justify-center bg-gray-50 p-8">
-    <div class="w-full max-w-sm">
-      <div class="mb-8">
-        <h2 class="text-2xl font-bold text-gray-900">Đăng nhập</h2>
-        <p class="text-gray-500 mt-1 text-sm">Nhập thông tin tài khoản của bạn</p>
+  <!-- Right panel — Login form -->
+  <div class="flex-1 flex items-center justify-center bg-white p-8 relative">
+    <!-- Subtle pattern -->
+    <div class="absolute inset-0 opacity-[0.02]" style="background-image: url('data:image/svg+xml,%3Csvg width=&quot;20&quot; height=&quot;20&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;%3E%3Ccircle cx=&quot;1&quot; cy=&quot;1&quot; r=&quot;1&quot; fill=&quot;%23000&quot;/%3E%3C/svg%3E');"></div>
+
+    <div class="w-full max-w-sm relative z-10">
+      <!-- Mobile logo -->
+      <div class="lg:hidden flex items-center gap-3 mb-10">
+        <div class="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+          </svg>
+        </div>
+        <span class="text-gray-900 font-bold text-lg">AI Manager</span>
       </div>
 
-      <div id="error-msg" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm"></div>
+      <div class="mb-8">
+        <h2 class="text-2xl font-extrabold text-gray-900 tracking-tight">Đăng nhập</h2>
+        <p class="text-slate-500 mt-2 text-sm leading-relaxed">Sử dụng tài khoản Google của bạn để truy cập hệ thống quản lý.</p>
+      </div>
 
-      <form id="login-form" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input id="email" type="email" required placeholder="ten@company.com"
-            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white" />
+      <div id="error-msg" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm"></div>
+
+      <button id="google-btn" onclick="signInWithGoogle()"
+        class="w-full flex items-center justify-center gap-3 bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3.5 rounded-xl transition-all text-sm shadow-lg shadow-gray-900/10 hover:shadow-xl hover:shadow-gray-900/20 cursor-pointer active:scale-[0.98]">
+        <svg class="w-5 h-5" viewBox="0 0 24 24">
+          <path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" opacity=".7"/>
+          <path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" opacity=".85"/>
+          <path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" opacity=".6"/>
+          <path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" opacity=".75"/>
+        </svg>
+        Đăng nhập với Google
+      </button>
+
+      <!-- Divider -->
+      <div class="flex items-center gap-3 my-6">
+        <div class="flex-1 h-px bg-gray-200"></div>
+        <span class="text-xs text-gray-400">hoặc</span>
+        <div class="flex-1 h-px bg-gray-200"></div>
+      </div>
+
+      <!-- Alt Google button (outline) -->
+      <button onclick="signInWithGoogle()"
+        class="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 rounded-xl transition-all text-sm cursor-pointer">
+        <svg class="w-5 h-5" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Đăng nhập với tài khoản Google cá nhân
+      </button>
+
+      <p class="mt-8 text-xs text-slate-400 text-center leading-relaxed">
+        Chỉ thành viên đã được đăng ký trong hệ thống mới có thể đăng nhập.
+        <br />Liên hệ admin nếu bạn chưa có quyền truy cập.
+      </p>
+
+      <!-- Trust badges -->
+      <div class="flex items-center justify-center gap-4 mt-6">
+        <div class="flex items-center gap-1.5 text-slate-400">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span class="text-[10px]">Bảo mật SSL</span>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
-          <input id="password" type="password" required placeholder="••••••••"
-            class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white" />
+        <div class="flex items-center gap-1.5 text-slate-400">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          <span class="text-[10px]">Google OAuth 2.0</span>
         </div>
-        <button type="submit" id="submit-btn"
-          class="w-full bg-teal-700 hover:bg-teal-800 text-white font-medium py-2.5 rounded-lg transition-colors text-sm">
-          Đăng nhập
-        </button>
-      </form>
+      </div>
     </div>
   </div>
 
   <script>
-    // If already logged in, redirect to dashboard
+    firebase.initializeApp({
+      apiKey: "***REMOVED***",
+      authDomain: "quan-ly-team-claude.firebaseapp.com",
+      projectId: "quan-ly-team-claude",
+      storageBucket: "quan-ly-team-claude.firebasestorage.app",
+      messagingSenderId: "965718013097",
+      appId: "1:965718013097:web:3e80bd8184debcd702e5b8",
+      measurementId: "G-SF5CHSTNBN"
+    });
+
     fetch('/api/auth/me', { credentials: 'include' })
       .then(r => { if (r.ok) window.location.href = '/'; })
       .catch(() => {});
 
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('submit-btn');
+    async function signInWithGoogle() {
+      const btn = document.getElementById('google-btn');
       const errEl = document.getElementById('error-msg');
       errEl.classList.add('hidden');
       btn.disabled = true;
-      btn.textContent = 'Đang đăng nhập...';
+      btn.textContent = 'Đang xác thực...';
 
       try {
-        const res = await fetch('/api/auth/login', {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const result = await firebase.auth().signInWithPopup(provider);
+        const idToken = await result.user.getIdToken();
+
+        const res = await fetch('/api/auth/google', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            email: document.getElementById('email').value,
-            password: document.getElementById('password').value
-          })
+          body: JSON.stringify({ idToken })
         });
+
         const data = await res.json();
         if (res.ok) {
           window.location.href = '/';
         } else {
-          errEl.textContent = data.message || 'Email hoặc mật khẩu không đúng';
+          errEl.textContent = data.error || 'Tài khoản chưa được đăng ký trong hệ thống';
           errEl.classList.remove('hidden');
         }
-      } catch {
-        errEl.textContent = 'Lỗi kết nối. Vui lòng thử lại.';
+      } catch (err) {
+        if (err.code === 'auth/popup-closed-by-user') return;
+        errEl.textContent = 'Lỗi đăng nhập. Vui lòng thử lại.';
         errEl.classList.remove('hidden');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Đăng nhập';
+        btn.innerHTML = `<svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" opacity=".7"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" opacity=".85"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" opacity=".6"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" opacity=".75"/></svg> Đăng nhập với Google`;
       }
-    });
+    }
   </script>
 </body>
 </html>
