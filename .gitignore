@@ -2,6 +2,16 @@ node_modules/
 dist/
 data/
 .env
+.env.local
 *.pen
 *-firebase-adminsdk-*.json
+*.docx
 .idea
+repomix-output.xml
+
+tsconfig.tsbuildinfo
+
+# Next.js
+.next/
+out/
+next-env.d.ts
