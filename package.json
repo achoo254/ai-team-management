@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:reset": "npx tsx server/scripts/db-reset.js"
+    "db:reset": "npx tsx --env-file=.env.local scripts/db-reset.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

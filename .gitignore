@@ -5,7 +5,11 @@ data/
 .env.local
 *.pen
 *-firebase-adminsdk-*.json
+*.docx
 .idea
+repomix-output.xml
+
+tsconfig.tsbuildinfo
 
 # Next.js
 .next/
