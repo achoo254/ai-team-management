@@ -1,12 +1,13 @@
+.idea/
 node_modules/
 dist/
 data/
 .env
 .env.local
+.env.test
 *.pen
 *-firebase-adminsdk-*.json
 *.docx
-.idea
 repomix-output.xml
 
 tsconfig.tsbuildinfo
