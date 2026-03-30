@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UserMenu } from "@/components/layout/user-menu";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -34,7 +34,6 @@ export function Header() {
 
       <h1 className="flex-1 text-base font-semibold lg:text-lg">{title}</h1>
 
-      <ThemeToggle />
       <UserMenu />
     </header>
   );
