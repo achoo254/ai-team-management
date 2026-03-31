@@ -43,9 +43,9 @@ export function MemberSidebar({ seats, isAdmin }: Props) {
         {seats.map((seat) => (
           <div key={seat._id}>
             <p className="text-xs font-medium text-muted-foreground px-2 mb-1 truncate">{seat.label}</p>
-            {(seat.users ?? []).map((user) => (
+            {(seat.users ?? []).map((user, i) => (
               <DraggableMember
-                key={user._id}
+                key={`${seat._id}-${user._id ?? i}`}
                 userId={user._id}
                 userName={user.name}
                 seatId={seat._id}
