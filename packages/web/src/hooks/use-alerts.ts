@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 export interface Alert {
   _id: string;
-  seat_email: string;
+  seat_id: { _id: string; email: string; label: string } | string;
   type: string;
   message: string;
   resolved: boolean;

@@ -8,10 +8,10 @@ import { Alert } from "@/models/alert";
 describe("GET /api/alerts", () => {
   beforeEach(async () => {
     const { seat } = await seedTestData();
-    await seedAlert(seat.email);
+    await seedAlert(String(seat._id));
     // Seed a resolved alert
     await Alert.create({
-      seat_email: seat.email,
+      seat_id: seat._id,
       type: "no_activity",
       message: "No activity for 1 week",
       resolved: true,

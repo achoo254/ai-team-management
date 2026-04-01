@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 import mongoose from "mongoose";
 import { UsageLog } from "@/models/usage-log";
+import { Seat } from "@/models/seat";
 import { getCurrentWeekStart, logUsage } from "@/services/usage-sync-service";
+
+/** Create a test seat and return its _id as string */
+async function createTestSeat(email: string): Promise<string> {
+  const seat = await Seat.create({ email, label: email.split("@")[0], team: "dev", max_users: 2 });
+  return String(seat._id);
+}
 
 describe("usage-sync-service", () => {
   describe("getCurrentWeekStart()", () => {
@@ -12,11 +19,8 @@ describe("usage-sync-service", () => {
 
     it("returns a date that is the Monday of the current local week", () => {
       const result = getCurrentWeekStart();
-      // Compute expected Monday using the same local-time algorithm as the service.
-      // We compare the result string against the independently computed expected value
-      // rather than re-parsing through Date to avoid UTC/local timezone conversion issues.
       const now = new Date();
-      const day = now.getDay(); // 0=Sun
+      const day = now.getDay();
       const diff = now.getDate() - day + (day === 0 ? -6 : 1);
       const expectedMonday = new Date(now.getFullYear(), now.getMonth(), diff);
       const expected = expectedMonday.toISOString().split("T")[0];
@@ -28,7 +32,6 @@ describe("usage-sync-service", () => {
       const monday = new Date(result + "T00:00:00Z");
       const now = new Date();
       const diffDays = Math.abs((now.getTime() - monday.getTime()) / (1000 * 60 * 60 * 24));
-      // Must be within the past 7 days
       expect(diffDays).toBeLessThan(7);
     });
   });
@@ -36,60 +39,47 @@ describe("usage-sync-service", () => {
   describe("logUsage()", () => {
     it("creates a UsageLog document in MongoDB", async () => {
       const userId = new mongoose.Types.ObjectId().toString();
-      const params = {
-        seatEmail: "sync@test.com",
-        userId,
-        weekStart: "2026-03-23",
-        weeklyAllPct: 65,
-        weeklySonnetPct: 30,
-      };
+      const seatId = await createTestSeat("sync@test.com");
 
-      await logUsage(params);
+      await logUsage({ seatId, userId, weekStart: "2026-03-23", weeklyAllPct: 65 });
 
-      const doc = await UsageLog.findOne({ seat_email: "sync@test.com", week_start: "2026-03-23" });
+      const doc = await UsageLog.findOne({ seat_id: seatId, week_start: "2026-03-23" });
       expect(doc).not.toBeNull();
       expect(doc!.weekly_all_pct).toBe(65);
-      expect(doc!.weekly_sonnet_pct).toBe(30);
       expect(doc!.user_id.toString()).toBe(userId);
     });
 
-    it("returns { success: true, weekStart, seatEmail }", async () => {
+    it("returns { success: true, weekStart, seatId }", async () => {
       const userId = new mongoose.Types.ObjectId().toString();
-      const result = await logUsage({
-        seatEmail: "return@test.com",
-        userId,
-        weekStart: "2026-03-23",
-        weeklyAllPct: 50,
-        weeklySonnetPct: 25,
-      });
+      const seatId = await createTestSeat("return@test.com");
+
+      const result = await logUsage({ seatId, userId, weekStart: "2026-03-23", weeklyAllPct: 50 });
 
       expect(result).toEqual({
         success: true,
         weekStart: "2026-03-23",
-        seatEmail: "return@test.com",
+        seatId,
       });
     });
 
     it("persists correct values — weeklyAllPct 0 allowed", async () => {
       const userId = new mongoose.Types.ObjectId().toString();
-      await logUsage({
-        seatEmail: "zero@test.com",
-        userId,
-        weekStart: "2026-03-23",
-        weeklyAllPct: 0,
-        weeklySonnetPct: 0,
-      });
+      const seatId = await createTestSeat("zero@test.com");
 
-      const doc = await UsageLog.findOne({ seat_email: "zero@test.com" });
+      await logUsage({ seatId, userId, weekStart: "2026-03-23", weeklyAllPct: 0 });
+
+      const doc = await UsageLog.findOne({ seat_id: seatId });
       expect(doc).not.toBeNull();
       expect(doc!.weekly_all_pct).toBe(0);
-      expect(doc!.weekly_sonnet_pct).toBe(0);
     });
 
     it("stores multiple logs for different seats in the same week without conflict", async () => {
       const userId = new mongoose.Types.ObjectId().toString();
-      await logUsage({ seatEmail: "a@test.com", userId, weekStart: "2026-03-23", weeklyAllPct: 10, weeklySonnetPct: 5 });
-      await logUsage({ seatEmail: "b@test.com", userId, weekStart: "2026-03-23", weeklyAllPct: 20, weeklySonnetPct: 10 });
+      const seatIdA = await createTestSeat("a@test.com");
+      const seatIdB = await createTestSeat("b@test.com");
+
+      await logUsage({ seatId: seatIdA, userId, weekStart: "2026-03-23", weeklyAllPct: 10 });
+      await logUsage({ seatId: seatIdB, userId, weekStart: "2026-03-23", weeklyAllPct: 20 });
 
       const count = await UsageLog.countDocuments({ week_start: "2026-03-23" });
       expect(count).toBe(2);

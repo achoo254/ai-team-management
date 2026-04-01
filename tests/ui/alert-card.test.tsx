@@ -7,7 +7,7 @@ import type { Alert } from "@/hooks/use-alerts";
 
 const mockAlert: Alert = {
   _id: "alert-1",
-  seat_email: "seat1@example.com",
+  seat_id: { _id: "seat-1", email: "seat1@example.com", label: "Seat 1" },
   type: "high_usage",
   message: "Usage exceeded 80%",
   resolved: false,
@@ -28,7 +28,7 @@ describe("AlertCard", () => {
       <AlertCard alert={mockAlert} isAdmin={false} onResolve={vi.fn()} />
     );
     expect(screen.getByText("Usage exceeded 80%")).toBeDefined();
-    expect(screen.getByText("seat1@example.com")).toBeDefined();
+    expect(screen.getByText("Seat 1")).toBeDefined();
   });
 
   it("renders alert type badge", () => {

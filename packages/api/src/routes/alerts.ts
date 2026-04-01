@@ -13,7 +13,10 @@ router.get('/', authenticate, async (req, res) => {
     if (resolvedParam === '0') filter.resolved = false
     else if (resolvedParam === '1') filter.resolved = true
 
-    const alerts = await Alert.find(filter).sort({ created_at: -1 }).lean()
+    const alerts = await Alert.find(filter)
+      .populate('seat_id', 'email label')
+      .sort({ created_at: -1 })
+      .lean()
     res.json({ alerts })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -30,7 +33,9 @@ router.put('/:id/resolve', authenticate, requireAdmin, async (req, res) => {
       { _id: id, resolved: false },
       { resolved: true, resolved_by: req.user!.name, resolved_at: new Date() },
       { new: true },
-    ).lean()
+    )
+      .populate('seat_id', 'email label')
+      .lean()
 
     if (!alert) {
       res.status(404).json({ error: 'Alert not found or already resolved' })

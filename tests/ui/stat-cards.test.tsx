@@ -17,8 +17,8 @@ const mockData = {
   unresolvedAlerts: 3,
   todaySchedules: 2,
   usagePerSeat: [
-    { label: "Seat 1", team: "dev", all_pct: 60, sonnet_pct: 40 },
-    { label: "Seat 2", team: "mkt", all_pct: 80, sonnet_pct: 50 },
+    { label: "Seat 1", team: "dev", all_pct: 60 },
+    { label: "Seat 2", team: "mkt", all_pct: 80 },
   ],
   usageTrend: [],
   teamUsage: [],

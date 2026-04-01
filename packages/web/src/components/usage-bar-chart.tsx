@@ -38,7 +38,6 @@ export function UsageBarChart() {
               />
               <Legend />
               <Bar dataKey="all_pct" name="All models" fill={cssVar("--chart-1")} radius={[3, 3, 0, 0]} />
-              <Bar dataKey="sonnet_pct" name="Sonnet" fill={cssVar("--chart-2")} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}

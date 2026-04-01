@@ -10,8 +10,8 @@ const mockDashboard = {
   totalSeats: 4,
   unresolvedAlerts: 2,
   todaySchedules: 3,
-  usagePerSeat: [{ label: "Seat 1", team: "dev", all_pct: 60, sonnet_pct: 40 }],
-  usageTrend: [{ week_start: "2026-03-23", avg_all: 55, avg_sonnet: 35 }],
+  usagePerSeat: [{ label: "Seat 1", team: "dev", all_pct: 60 }],
+  usageTrend: [{ week_start: "2026-03-23", avg_all: 55 }],
   teamUsage: [{ team: "dev", avg_pct: 58 }],
 };
 
@@ -19,11 +19,10 @@ const mockUsageBySeat = {
   seats: [
     {
       seat_id: "seat-1",
-      seat_email: "seat1@example.com",
+      seat_email: "seat1@example.com",  // response field from populated join
       label: "Seat 1",
       team: "dev",
       weekly_all_pct: 60,
-      weekly_sonnet_pct: 40,
       last_logged: "2026-03-24",
       users: ["Alice"],
     },

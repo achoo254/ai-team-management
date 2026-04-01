@@ -154,7 +154,6 @@ quan-ly-team-claude/
   seat_id: ObjectId (reference to Seat),
   week_start: Date,
   weekly_all_pct: Number,
-  weekly_sonnet_pct: Number,
   created_at: Date (auto),
   // Unique compound index: (user_id, week_start)
 }

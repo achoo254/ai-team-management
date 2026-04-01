@@ -105,11 +105,10 @@ describe("telegram-service", () => {
     it("includes usage log data when logs exist for current week", async () => {
       const { seat, user } = await seedBaseData();
       await UsageLog.create({
-        seat_email: seat.email,
+        seat_id: seat._id,
         week_start: currentWeekStart(),
         weekly_all_pct: 75,
-        weekly_sonnet_pct: 40,
-        user_id: user._id,
+                user_id: user._id,
       });
 
       await sendWeeklyReport();
@@ -167,11 +166,10 @@ describe("telegram-service", () => {
     it("does NOT call Telegram API when all seats have already logged this week", async () => {
       const { seat, user } = await seedBaseData();
       await UsageLog.create({
-        seat_email: seat.email,
+        seat_id: seat._id,
         week_start: currentWeekStart(),
         weekly_all_pct: 40,
-        weekly_sonnet_pct: 20,
-        user_id: user._id,
+                user_id: user._id,
       });
 
       await sendLogReminder();

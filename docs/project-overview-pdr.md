@@ -19,8 +19,8 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - View seat status and current users
 
 ### 2. Usage Logging (Weekly %)
-- Users log their weekly usage percentage (all models + specific model breakdowns)
-- Store per-user usage data: seat, week_start, all_pct, sonnet_pct
+- Users log their weekly usage percentage (all models combined)
+- Store per-user usage data: seat, week_start, all_pct
 - Week range: Monday 00:00 - Sunday 23:59 Asia/Saigon
 
 ### 3. Scheduling (Morning/Afternoon)

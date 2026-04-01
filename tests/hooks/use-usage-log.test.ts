@@ -9,11 +9,10 @@ const mockWeekLog = {
   seats: [
     {
       seatId: "seat-1",
-      seatEmail: "seat1@example.com",
+      seatId: "seat-1",
       seatLabel: "Seat 1",
       team: "dev",
       weeklyAllPct: 75,
-      weeklySonnetPct: 50,
       loggedAt: "2026-03-24T08:00:00.000Z",
     },
   ],
@@ -79,7 +78,7 @@ describe("useBulkLog", () => {
     await act(async () => {
       result.current.mutate({
         weekStart: "2026-03-23",
-        entries: [{ seatEmail: "seat1@example.com", weeklyAllPct: 75, weeklySonnetPct: 50 }],
+        entries: [{ seatId: "seat-1", weeklyAllPct: 75 }],
       });
     });
 

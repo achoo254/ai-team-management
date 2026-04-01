@@ -9,8 +9,8 @@ export interface EnhancedDashboardData {
   totalSeats: number;
   unresolvedAlerts: number;
   todaySchedules: number;
-  usagePerSeat: { label: string; team: string; all_pct: number; sonnet_pct: number }[];
-  usageTrend: { week_start: string; avg_all: number; avg_sonnet: number }[];
+  usagePerSeat: { label: string; team: string; all_pct: number }[];
+  usageTrend: { week_start: string; avg_all: number }[];
   teamUsage: { team: string; avg_pct: number }[];
 }
 
@@ -21,10 +21,16 @@ export interface SeatUsageData {
     label: string;
     team: string;
     weekly_all_pct: number;
-    weekly_sonnet_pct: number;
     last_logged: string | null;
     users: string[];
   }[];
+}
+
+/** Populated seat reference from Alert.seat_id */
+export interface PopulatedSeat {
+  _id: string;
+  email: string;
+  label: string;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {

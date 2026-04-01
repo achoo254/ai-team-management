@@ -55,11 +55,12 @@ export async function sendWeeklyReport() {
   const users = await User.find({ active: true }, 'name seat_ids').lean()
   const teamRows = await Team.find({}, 'name label').sort({ name: 1 }).lean()
 
-  // Build lookup: seat_email -> log data (highest pct)
-  const logBySeat: Record<string, { weekly_all_pct: number; weekly_sonnet_pct: number }> = {}
+  // Build lookup: seat_id -> log data (highest pct)
+  const logBySeat: Record<string, { weekly_all_pct: number }> = {}
   for (const l of logs) {
-    if (!logBySeat[l.seat_email] || l.weekly_all_pct > logBySeat[l.seat_email].weekly_all_pct) {
-      logBySeat[l.seat_email] = l
+    const key = String(l.seat_id)
+    if (!logBySeat[key] || l.weekly_all_pct > logBySeat[key].weekly_all_pct) {
+      logBySeat[key] = l
     }
   }
 
@@ -68,8 +69,7 @@ export async function sendWeeklyReport() {
     email: s.email,
     label: s.label,
     team: s.team,
-    all_pct: logBySeat[s.email]?.weekly_all_pct || 0,
-    sonnet_pct: logBySeat[s.email]?.weekly_sonnet_pct || 0,
+    all_pct: logBySeat[String(s._id)]?.weekly_all_pct || 0,
   }))
 
   // Group users by seat_ids (user can be in multiple seats)
@@ -106,7 +106,6 @@ export async function sendWeeklyReport() {
       const bar = buildProgressBar(s.all_pct)
       msg += `\n${warn} <b>${esc(s.label)}</b> <code>${esc(s.email)}</code>\n`
       msg += `   All: ${bar} ${s.all_pct}%\n`
-      msg += `   Sonnet: <b>${s.sonnet_pct}%</b>\n`
 
       const members = usersBySeat[String(s.seat_id)]
       if (members && members.length > 0) {
@@ -140,8 +139,8 @@ export async function sendLogReminder() {
   }
 
   const weekStart = getCurrentWeekStart()
-  const loggedEmails = await UsageLog.distinct('seat_email', { week_start: weekStart })
-  const missing = await Seat.find({ email: { $nin: loggedEmails } }).lean()
+  const loggedSeatIds = await UsageLog.distinct('seat_id', { week_start: weekStart })
+  const missing = await Seat.find({ _id: { $nin: loggedSeatIds } }).lean()
 
   if (missing.length === 0) return
 

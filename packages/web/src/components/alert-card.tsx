@@ -45,7 +45,9 @@ export function AlertCard({ alert, isAdmin, onResolve, resolving }: Props) {
           <Badge variant={cfg.variant} className="text-[10px] uppercase tracking-wider font-medium">
             {cfg.label}
           </Badge>
-          <span className="text-xs font-medium text-foreground/70">{alert.seat_email}</span>
+          <span className="text-xs font-medium text-foreground/70">
+            {typeof alert.seat_id === 'object' ? alert.seat_id.label ?? alert.seat_id.email : ''}
+          </span>
         </div>
         <p className="text-sm leading-relaxed">{alert.message}</p>
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">

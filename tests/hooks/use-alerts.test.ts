@@ -6,7 +6,7 @@ import { useAlerts, useResolveAlert } from "@/hooks/use-alerts";
 
 const mockAlert = {
   _id: "alert-1",
-  seat_email: "seat1@example.com",
+  seat_id: { _id: "seat-1", email: "seat1@example.com", label: "Seat 1" },
   type: "high_usage",
   message: "Usage exceeded 80%",
   resolved: false,

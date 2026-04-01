@@ -57,15 +57,6 @@ export function TrendLineChart() {
                 dot={{ r: 3 }}
                 activeDot={{ r: 5 }}
               />
-              <Line
-                type="monotone"
-                dataKey="avg_sonnet"
-                name="Sonnet"
-                stroke={cssVar("--chart-2")}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
             </LineChart>
           </ResponsiveContainer>
         )}

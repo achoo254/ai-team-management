@@ -31,7 +31,7 @@ export interface Schedule {
 
 export interface Alert {
   _id: string
-  seat_email: string
+  seat_id: string
   type: 'high_usage' | 'no_activity'
   message: string
   resolved: boolean
@@ -50,10 +50,9 @@ export interface Team {
 
 export interface UsageLog {
   _id: string
-  seat_email: string
+  seat_id: string
   week_start: string
   weekly_all_pct: number
-  weekly_sonnet_pct: number
   user_id: string
   logged_at: string
 }

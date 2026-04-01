@@ -38,20 +38,19 @@ export async function seedSchedule(seatId: string, userId: string) {
   });
 }
 
-export async function seedAlert(seatEmail: string) {
+export async function seedAlert(seatId: string) {
   return Alert.create({
-    seat_email: seatEmail,
+    seat_id: seatId,
     type: "high_usage",
     message: "Usage exceeded 80%",
   });
 }
 
-export async function seedUsageLog(seatEmail: string, userId: string) {
+export async function seedUsageLog(seatId: string, userId: string) {
   return UsageLog.create({
-    seat_email: seatEmail,
+    seat_id: seatId,
     week_start: "2026-03-23",
     weekly_all_pct: 50,
-    weekly_sonnet_pct: 30,
     user_id: userId,
   });
 }

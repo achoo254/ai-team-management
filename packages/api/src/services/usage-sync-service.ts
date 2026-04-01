@@ -1,30 +1,31 @@
 import { UsageLog } from '../models/usage-log.js'
 
-/** Get Monday of current week as YYYY-MM-DD */
+/** Get Monday of current week as YYYY-MM-DD (local timezone, no UTC shift) */
 export function getCurrentWeekStart(): string {
   const now = new Date()
   const day = now.getDay() // 0=Sun
   const diff = now.getDate() - day + (day === 0 ? -6 : 1)
   const monday = new Date(now.getFullYear(), now.getMonth(), diff)
-  return monday.toISOString().split('T')[0]
+  const y = monday.getFullYear()
+  const m = String(monday.getMonth() + 1).padStart(2, '0')
+  const d = String(monday.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 interface LogUsageParams {
-  seatEmail: string
+  seatId: string
   userId: string
   weekStart: string
   weeklyAllPct: number
-  weeklySonnetPct: number
 }
 
 /** Log weekly usage percentages for a seat */
-export async function logUsage({ seatEmail, userId, weekStart, weeklyAllPct, weeklySonnetPct }: LogUsageParams) {
+export async function logUsage({ seatId, userId, weekStart, weeklyAllPct }: LogUsageParams) {
   await UsageLog.create({
-    seat_email: seatEmail,
+    seat_id: seatId,
     week_start: weekStart,
     weekly_all_pct: weeklyAllPct,
-    weekly_sonnet_pct: weeklySonnetPct,
     user_id: userId,
   })
-  return { success: true, weekStart, seatEmail }
+  return { success: true, weekStart, seatId }
 }

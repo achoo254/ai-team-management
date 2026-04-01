@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 priority: medium
 effort: 1h
 blockedBy: []
@@ -14,9 +14,9 @@ blocks: []
 
 | # | Phase | Effort | Status |
 |---|-------|--------|--------|
-| 1 | [Backend: model + service + routes](phase-01-backend.md) | 25m | pending |
-| 2 | [Frontend: hooks + components + pages](phase-02-frontend.md) | 20m | pending |
-| 3 | [Tests + docs](phase-03-tests-docs.md) | 15m | pending |
+| 1 | [Backend: model + service + routes](phase-01-backend.md) | 25m | done |
+| 2 | [Frontend: hooks + components + pages](phase-02-frontend.md) | 20m | done |
+| 3 | [Tests + docs](phase-03-tests-docs.md) | 15m | done |
 
 ## Key Decision
 

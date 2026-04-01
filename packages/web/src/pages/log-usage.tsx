@@ -32,9 +32,8 @@ export default function LogUsagePage() {
     bulkLog.mutate({
       weekStart,
       entries: entries.map((r) => ({
-        seatEmail: r.seatEmail,
+        seatId: r.seatId,
         weeklyAllPct: r.weeklyAllPct ?? 0,
-        weeklySonnetPct: r.weeklySonnetPct ?? 0,
       })),
     }, { onSuccess: () => setLocal([]) });
   };

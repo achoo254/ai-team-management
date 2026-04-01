@@ -144,7 +144,6 @@ Subsequent requests: JWT read from cookie or Authorization header
   seat_id: ObjectId (ref: Seat),
   week_start: Date,
   weekly_all_pct: Number (0-100),
-  weekly_sonnet_pct: Number (0-100),
   created_at: Date,
   // Index: (user_id, week_start) compound unique
 }

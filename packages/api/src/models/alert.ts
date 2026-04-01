@@ -1,7 +1,7 @@
-import mongoose, { Schema, type Document } from 'mongoose'
+import mongoose, { Schema, type Document, type Types } from 'mongoose'
 
 export interface IAlert extends Document {
-  seat_email: string
+  seat_id: Types.ObjectId
   type: 'high_usage' | 'no_activity'
   message: string
   resolved: boolean
@@ -12,7 +12,7 @@ export interface IAlert extends Document {
 
 const alertSchema = new Schema<IAlert>(
   {
-    seat_email: { type: String, required: true },
+    seat_id: { type: Schema.Types.ObjectId, ref: 'Seat', required: true },
     type: { type: String, required: true, enum: ['high_usage', 'no_activity'] },
     message: { type: String, required: true },
     resolved: { type: Boolean, default: false },

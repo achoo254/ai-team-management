@@ -31,16 +31,15 @@ router.post('/bulk', authenticate, requireAdmin, async (req, res) => {
     }
 
     const results: unknown[] = []
-    const errors: { seatEmail: string; error: string }[] = []
+    const errors: { seatId: string; error: string }[] = []
 
     for (const entry of entries) {
-      const { seatEmail, weeklyAllPct, weeklySonnetPct } = entry
+      const { seatId, weeklyAllPct } = entry
       try {
         const doc = await UsageLog.findOneAndUpdate(
-          { seat_email: seatEmail, week_start: weekStart, user_id: req.user!._id },
+          { seat_id: seatId, week_start: weekStart, user_id: req.user!._id },
           {
             weekly_all_pct: clamp(Number(weeklyAllPct ?? 0)),
-            weekly_sonnet_pct: clamp(Number(weeklySonnetPct ?? 0)),
             logged_at: new Date(),
           },
           { upsert: true, new: true },
@@ -48,7 +47,7 @@ router.post('/bulk', authenticate, requireAdmin, async (req, res) => {
         results.push(doc)
       } catch (err) {
         errors.push({
-          seatEmail,
+          seatId,
           error: err instanceof Error ? err.message : 'Unknown error',
         })
       }
@@ -71,24 +70,24 @@ router.get('/week', authenticate, async (req, res) => {
       UsageLog.find({ week_start: weekStart }).lean(),
     ])
 
-    // Group logs by seat_email — keep entry with latest logged_at
+    // Group logs by seat_id — keep entry with latest logged_at
     const logBySeat: Record<string, (typeof logs)[number]> = {}
     for (const log of logs) {
-      const existing = logBySeat[log.seat_email]
+      const key = String(log.seat_id)
+      const existing = logBySeat[key]
       if (!existing || log.logged_at > existing.logged_at) {
-        logBySeat[log.seat_email] = log
+        logBySeat[key] = log
       }
     }
 
     const data = seats.map((seat) => {
-      const log = logBySeat[seat.email]
+      const log = logBySeat[String(seat._id)]
       return {
         seatId: seat._id,
         seatEmail: seat.email,
         seatLabel: seat.label,
         team: seat.team,
         weeklyAllPct: log?.weekly_all_pct ?? null,
-        weeklySonnetPct: log?.weekly_sonnet_pct ?? null,
         loggedAt: log?.logged_at ?? null,
       }
     })

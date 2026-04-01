@@ -10,7 +10,6 @@ export interface UsageLogEntry {
   seatLabel: string;
   team: string;
   weeklyAllPct: number | null;
-  weeklySonnetPct: number | null;
   loggedAt?: string | null;
 }
 
@@ -19,13 +18,16 @@ export interface WeekLogResponse {
   seats: UsageLogEntry[];
 }
 
-// Returns Monday of the given date's week (ISO)
+// Returns Monday of the given date's week (local timezone, no UTC shift)
 export function getWeekStart(date: Date): string {
   const d = new Date(date);
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 export function useWeekLog(weekStart: string) {
@@ -38,7 +40,7 @@ export function useWeekLog(weekStart: string) {
 export function useBulkLog() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { weekStart: string; entries: { seatEmail: string; weeklyAllPct: number; weeklySonnetPct: number }[] }) =>
+    mutationFn: (body: { weekStart: string; entries: { seatId: string; weeklyAllPct: number }[] }) =>
       api.post("/api/usage-log/bulk", body),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["usage-log", vars.weekStart] });

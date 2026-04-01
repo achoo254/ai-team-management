@@ -16,7 +16,7 @@ router.get('/summary', async (_req, res) => {
     const latestLog = await UsageLog.findOne().sort({ week_start: -1 }).lean()
     const latestWeek = latestLog?.week_start
 
-    let avgAll = 0, avgSonnet = 0
+    let avgAll = 0
     if (latestWeek) {
       const result = await UsageLog.aggregate([
         { $match: { week_start: latestWeek } },
@@ -24,20 +24,18 @@ router.get('/summary', async (_req, res) => {
           $group: {
             _id: null,
             avgAll: { $avg: '$weekly_all_pct' },
-            avgSonnet: { $avg: '$weekly_sonnet_pct' },
           },
         },
       ])
       if (result.length > 0) {
         avgAll = Math.round(result[0].avgAll) || 0
-        avgSonnet = Math.round(result[0].avgSonnet) || 0
       }
     }
 
     const activeAlerts = await Alert.countDocuments({ resolved: false })
     const totalLogs = await UsageLog.countDocuments()
 
-    res.json({ avgAllPct: avgAll, avgSonnetPct: avgSonnet, activeAlerts, totalLogs })
+    res.json({ avgAllPct: avgAll, activeAlerts, totalLogs })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
@@ -77,23 +75,21 @@ router.get('/enhanced', async (_req, res) => {
       { $sort: { week_start: -1 } },
       {
         $group: {
-          _id: '$seat_email',
+          _id: '$seat_id',
           weekly_all_pct: { $first: '$weekly_all_pct' },
-          weekly_sonnet_pct: { $first: '$weekly_sonnet_pct' },
         },
       },
     ])
 
-    const usageMap: Record<string, { weekly_all_pct: number; weekly_sonnet_pct: number }> = {}
-    for (const u of latestUsage) usageMap[u._id] = u
+    const usageMap: Record<string, { weekly_all_pct: number }> = {}
+    for (const u of latestUsage) usageMap[String(u._id)] = u
 
     const seats = await Seat.find().sort({ _id: 1 }).lean()
 
     const usagePerSeat = seats.map((s) => ({
       label: s.label,
       team: s.team,
-      all_pct: usageMap[s.email]?.weekly_all_pct || 0,
-      sonnet_pct: usageMap[s.email]?.weekly_sonnet_pct || 0,
+      all_pct: usageMap[String(s._id)]?.weekly_all_pct || 0,
     }))
 
     // 8-week usage trend
@@ -102,7 +98,6 @@ router.get('/enhanced', async (_req, res) => {
         $group: {
           _id: '$week_start',
           avg_all: { $avg: '$weekly_all_pct' },
-          avg_sonnet: { $avg: '$weekly_sonnet_pct' },
         },
       },
       { $sort: { _id: -1 } },
@@ -111,7 +106,6 @@ router.get('/enhanced', async (_req, res) => {
         $project: {
           week_start: '$_id',
           avg_all: { $round: ['$avg_all', 0] },
-          avg_sonnet: { $round: ['$avg_sonnet', 0] },
           _id: 0,
         },
       },
@@ -123,7 +117,7 @@ router.get('/enhanced', async (_req, res) => {
     for (const s of seats) {
       const team = s.team
       if (!teamUsageCalc[team]) teamUsageCalc[team] = { total: 0, count: 0 }
-      teamUsageCalc[team].total += usageMap[s.email]?.weekly_all_pct || 0
+      teamUsageCalc[team].total += usageMap[String(s._id)]?.weekly_all_pct || 0
       teamUsageCalc[team].count++
     }
     const teamUsage = Object.entries(teamUsageCalc).map(([team, data]) => ({
@@ -150,52 +144,47 @@ router.get('/enhanced', async (_req, res) => {
 // GET /api/dashboard/usage/by-seat — per-seat usage with user names
 router.get('/usage/by-seat', async (_req, res) => {
   try {
-    // Latest week per seat_email
+    // Latest week per seat_id
     const latestUsage = await UsageLog.aggregate([
       { $sort: { week_start: -1 } },
       {
         $group: {
-          _id: '$seat_email',
+          _id: '$seat_id',
           weekly_all_pct: { $first: '$weekly_all_pct' },
-          weekly_sonnet_pct: { $first: '$weekly_sonnet_pct' },
           last_logged: { $first: '$logged_at' },
         },
       },
     ])
 
-    const usageMap: Record<string, { weekly_all_pct: number; weekly_sonnet_pct: number; last_logged: string }> = {}
-    for (const u of latestUsage) usageMap[u._id] = u
+    const usageMap: Record<string, { weekly_all_pct: number; last_logged: string }> = {}
+    for (const u of latestUsage) usageMap[String(u._id)] = u
 
     const seats = await Seat.find().lean()
     const users = await User.find({ active: true, seat_ids: { $exists: true, $ne: [] } }, 'name seat_ids').lean()
 
-    // Map seat _id → email
-    const seatIdToEmail: Record<string, string> = {}
-    for (const s of seats) seatIdToEmail[String(s._id)] = s.email
-
-    // Map seat email → user names (user can be in multiple seats)
-    const usersBySeatEmail: Record<string, string[]> = {}
+    // Map seat _id → user names (user can be in multiple seats)
+    const usersBySeatId: Record<string, string[]> = {}
     for (const u of users) {
       for (const seatId of u.seat_ids) {
-        const seatEmail = seatIdToEmail[String(seatId)]
-        if (seatEmail) {
-          if (!usersBySeatEmail[seatEmail]) usersBySeatEmail[seatEmail] = []
-          usersBySeatEmail[seatEmail].push(u.name)
-        }
+        const key = String(seatId)
+        if (!usersBySeatId[key]) usersBySeatId[key] = []
+        usersBySeatId[key].push(u.name)
       }
     }
 
     const enriched = seats
-      .map((s) => ({
-        seat_id: s._id,
-        seat_email: s.email,
-        label: s.label,
-        team: s.team,
-        weekly_all_pct: usageMap[s.email]?.weekly_all_pct || 0,
-        weekly_sonnet_pct: usageMap[s.email]?.weekly_sonnet_pct || 0,
-        last_logged: usageMap[s.email]?.last_logged || null,
-        users: usersBySeatEmail[s.email] || [],
-      }))
+      .map((s) => {
+        const key = String(s._id)
+        return {
+          seat_id: s._id,
+          seat_email: s.email,
+          label: s.label,
+          team: s.team,
+          weekly_all_pct: usageMap[key]?.weekly_all_pct || 0,
+          last_logged: usageMap[key]?.last_logged || null,
+          users: usersBySeatId[key] || [],
+        }
+      })
       .sort((a, b) => b.weekly_all_pct - a.weekly_all_pct)
 
     res.json({ seats: enriched })

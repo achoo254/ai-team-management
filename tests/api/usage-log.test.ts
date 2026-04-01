@@ -9,7 +9,7 @@ import { UsageLog } from "@/models/usage-log";
 describe("GET /api/usage-log/week", () => {
   beforeEach(async () => {
     const { seat, user } = await seedTestData();
-    await seedUsageLog(seat.email, String(user._id));
+    await seedUsageLog(String(seat._id), String(user._id));
   });
 
   it("returns 401 without token", async () => {
@@ -71,7 +71,7 @@ describe("POST /api/usage-log/bulk", () => {
       method: "POST",
       body: JSON.stringify({
         weekStart: "2026-03-23",
-        entries: [{ seatEmail: "seat@test.com", weeklyAllPct: 60, weeklySonnetPct: 40 }],
+        entries: [{ seatId: "000000000000000000000001", weeklyAllPct: 60 }],
       }),
       token,
     });
@@ -95,7 +95,7 @@ describe("POST /api/usage-log/bulk", () => {
       body: JSON.stringify({
         weekStart: "2026-03-23", // Monday
         entries: [
-          { seatEmail: "seat@test.com", weeklyAllPct: 75, weeklySonnetPct: 50 },
+          { seatId: "000000000000000000000001", weeklyAllPct: 75 },
         ],
       }),
       token,
@@ -116,7 +116,7 @@ describe("POST /api/usage-log/bulk", () => {
       method: "POST",
       body: JSON.stringify({
         weekStart: "2026-03-24", // Tuesday
-        entries: [{ seatEmail: "seat@test.com", weeklyAllPct: 50, weeklySonnetPct: 30 }],
+        entries: [{ seatId: "000000000000000000000001", weeklyAllPct: 50 }],
       }),
       token,
     });
@@ -131,7 +131,7 @@ describe("POST /api/usage-log/bulk", () => {
     const req = makeRequest("/api/usage-log/bulk", {
       method: "POST",
       body: JSON.stringify({
-        entries: [{ seatEmail: "seat@test.com", weeklyAllPct: 50, weeklySonnetPct: 30 }],
+        entries: [{ seatId: "000000000000000000000001", weeklyAllPct: 50 }],
       }),
       token,
     });
@@ -152,18 +152,18 @@ describe("POST /api/usage-log/bulk", () => {
     expect(body.error).toMatch(/non-empty/i);
   });
 
-  it("upserts log on duplicate weekStart + seatEmail + user_id", async () => {
+  it("upserts log on duplicate weekStart + seatId + user_id", async () => {
     const token = createTestToken();
     const payload = {
       weekStart: "2026-03-23",
-      entries: [{ seatEmail: "seat@test.com", weeklyAllPct: 50, weeklySonnetPct: 30 }],
+      entries: [{ seatId: "000000000000000000000001", weeklyAllPct: 50 }],
     };
     // First insert
     await POST(makeRequest("/api/usage-log/bulk", { method: "POST", body: JSON.stringify(payload), token }));
     // Second insert (upsert) with different values
     const req2 = makeRequest("/api/usage-log/bulk", {
       method: "POST",
-      body: JSON.stringify({ ...payload, entries: [{ seatEmail: "seat@test.com", weeklyAllPct: 90, weeklySonnetPct: 70 }] }),
+      body: JSON.stringify({ ...payload, entries: [{ seatId: "000000000000000000000001", weeklyAllPct: 90 }] }),
       token,
     });
     const res2 = await POST(req2);
@@ -171,7 +171,7 @@ describe("POST /api/usage-log/bulk", () => {
     const body2 = await res2.json();
     expect(body2.results[0].weekly_all_pct).toBe(90);
     // Only one log should exist (upserted)
-    const count = await UsageLog.countDocuments({ seat_email: "seat@test.com", week_start: "2026-03-23" });
+    const count = await UsageLog.countDocuments({ week_start: "2026-03-23" });
     expect(count).toBe(1);
   });
 
@@ -181,7 +181,7 @@ describe("POST /api/usage-log/bulk", () => {
       method: "POST",
       body: JSON.stringify({
         weekStart: "2026-03-23",
-        entries: [{ seatEmail: "seat@test.com", weeklyAllPct: 150, weeklySonnetPct: -10 }],
+        entries: [{ seatId: "000000000000000000000001", weeklyAllPct: 150 }],
       }),
       token,
     });
@@ -189,6 +189,5 @@ describe("POST /api/usage-log/bulk", () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.results[0].weekly_all_pct).toBe(100);
-    expect(body.results[0].weekly_sonnet_pct).toBe(0);
   });
 });
