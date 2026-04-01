@@ -44,7 +44,6 @@ await build({
   target: 'node20',
   format: 'esm',
   outfile: 'dist/index.js',
-  packages: 'external',
   define,
 })
 
