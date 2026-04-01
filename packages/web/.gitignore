@@ -1,0 +1,7 @@
+# Env files
+.env
+.env.local
+.env.staging
+
+# Build output
+dist/
