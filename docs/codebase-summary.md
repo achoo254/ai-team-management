@@ -4,63 +4,87 @@
 
 ```
 quan-ly-team-claude/
-├── server/                          # Express backend
-│   ├── index.js                     # App entry, routes, cron jobs (async startup)
-│   ├── config.js                    # Environment config (includes mongoUri)
-│   ├── db/
-│   │   ├── database.js              # Mongoose connection helpers
-│   │   └── migrations.js            # Async seed data initialization
-│   ├── models/                      # Mongoose schemas
-│   │   ├── seat-model.js
-│   │   ├── user-model.js
-│   │   ├── usage-log-model.js
-│   │   ├── schedule-model.js
-│   │   ├── alert-model.js
-│   │   └── team-model.js
-│   ├── lib/
-│   │   └── firebase-admin-init.js   # Firebase Admin SDK init
-│   ├── middleware/
-│   │   └── auth-middleware.js       # JWT auth + requireAdmin + validateObjectId
-│   ├── routes/
-│   │   ├── auth-routes.js           # Google auth, logout, /me (async)
-│   │   ├── dashboard-routes.js      # Dashboard stats (async)
-│   │   ├── seat-routes.js           # Seat CRUD (async)
-│   │   ├── schedule-routes.js       # Schedule CRUD (async)
-│   │   ├── alert-routes.js          # Alert CRUD (async)
-│   │   ├── admin-routes.js          # Admin user management (async)
-│   │   ├── team-routes.js           # Team CRUD (async)
-│   │   └── usage-log-routes.js      # Usage log CRUD (async)
-│   ├── scripts/
-│   │   └── db-reset.js              # Drop MongoDB + re-seed
-│   └── services/
-│       ├── alert-service.js         # Alert logic (async)
-│       ├── telegram-service.js      # Telegram notifications (async)
-│       └── usage-sync-service.js    # Usage sync (async)
-│
-├── public/                          # Frontend SPA
-│   ├── index.html                   # SPA shell
-│   ├── login.html                   # Google sign-in
-│   ├── js/
-│   │   ├── api-client.js            # Fetch wrapper
-│   │   ├── dashboard-app.js         # SPA router + logic
-│   │   ├── dashboard-helpers.js     # UI helpers
-│   │   └── dashboard-admin-actions.js # Admin UI
-│   ├── views/
-│   │   ├── view-dashboard.html      # Dashboard view
-│   │   ├── view-seats.html          # Seats management
-│   │   ├── view-schedule.html       # Scheduling
-│   │   ├── view-teams.html          # Team management
-│   │   ├── view-admin.html          # Admin panel
-│   │   ├── view-log-usage.html      # Usage logging
-│   │   ├── view-alerts.html         # Alerts
-│   │   └── view-modal.html          # Modal templates
-│   └── css/                         # Styling
+├── packages/
+│   ├── api/                         # Express 5 + TypeScript backend
+│   │   ├── src/
+│   │   │   ├── index.ts             # App entry, routes, cron jobs
+│   │   │   ├── config.ts            # Environment config
+│   │   │   ├── db.ts                # Mongoose connection helpers
+│   │   │   ├── firebase-admin.ts    # Firebase Admin SDK init
+│   │   │   ├── middleware.ts        # Auth middleware
+│   │   │   ├── models/              # Mongoose schemas (TypeScript)
+│   │   │   │   ├── seat.ts
+│   │   │   │   ├── user.ts
+│   │   │   │   ├── usage-log.ts
+│   │   │   │   ├── schedule.ts
+│   │   │   │   ├── alert.ts
+│   │   │   │   └── team.ts
+│   │   │   ├── routes/              # Express route handlers (TypeScript)
+│   │   │   │   ├── auth.ts
+│   │   │   │   ├── dashboard.ts
+│   │   │   │   ├── seats.ts
+│   │   │   │   ├── schedules.ts
+│   │   │   │   ├── alerts.ts
+│   │   │   │   ├── admin.ts
+│   │   │   │   ├── teams.ts
+│   │   │   │   └── usage-log.ts
+│   │   │   ├── services/            # Business logic (TypeScript)
+│   │   │   │   ├── alert-service.ts
+│   │   │   │   ├── telegram-service.ts
+│   │   │   │   └── usage-sync-service.ts
+│   │   │   ├── scripts/
+│   │   │   │   └── db-reset.ts      # Drop MongoDB + re-seed
+│   │   │   └── seed-data.ts         # Seed data definitions
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── dist/                    # Compiled output (gitignored)
+│   │
+│   ├── web/                         # Vite + React 19 + TypeScript frontend
+│   │   ├── src/
+│   │   │   ├── main.tsx             # React entry point
+│   │   │   ├── app.tsx              # Root app component + React Router
+│   │   │   ├── pages/               # Route page components (TypeScript)
+│   │   │   │   ├── dashboard.tsx
+│   │   │   │   ├── seats.tsx
+│   │   │   │   ├── schedules.tsx
+│   │   │   │   ├── alerts.tsx
+│   │   │   │   ├── admin.tsx
+│   │   │   │   ├── teams.tsx
+│   │   │   │   ├── usage-log.tsx
+│   │   │   │   └── login.tsx
+│   │   │   ├── components/          # Reusable React components
+│   │   │   │   ├── auth-provider.tsx
+│   │   │   │   ├── seat-card.tsx
+│   │   │   │   ├── schedule-grid.tsx
+│   │   │   │   ├── dashboard-shell.tsx
+│   │   │   │   └── ...
+│   │   │   ├── lib/
+│   │   │   │   └── api.ts           # Fetch wrapper
+│   │   │   ├── index.css            # Global styles
+│   │   │   └── types/               # Type definitions
+│   │   ├── index.html               # Vite entry HTML
+│   │   ├── vite.config.ts           # Vite configuration + API proxy
+│   │   ├── tailwind.config.ts       # Tailwind CSS config
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── dist/                    # Built output (gitignored)
+│   │
+│   └── shared/                      # Shared TypeScript types
+│       ├── src/
+│       │   └── types.ts             # Exported types for API/Web
+│       ├── package.json
+│       └── tsconfig.json
 │
 ├── docs/                            # Project documentation
 ├── .env.example                     # Environment variables template
 ├── .env                             # Local environment (git-ignored)
-├── package.json                     # Dependencies & scripts
-└── CLAUDE.md                        # Project guidance for Claude
+├── .env.test                        # Test environment
+├── package.json                     # Root workspace config + scripts
+├── pnpm-workspace.yaml              # pnpm workspace definition
+├── tsconfig.base.json               # Base TypeScript config
+├── tsconfig.json                    # Root TypeScript config
+├── CLAUDE.md                        # Project guidance for Claude
+└── README.md                        # Main README
 
 ```
 
@@ -69,27 +93,35 @@ quan-ly-team-claude/
 | Layer | Technology |
 |-------|-----------|
 | **Runtime** | Node.js 18+ |
-| **Package Manager** | pnpm |
+| **Language** | TypeScript 5 |
+| **Package Manager** | pnpm workspaces |
 | **Backend Framework** | Express 5 |
-| **Database** | MongoDB (via Mongoose) |
+| **Backend Dev Server** | tsx (TypeScript executor) |
+| **Frontend Framework** | React 19 |
+| **Frontend Router** | React Router v7 |
+| **Frontend Build** | Vite 8 |
+| **Database** | MongoDB (via Mongoose 9.3.1) |
 | **Auth** | Firebase Admin SDK + JWT (jsonwebtoken) |
-| **Frontend** | Vanilla JS (ES6+) SPA |
+| **Data Fetching** | React Query (TanStack Query) |
+| **Styling** | Tailwind CSS 4 + Base UI |
 | **Async Jobs** | node-cron (Friday reminders) |
 | **Notifications** | Telegram Bot API |
-| **Middleware** | cookie-parser, cors, express.json |
+| **Testing** | Vitest |
 
 ## Module System
 
-- **CommonJS throughout** (`require`/`module.exports`)
-- No bundler or transpiler
-- No external UI framework (vanilla HTML/CSS/JS)
+- **ES Modules throughout** (`import`/`export`)
+- **TypeScript** for type safety
+- **Compilation**: tsc compiles TS to JS in dist/ directories
+- **Build Tool**: Vite for frontend bundling
+- **Monorepo**: pnpm workspaces for shared types between packages
 
 ## Key Data Structures
 
-### Mongoose Models
+### Mongoose Models (packages/api/src/models/*.ts)
 
 #### Seat
-```javascript
+```typescript
 {
   _id: ObjectId (auto),
   email: String (required, unique),
@@ -101,7 +133,7 @@ quan-ly-team-claude/
 ```
 
 #### User
-```javascript
+```typescript
 {
   _id: ObjectId (auto),
   name: String,
@@ -115,7 +147,7 @@ quan-ly-team-claude/
 ```
 
 #### UsageLog
-```javascript
+```typescript
 {
   _id: ObjectId (auto),
   user_id: ObjectId (reference to User),
@@ -129,7 +161,7 @@ quan-ly-team-claude/
 ```
 
 #### Schedule
-```javascript
+```typescript
 {
   _id: ObjectId (auto),
   seat_id: ObjectId (reference to Seat),
@@ -142,7 +174,7 @@ quan-ly-team-claude/
 ```
 
 #### Alert
-```javascript
+```typescript
 {
   _id: ObjectId (auto),
   seat_id: ObjectId (reference to Seat),
@@ -154,7 +186,7 @@ quan-ly-team-claude/
 ```
 
 #### Team
-```javascript
+```typescript
 {
   _id: ObjectId (auto),
   name: String (unique),
@@ -216,14 +248,15 @@ quan-ly-team-claude/
 - `DELETE /api/admin/users/:id` — Delete user
 - `POST /api/admin/seed-data` — Reset database (dev only)
 
-## Frontend Architecture
+## Frontend Architecture (packages/web)
 
-### SPA Flow
-1. `login.html` → Google sign-in → JWT issued
-2. `index.html` loaded → `dashboard-app.js` initializes router
-3. User clicks navigation → `dashboard-app.js` loads view partial
-4. View renders via `dashboard-helpers.js` (templates, DOM manipulation)
-5. Admin actions via `dashboard-admin-actions.js` (modal forms)
+### React App Flow
+1. `index.html` loaded → Vite loads `main.tsx`
+2. `main.tsx` renders React app → mounts App.tsx
+3. `App.tsx` wraps app with AuthProvider + React Query + React Router
+4. React Router renders pages based on URL
+5. Components fetch data via React Query
+6. UI updates via React hooks (useState, useEffect)
 
 ### View Components
 - **Dashboard**: Stats, alerts, quick info
@@ -281,19 +314,28 @@ See `.env.example` for all variables. Key:
 ## Common Patterns
 
 ### Error Handling
-- Try-catch in async route handlers
-- 400 (bad request), 401 (unauthorized), 403 (forbidden), 500 (server error)
+- Backend: Try-catch in async route handlers → res.status().json() with error message
+- Frontend: React Query error handling → display in UI via toast/modal
+- Status codes: 400 (bad request), 401 (unauthorized), 403 (forbidden), 500 (server error)
 - Error messages logged to console with context
 
-### Database Access
+### Database Access (Backend)
 - Mongoose models imported in routes/services
 - Async/await for all database operations
 - Schema validation and unique constraints at model level
 - Optional `validateObjectId` middleware for routes accepting :id params
+- TypeScript types for model instances (e.g., `IUser`, `ISeat`)
 
-### Middleware Stack
+### Data Fetching (Frontend)
+- React Query (TanStack Query) for server state management
+- Custom hooks wrapping query calls (e.g., `useSeats()`, `useUsers()`)
+- Automatic caching, refetching, and invalidation via query keys
+- Mutations for POST/PUT/DELETE operations
+
+### Middleware Stack (Backend)
 - CORS enabled for all origins
 - Body parser (json)
 - Cookie parser for JWT
-- Custom auth middleware: `authenticate`, `requireAdmin`, `validateObjectId`
+- Custom auth middleware: `authenticate()`, `requireAdmin()`, `validateObjectId()`
+- Error handler (express.json error handling)
 

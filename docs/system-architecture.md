@@ -2,28 +2,34 @@
 
 ## Overview
 
-Claude Teams Management Dashboard is a full-stack web application built with Express.js backend, MongoDB database, and vanilla JavaScript frontend. It manages Claude Teams seats (account licenses) shared among team members.
+Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 + TypeScript backend, Vite + React 19 SPA frontend, and shared TypeScript types. Manages Claude Teams seats (account licenses) shared among team members.
 
-**Architecture Type**: Monolithic with clear separation between backend API and frontend SPA.
+**Architecture Type**: Monorepo (pnpm workspaces) with clear separation between packages: API backend (Express 5), web frontend (React + Vite), and shared types.
 
 ## Technology Stack
 
-### Backend
+### Backend (`packages/api`)
 - **Runtime**: Node.js 18+
+- **Language**: TypeScript 5
 - **Framework**: Express 5.x
+- **Dev Server**: tsx with file watching
 - **ORM/ODM**: Mongoose 9.3.1 (MongoDB)
 - **Authentication**: Firebase Admin SDK 13.7.0 + JWT (jsonwebtoken 9.0.3)
 - **Task Scheduling**: node-cron 4.2.1
 - **Notifications**: Telegram Bot API
 - **Middleware**: cors, cookie-parser, express.json
 
-### Frontend
+### Frontend (`packages/web`)
 - **Architecture**: Single Page Application (SPA)
-- **Language**: Vanilla JavaScript (ES6+)
-- **Interactivity**: Alpine.js 3.x (optional, lightweight)
-- **Styling**: Tailwind CSS 4 (CDN)
-- **Charts**: Chart.js 4.4.0
-- **HTTP Client**: Fetch API with custom wrapper (api-client.js)
+- **Framework**: React 19
+- **Router**: React Router v7
+- **Build Tool**: Vite 8
+- **Language**: TypeScript 5
+- **Styling**: Tailwind CSS 4 (via @tailwindcss/vite)
+- **UI Components**: Base UI React
+- **Charts**: Recharts 3.8.0
+- **Data Fetching**: @tanstack/react-query 5.95.0
+- **Notifications**: Sonner (toast library)
 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
@@ -31,11 +37,17 @@ Claude Teams Management Dashboard is a full-stack web application built with Exp
 - **Collections**: 6 (seats, users, usage_logs, schedules, alerts, teams)
 - **Indexing**: Compound indexes on (user_id, week_start) and (seat_id, day_of_week, slot)
 
+### Monorepo & Shared (`packages/shared`)
+- **Package Manager**: pnpm workspaces
+- **Shared Exports**: TypeScript types (exported via types.ts)
+- **Workspace Configuration**: pnpm-workspace.yaml
+
 ### Infrastructure
 - **Hosting**: Any Node.js-compatible server
-- **Port**: Configurable (default 3000)
-- **Environment**: .env-based configuration
-- **Package Manager**: pnpm (recommended), npm compatible
+- **API Port**: 3001 (configurable)
+- **Frontend Port**: 5173 (Vite dev, proxies /api to API)
+- **Environment**: .env-based configuration (root-level .env)
+- **Build**: TypeScript compilation to dist/ directories
 
 ## System Components
 
@@ -43,11 +55,11 @@ Claude Teams Management Dashboard is a full-stack web application built with Exp
 
 **Flow**:
 ```
-User → Login Page → Google Sign-In (Firebase Client SDK)
+User → Login Page (React component) → Google Sign-In (Firebase Client SDK)
     ↓
 idToken → POST /api/auth/google
     ↓
-Server verifies via Firebase Admin SDK
+API verifies via Firebase Admin SDK
     ↓
 JWT issued in httpOnly, Secure, SameSite=Strict cookie (24h expiry)
     ↓
@@ -55,46 +67,51 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```
 
 **Key Files**:
-- `public/login.html` — Google sign-in UI
-- `server/lib/firebase-admin-init.js` — Firebase Admin initialization
-- `server/routes/auth-routes.js` — Auth endpoints (/api/auth/*)
-- `server/middleware/auth-middleware.js` — JWT verification, role checks
+- `packages/web/src/pages/login.tsx` — Google sign-in UI
+- `packages/api/src/firebase-admin.ts` — Firebase Admin initialization
+- `packages/api/src/routes/auth.ts` — Auth endpoints (/api/auth/*)
+- `packages/api/src/middleware.ts` — JWT verification, role checks
 
 **Protected Endpoints**:
 - All `/api/*` routes require valid JWT
 - Admin endpoints require `role === 'admin'`
 - Public routes: `/login.html`
 
-### 2. Backend API (Express)
+### 2. Backend API (Express 5 + TypeScript)
+
+**Location**: `packages/api/src`
 
 **Architecture**:
+- TypeScript for type safety
 - Modular route handlers organized by resource
 - Service layer for business logic
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (8 files, 28 endpoints):
-- `auth-routes.js` — Login, logout, current user
-- `dashboard-routes.js` — Stats, weekly summary, alerts
-- `seat-routes.js` — Seat CRUD, team assignment
-- `user-routes.js` (via admin-routes.js) — User management
-- `schedule-routes.js` — Schedule CRUD with conflict prevention
-- `alert-routes.js` — Alert creation, resolution, listing
-- `team-routes.js` — Team CRUD
-- `usage-log-routes.js` — Usage logging, retrieval
+**Route Structure** (8 files):
+- `routes/auth.ts` — Login, logout, current user
+- `routes/dashboard.ts` — Stats, weekly summary, alerts
+- `routes/seats.ts` — Seat CRUD, team assignment
+- `routes/admin.ts` — User management
+- `routes/schedules.ts` — Schedule CRUD with conflict prevention
+- `routes/alerts.ts` — Alert creation, resolution, listing
+- `routes/teams.ts` — Team CRUD
+- `routes/usage-log.ts` — Usage logging, retrieval
 
 **Service Layer** (4 files):
-- `alert-service.js` — Alert generation and checking
-- `telegram-service.js` — Telegram message formatting and sending
-- `usage-sync-service.js` — Usage data synchronization (optional)
-- `anthropic-service.js` — Future Anthropic API integration
+- `services/alert-service.ts` — Alert generation and checking
+- `services/telegram-service.ts` — Telegram message formatting and sending
+- `services/usage-sync-service.ts` — Usage data synchronization
+- `services/anthropic-service.ts` — Future Anthropic API integration
 
-### 3. Database Layer (Mongoose)
+### 3. Database Layer (Mongoose + TypeScript)
+
+**Location**: `packages/api/src/models`
 
 **6 Collections**:
 
 #### Seats
-```javascript
+```typescript
 {
   _id: ObjectId,
   email: String (unique),
@@ -106,7 +123,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```
 
 #### Users
-```javascript
+```typescript
 {
   _id: ObjectId,
   name: String,
@@ -120,7 +137,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```
 
 #### UsageLogs
-```javascript
+```typescript
 {
   _id: ObjectId,
   user_id: ObjectId (ref: User),
@@ -134,7 +151,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```
 
 #### Schedules
-```javascript
+```typescript
 {
   _id: ObjectId,
   seat_id: ObjectId (ref: Seat),
@@ -147,7 +164,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```
 
 #### Alerts
-```javascript
+```typescript
 {
   _id: ObjectId,
   seat_id: ObjectId (ref: Seat),
@@ -159,7 +176,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```
 
 #### Teams
-```javascript
+```typescript
 {
   _id: ObjectId,
   name: String (unique),
@@ -169,43 +186,46 @@ Subsequent requests: JWT read from cookie or Authorization header
 }
 ```
 
-### 4. Frontend SPA
+### 4. Frontend SPA (React 19 + Vite)
+
+**Location**: `packages/web/src`
 
 **Architecture**:
 ```
-login.html (auth entry)
+index.html (Vite entry with root <div>)
     ↓
-index.html (SPA shell with sidebar)
+main.tsx (React app bootstrap)
     ↓
-Alpine.js app (dashboardApp in dashboard-app.js)
+App.tsx (React Router v7 provider)
     ↓
-Dynamic view partials (8 HTML files)
+Routes + Components (pages, layouts, UI components)
     ↓
-API calls via api-client.js fetch wrapper
+API calls via React Query (TanStack Query)
 ```
 
 **Key Files**:
-- `public/index.html` — SPA shell with sidebar navigation
-- `public/login.html` — Login with Google sign-in button
-- `public/js/api-client.js` — Fetch wrapper with auto 401 redirect
-- `public/js/dashboard-app.js` — Main Alpine.js store + navigation
-- `public/js/dashboard-helpers.js` — UI utilities (formatting, helpers)
-- `public/js/dashboard-admin-actions.js` — Admin CRUD operations
+- `pages/` — Route pages (dashboard, seats, schedules, etc.)
+- `components/` — Reusable UI components (cards, dialogs, grids)
+- `app.tsx` — Root App component with React Router
+- `main.tsx` — React app entry point
+- `components/auth-provider.tsx` — Firebase Auth context
+- `components/dashboard-shell.tsx` — Main layout shell with sidebar
 
-**View Partials** (8 views):
-1. `view-dashboard.html` — Overview stats, recent alerts, summary cards
-2. `view-log-usage.html` — Log weekly usage, view history
-3. `view-seats.html` — List, create, edit, delete seats
-4. `view-schedule.html` — Schedule assignments (day + morning/afternoon)
-5. `view-alerts.html` — View and resolve alerts
-6. `view-admin.html` — User CRUD, system admin panel
-7. `view-teams.html` — Manage team definitions
-8. `view-modal.html` — Reusable modal templates
+**Page Components**:
+1. `pages/dashboard.tsx` — Overview stats, recent alerts, summary cards
+2. `pages/usage-log.tsx` — Log weekly usage, view history
+3. `pages/seats.tsx` — List, create, edit, delete seats
+4. `pages/schedules.tsx` — Schedule assignments (day + morning/afternoon)
+5. `pages/alerts.tsx` — View and resolve alerts
+6. `pages/admin.tsx` — User CRUD, system admin panel
+7. `pages/teams.tsx` — Manage team definitions
+8. `pages/login.tsx` — Login page with Google sign-in
 
 **State Management**:
-- Centralized in Alpine.js store (dashboardApp)
-- Minimal state; mostly API-driven
-- No external state library (Redux, Zustand)
+- React Context for global auth state
+- React Query (TanStack Query) for server state
+- Component-level state via useState
+- URL-based routing with React Router v7
 
 ### 5. Scheduled Tasks (Cron)
 
@@ -223,15 +243,15 @@ API calls via api-client.js fetch wrapper
    - Sends formatted report to Telegram
 
 **Configuration**:
-- `server/index.js` — Cron schedule setup
-- `server/services/telegram-service.js` — Message formatting and sending
+- `packages/api/src/index.ts` — Cron schedule setup
+- `packages/api/src/services/telegram-service.ts` — Message formatting and sending
 - Requires `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 
 ### 6. Configuration & Environment
 
-**Config File**: `server/config.js`
-- Reads `.env` via dotenv
-- Exports constants: `jwtSecret`, `mongoUri`, `port`, `telegramToken`, etc.
+**Config Files**:
+- `packages/api/src/config.ts` — API environment config
+- `.env` (root) — Shared environment variables for all packages
 - No hardcoded secrets; all from environment
 
 **Environment Variables**:
@@ -321,19 +341,26 @@ Frontend: Refresh seats list
 - Firebase project with service account JSON
 - (Optional) Telegram bot token
 
-### Process
-1. Set environment variables on server
-2. Run `pnpm install` to install dependencies
-3. Run `pnpm run db:reset` to initialize database (one-time)
-4. Run `pnpm start` to start server
-5. Server listens on configured `PORT` (default 3000)
-6. Cron jobs activate automatically on startup
+### Development Process
+1. Install dependencies: `pnpm install`
+2. Set environment variables in `.env`
+3. Initialize database: `pnpm run db:reset`
+4. Run dev servers: `pnpm dev` (starts both API and web in parallel)
+   - Web: http://localhost:5173
+   - API: http://localhost:3001
+
+### Production Process
+1. Build packages: `pnpm build`
+2. Set environment variables on server
+3. Start API: `pnpm -F @repo/api start`
+4. Serve built web app via static server or CDN
+5. API listens on configured `PORT` (default 3001)
 
 ### Scaling Considerations
 - **Current Capacity**: Designed for <100 users, <1000 seats
 - **MongoDB Scaling**: Create indexes on user_id, week_start, seat_id
 - **API Caching**: Implement Redis for stats endpoints if needed
-- **Frontend**: No build step; scales with static file serving
+- **Frontend**: Built SPA served as static files; scales via CDN
 - **Cron Jobs**: Fire-and-forget; timeouts logged but non-blocking
 
 ## Security Architecture
@@ -345,9 +372,9 @@ Frontend: Refresh seats list
 - All protected endpoints checked via middleware
 
 ### Authorization
-- `authenticate` middleware: Verifies JWT, sets `req.user`
-- `requireAdmin` middleware: Checks `req.user.role === 'admin'`
-- `validateObjectId` middleware: Validates MongoDB ObjectIds in URLs
+- `authenticate()` middleware: Verifies JWT, sets `req.user` in types
+- `requireAdmin()` middleware: Checks `req.user.role === 'admin'`
+- `validateObjectId()` middleware: Validates MongoDB ObjectIds in URLs
 
 ### Data Protection
 - CORS enabled for all origins (configurable)
@@ -381,15 +408,17 @@ Frontend: Refresh seats list
 ## Monitoring & Debugging
 
 **Development**:
-- Run `pnpm dev` for auto-reload on file changes
-- Check server logs for errors, requests, cron job status
+- Run `pnpm dev` for auto-reload on file changes (API: tsx watch, Web: Vite HMR)
+- Check terminal/console logs for errors, requests, cron job status
 - Use browser DevTools for frontend debugging
+- React DevTools extension helpful for debugging React components
 
 **Production**:
 - Monitor MongoDB connection pool
 - Check Telegram integration (test with manual reminder)
 - Log rotation recommended for long-running servers
 - Alert on cron job failures (add error email in future)
+- Monitor API and web app uptime separately
 
 ## Performance Characteristics
 
@@ -413,10 +442,10 @@ Frontend: Refresh seats list
 2. **Message Queue**: Bull/RabbitMQ for async tasks (Telegram, email)
 3. **Analytics**: Separate analytics database or data warehouse
 4. **Microservices**: Extract alert service, Telegram service to separate processes
-5. **Frontend Build**: Switch to bundler (Vite) if app grows significantly
-6. **Testing**: Add Jest/Supertest for unit/integration tests
-7. **API Documentation**: OpenAPI/Swagger specification
-8. **Audit Logging**: Separate audit collection for compliance
+5. **E2E Testing**: Add Playwright/Cypress for integration tests
+6. **API Documentation**: OpenAPI/Swagger specification
+7. **Audit Logging**: Separate audit collection for compliance
+8. **Frontend Performance**: Code splitting and lazy loading for large page count
 
 ## Technology Rationale
 

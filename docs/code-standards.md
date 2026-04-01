@@ -2,10 +2,11 @@
 
 ## Module System
 
-- **CommonJS** throughout: `require()` and `module.exports`
-- No ES6 import/export syntax
-- No transpiler or bundler
-- File names: kebab-case (e.g., `firebase-admin-init.js`, `usage-sync-service.js`)
+- **ES Modules** throughout: `import`/`export`
+- **TypeScript** for all source files
+- **Compilation**: TypeScript compiled to JavaScript in `dist/` directories
+- **Package Manager**: pnpm workspaces for monorepo management
+- File names: kebab-case (e.g., `firebase-admin.ts`, `usage-sync-service.ts`)
 
 ## Naming Conventions
 
@@ -34,23 +35,25 @@
 
 ## Code Organization
 
-### Backend Structure
+### Backend Structure (`packages/api/src`)
 
-#### Routes (`routes/*-routes.js`)
-- Express router mounted at module export
+#### Routes (`routes/*.ts`)
+- Express router with TypeScript types
 - All handlers are async (async/await)
 - Authentication via middleware before handler
 - Error handling: try-catch with res.status().json()
 - Return early on validation errors
 
 Example:
-```javascript
-const express = require('express');
-const { authenticate, requireAdmin } = require('../middleware/auth-middleware');
-const Seat = require('../models/seat-model');
+```typescript
+import express from 'express';
+import { authenticate, requireAdmin } from '../middleware';
+import Seat from '../models/seat';
+import type { Request, Response } from 'express';
+
 const router = express.Router();
 
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+router.post('/', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
     // Validate input
     if (!req.body.name) {
@@ -61,24 +64,27 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: (err as Error).message });
   }
 });
 
-module.exports = router;
+export default router;
 ```
 
-#### Services (`services/*-service.js`)
+#### Services (`services/*.ts`)
 - Pure business logic functions (async/await)
 - No Express dependencies
 - Exported functions callable from routes or cron jobs
 - Error handling: throw errors for callers to handle
 - Functions prefixed with descriptive verbs
+- Strong typing for parameters and return values
 
 Example:
-```javascript
-async function calculateHighUsageAlerts() {
-  const alerts = [];
+```typescript
+import Seat from '../models/seat';
+
+export async function calculateHighUsageAlerts(): Promise<Alert[]> {
+  const alerts: Alert[] = [];
   const seats = await Seat.find();
 
   for (const seat of seats) {
@@ -94,21 +100,20 @@ async function calculateHighUsageAlerts() {
 
   return alerts;
 }
-
-module.exports = { calculateHighUsageAlerts };
 ```
 
-#### Middleware (`middleware/*-middleware.js`)
-- Express middleware exported as functions
-- `authenticate`: Verify JWT from cookie or Bearer header
-- `requireAdmin`: Check user.role === 'admin'
+#### Middleware (`middleware.ts`)
+- Express middleware as TypeScript functions
+- `authenticate()`: Verify JWT from cookie or Bearer header
+- `requireAdmin()`: Check user.role === 'admin'
 
 Example:
-```javascript
-const jwt = require('jsonwebtoken');
-const config = require('../config');
+```typescript
+import jwt from 'jsonwebtoken';
+import config from './config';
+import type { Request, Response, NextFunction } from 'express';
 
-function authenticate(req, res, next) {
+export function authenticate(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies.jwt || req.headers.authorization?.split(' ')[1];
 
   if (!token) {
@@ -116,106 +121,128 @@ function authenticate(req, res, next) {
   }
 
   try {
-    req.user = jwt.verify(token, config.jwtSecret);
+    req.user = jwt.verify(token, config.jwtSecret) as UserPayload;
     next();
   } catch (err) {
     res.status(403).json({ error: 'Invalid token' });
   }
 }
 
-module.exports = { authenticate, requireAdmin };
-```
-
-### Frontend Structure
-
-#### HTML Views (`views/view-*.html`)
-- Plain HTML with inline styles or CSS classes
-- Use semantic HTML (form, table, div, section)
-- Data attributes for JS hooks: `data-action="delete-seat"`, `data-id="123"`
-- IDs for form inputs: `id="form-seat-name"` (prefix with form context)
-- No embedded scripts; keep JS separate
-
-Example:
-```html
-<div id="seats-view">
-  <h1>Seats</h1>
-  <form id="form-create-seat">
-    <input id="form-seat-name" type="text" placeholder="Seat name" required>
-    <button type="submit">Create</button>
-  </form>
-  <table id="seats-table">
-    <tr data-seat-id="123">
-      <td>Dev Seat 1</td>
-      <td><button data-action="edit">Edit</button></td>
-    </tr>
-  </table>
-</div>
-```
-
-#### Dashboard App (`js/dashboard-app.js`)
-- Single router managing navigation and view loading
-- Each route maps to view file + load handler
-- Global app state if needed; minimal for this project
-- Event delegation for dynamically loaded content
-
-Example:
-```javascript
-const app = {
-  currentView: null,
-
-  init() {
-    this.setupRoutes();
-    this.setupNavigation();
-  },
-
-  setupRoutes() {
-    this.routes = {
-      '/dashboard': () => this.loadView('view-dashboard.html'),
-      '/seats': () => this.loadView('view-seats.html'),
-    };
-  },
-
-  loadView(file) {
-    fetch(`/views/${file}`)
-      .then(r => r.text())
-      .then(html => {
-        document.getElementById('content').innerHTML = html;
-        this.attachHandlers();
-      });
-  },
-
-  attachHandlers() {
-    // Event listeners for loaded view
-    document.addEventListener('click', e => {
-      if (e.target.dataset.action === 'delete-seat') {
-        this.deleteSeat(e.target.dataset.id);
-      }
-    });
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
   }
+  next();
+}
+```
+
+### Frontend Structure (`packages/web/src`)
+
+#### React Components (`components/*.tsx`)
+- Functional components with TypeScript types
+- Use React hooks (useState, useEffect, useContext)
+- Props typing with TypeScript interfaces
+- Reusable, focused components (single responsibility)
+- Use Base UI React for unstyled, accessible components
+- Tailwind CSS for styling
+
+Example:
+```typescript
+import React from 'react';
+import type { FC } from 'react';
+import { Button } from '@base-ui/react/button';
+
+interface SeatFormProps {
+  onSubmit: (data: SeatFormData) => Promise<void>;
+  isLoading?: boolean;
+}
+
+export const SeatForm: FC<SeatFormProps> = ({ onSubmit, isLoading = false }) => {
+  const [formData, setFormData] = React.useState<SeatFormData>({
+    name: '',
+    team: 'dev',
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        type="text"
+        value={formData.name}
+        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        placeholder="Seat name"
+        required
+      />
+      <Button type="submit" disabled={isLoading}>
+        {isLoading ? 'Creating...' : 'Create'}
+      </Button>
+    </form>
+  );
 };
 ```
 
-#### API Client (`js/api-client.js`)
-- Fetch wrapper with consistent error handling
-- Methods: `get(path)`, `post(path, data)`, `put(path, data)`, `delete(path)`
-- Automatic Content-Type, credentials, error parsing
-- Throws on non-2xx; caller handles
+#### Page Components (`pages/*.tsx`)
+- Top-level route components
+- Connect to React Query for server state
+- Manage page-level state via useState/useContext
+- Use layout components for consistent UI
 
 Example:
-```javascript
-const api = {
-  async get(path) {
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { SeatForm } from '../components/seat-form';
+import { SeatsTable } from '../components/seats-table';
+import { api } from '../lib/api';
+
+export default function SeatsPage() {
+  const { data: seats, isLoading } = useQuery({
+    queryKey: ['seats'],
+    queryFn: () => api.get('/api/seats'),
+  });
+
+  const handleCreateSeat = async (data: SeatFormData) => {
+    await api.post('/api/seats', data);
+    // React Query will auto-refetch
+  };
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <div>
+      <h1>Seats</h1>
+      <SeatForm onSubmit={handleCreateSeat} />
+      <SeatsTable seats={seats} />
+    </div>
+  );
+}
+```
+
+#### API Client (`lib/api.ts`)
+- Fetch wrapper with consistent error handling
+- Methods: `get()`, `post()`, `put()`, `delete()`
+- Automatic Content-Type, credentials, error parsing
+- TypeScript generic for response types
+- Throws on non-2xx; caller handles via React Query
+
+Example:
+```typescript
+export const api = {
+  async get<T>(path: string): Promise<T> {
     const res = await fetch(path, { credentials: 'include' });
     if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
     return res.json();
   },
 
-  async post(path, data) {
+  async post<T>(path: string, data: unknown): Promise<T> {
     const res = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-      credentials: 'include'
+      credentials: 'include',
     });
     if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
     return res.json();
@@ -257,19 +284,25 @@ try {
 - Use Mongoose model methods (async/await)
 - Common patterns: `.find()`, `.findById()`, `.findOne()`, `.create()`, `.updateOne()`, `.deleteOne()`
 - Always await async operations
+- TypeScript typing via Mongoose Document types
 
 Example:
-```javascript
-const User = require('../models/user-model');
+```typescript
+import User from '../models/user';
+import type { IUser } from '../models/user';
 
 // Find one
-const user = await User.findById(userId);
+const user = await User.findById(userId) as IUser | null;
 
 // Find many
-const users = await User.find({ active: true }).sort({ name: 1 });
+const users = await User.find({ active: true }).sort({ name: 1 }) as IUser[];
 
 // Create
-const newUser = await User.create({ name, email, role: 'user' });
+const newUser = await User.create({ 
+  name, 
+  email, 
+  role: 'user' 
+}) as IUser;
 ```
 
 ### Transactions
@@ -277,7 +310,7 @@ const newUser = await User.create({ name, email, role: 'user' });
 - Wrap with try-catch; session aborts on error
 
 Example:
-```javascript
+```typescript
 const session = await mongoose.startSession();
 try {
   await session.withTransaction(async () => {
@@ -290,10 +323,11 @@ try {
 }
 ```
 
-### Migrations
-- Run on startup via `initializeDb()` in `db/migrations.js` (async function)
+### Seed Data & Initialization
+- Run on startup via `initializeDb()` in `src/db.ts` (async function)
 - Creates documents if collections don't exist
-- Seed data inserted after Mongoose connects
+- Seed data defined in `src/seed-data.ts`
+- Called during API startup in `src/index.ts`
 
 ## Security
 
@@ -320,19 +354,25 @@ try {
 ## Testing & Debugging
 
 ### Development
-- Run `pnpm dev` for auto-restart on file changes
+- Backend: Run `pnpm dev:api` for tsx watch with auto-restart on changes
+- Frontend: Run `pnpm dev:web` for Vite with HMR (Hot Module Replacement)
+- Combined: Run `pnpm dev` to start both in parallel
 - Check browser console for frontend errors
-- Check server terminal for backend logs
+- Check API terminal for backend logs
 
 ### Database
-- Reset with `pnpm run db:reset` (drops MongoDB + re-seeds)
+- Reset with `pnpm run db:reset` (drops MongoDB + re-seeds via seed-data.ts)
 - Connect to MongoDB via `mongosh` if needed
 - Use Mongoose models for queries (see Database Patterns section)
 
-### API
+### API Testing
 - Use curl/Postman to test endpoints
 - Frontend network tab for request/response inspection
-- Enable CORS for localhost during dev
+- Vite dev server proxies /api to http://localhost:3001
+
+### Testing Framework
+- Test runner: Vitest
+- Commands: `pnpm test` (run once), `pnpm test:watch`, `pnpm test:coverage`
 
 ## Performance Guidelines
 
@@ -358,24 +398,30 @@ try {
 - One blank line between function definitions
 - No trailing whitespace
 
+### TypeScript Conventions
+- Use strict mode: `"strict": true` in tsconfig.json
+- Explicit types for function parameters and return values
+- Avoid `any`; use `unknown` when necessary with proper type narrowing
+- Import types explicitly: `import type { Foo }` for type-only imports
+
 ### Comments
 - Comment non-obvious logic; avoid obvious comments
 - Use `//` for single-line, `/* */` for multi-line
-- JSDoc-style for exported functions (optional):
-  ```javascript
+- JSDoc-style for exported functions:
+  ```typescript
   /**
    * Get weekly usage for a seat.
-   * @param {Database} db
-   * @param {string} seatId
-   * @returns {object}
+   * @param seatId - The seat ObjectId
+   * @returns Promise resolving to usage percentage
    */
-  function getWeeklyUsage(db, seatId) { ... }
+  export async function getWeeklyUsage(seatId: string): Promise<number> { ... }
   ```
 
 ### Linting
-- No strict linting required; prioritize functionality
-- Avoid syntax errors and obvious bugs
-- Use `pnpm start` to verify no runtime errors
+- Run `pnpm lint` to check code (ESLint)
+- Fix automatically with `pnpm lint --fix`
+- Prioritize functionality over strict style enforcement
+- Avoid syntax errors and TypeScript type errors
 
 ## File Size & Modularization
 

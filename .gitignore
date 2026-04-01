@@ -1,18 +1,27 @@
-.idea/
+# Dependencies
 node_modules/
-dist/
-data/
-.env
-.env.local
-.env.test
-*.pen
-*-firebase-adminsdk-*.json
-*.docx
-repomix-output.xml
 
+# Build outputs
+dist/
 tsconfig.tsbuildinfo
 
-# Next.js
-.next/
-out/
-next-env.d.ts
+# Env files (secrets in package-level .env.local/.env.staging)
+.env
+.env.local
+.env.staging
+.env.test
+
+# Firebase service account
+*-firebase-adminsdk-*.json
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+repomix-output.xml
+*.pen
+*.docx
