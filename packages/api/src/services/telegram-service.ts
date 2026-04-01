@@ -12,6 +12,16 @@ function fmtDate(dateStr: string): string {
   return `${d}/${m}/${y}`
 }
 
+/** Format week range: "dd/MM - dd/MM/yyyy" (Mon → Sun) */
+function fmtWeekRange(weekStartStr: string): string {
+  if (!weekStartStr) return ''
+  const [y, m, d] = weekStartStr.split('-').map(Number)
+  const mon = new Date(y, m - 1, d)
+  const sun = new Date(y, m - 1, d + 6)
+  const dd = (n: number) => String(n).padStart(2, '0')
+  return `${dd(mon.getDate())}/${dd(mon.getMonth() + 1)} - ${dd(sun.getDate())}/${dd(sun.getMonth() + 1)}/${sun.getFullYear()}`
+}
+
 /** Escape HTML special chars for Telegram */
 function esc(str: string | number): string {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -94,7 +104,7 @@ export async function sendWeeklyReport() {
   }
 
   // Build HTML message
-  let msg = `📊 <b>Báo cáo Usage tuần ${fmtDate(weekStart)}</b>\n\n`
+  let msg = `📊 <b>Báo cáo Usage tuần ${fmtWeekRange(weekStart)}</b>\n\n`
 
   for (const [team, teamSeats] of Object.entries(teams)) {
     const label = teamLabels[team] || team
