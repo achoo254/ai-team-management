@@ -23,7 +23,7 @@ export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
 
   useEffect(() => {
     setForm(initial
-      ? { name: initial.name, email: initial.email, role: initial.role, team: initial.team, seatId: initial.seat_id ?? "" }
+      ? { name: initial.name, email: initial.email, role: initial.role, team: initial.team, seatId: initial.seat_ids?.[0] ?? "" }
       : empty);
   }, [initial, open]);
 

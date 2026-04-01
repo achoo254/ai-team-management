@@ -35,7 +35,7 @@ export function UserTable({ users, onEdit, onDelete }: Props) {
                 <Badge variant={u.role === "admin" ? "default" : "secondary"}>{u.role}</Badge>
               </TableCell>
               <TableCell>{u.team}</TableCell>
-              <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{u.seat_label ?? "—"}</TableCell>
+              <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{u.seat_labels?.join(", ") || "—"}</TableCell>
               <TableCell>
                 <Badge variant={u.active ? "default" : "outline"}>{u.active ? "Active" : "Inactive"}</Badge>
               </TableCell>
