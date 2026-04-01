@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
-// Mock next/navigation
-vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+// Mock react-router (project uses react-router, not next/navigation)
+vi.mock("react-router", () => ({
+  useLocation: () => ({ pathname: "/" }),
+  Link: ({ children, ...props }: any) => <a {...props}>{children}</a>,
 }));
 
 // SidebarProvider uses use-mobile which calls window.matchMedia — not in jsdom

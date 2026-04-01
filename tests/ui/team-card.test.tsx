@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { TeamCard } from "@/components/teams/team-card";
+import { TeamCard } from "@/components/team-card";
 import type { Team } from "@/hooks/use-teams";
 
 const mockTeam: Team = {

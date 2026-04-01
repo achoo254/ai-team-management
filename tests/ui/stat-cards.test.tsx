@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { StatCards } from "@/components/dashboard/stat-cards";
+import { StatCards } from "@/components/stat-cards";
 
 // Mock the hook so we don't need a real QueryClient or fetch
 vi.mock("@/hooks/use-dashboard", () => ({

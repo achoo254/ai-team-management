@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { type ReactNode, createContext } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { AuthContext, type AuthUser } from "@/components/providers/auth-provider";
+import { AuthContext, type AuthUser } from "@/components/auth-provider";
 
 const mockUser: AuthUser = {
   _id: "user-1",
