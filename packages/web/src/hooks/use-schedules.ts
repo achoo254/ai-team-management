@@ -1,6 +1,6 @@
-
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export interface ScheduleEntry {
   _id: string;
@@ -21,23 +21,17 @@ export interface SeatWithUsers {
   users: { _id: string; name: string; email: string; team: string }[];
 }
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
-  if (!res.ok) throw new Error(`${url}: ${res.statusText}`);
-  return res.json();
-}
-
 export function useSchedules() {
   return useQuery<{ schedules: ScheduleEntry[] }>({
     queryKey: ["schedules"],
-    queryFn: () => fetchJson("/api/schedules"),
+    queryFn: () => api.get("/api/schedules"),
   });
 }
 
 export function useSeatsWithUsers() {
   return useQuery<{ seats: SeatWithUsers[] }>({
     queryKey: ["seats"],
-    queryFn: () => fetchJson("/api/seats"),
+    queryFn: () => api.get("/api/seats"),
   });
 }
 
@@ -45,12 +39,9 @@ export function useAssignSchedule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { seatId: string; userId: string; dayOfWeek: number; slot: string }) =>
-      fetchJson("/api/schedules/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      api.post("/api/schedules/assign", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: (e: Error) => toast.error(e.message),
   });
 }
 
@@ -60,13 +51,9 @@ export function useSwapSchedule() {
     mutationFn: (body: {
       from: { seatId: string; dayOfWeek: number; slot: string };
       to: { seatId: string; dayOfWeek: number; slot: string };
-    }) =>
-      fetchJson("/api/schedules/swap", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+    }) => api.patch("/api/schedules/swap", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: (e: Error) => toast.error(e.message),
   });
 }
 
@@ -74,19 +61,17 @@ export function useDeleteEntry() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { seatId: string; dayOfWeek: number; slot: string }) =>
-      fetchJson("/api/schedules/entry", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      api.delete("/api/schedules/entry", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: (e: Error) => toast.error(e.message),
   });
 }
 
 export function useClearAll() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => fetchJson("/api/schedules/all", { method: "DELETE" }),
+    mutationFn: () => api.delete("/api/schedules/all"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: (e: Error) => toast.error(e.message),
   });
 }

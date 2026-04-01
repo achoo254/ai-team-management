@@ -3,13 +3,7 @@ import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, type PieLabe
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardEnhanced } from "@/hooks/use-dashboard";
-
-const TEAM_COLORS: Record<string, string> = {
-  dev: "#3b82f6",
-  mkt: "#22c55e",
-};
-
-const FALLBACK_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
+import { cssVar, getTeamColor } from "@/lib/chart-colors";
 
 function renderCustomLabel(props: PieLabelRenderProps) {
   const { cx, cy, midAngle, innerRadius, outerRadius, name, value } = props;
@@ -61,11 +55,16 @@ export function TeamPieChart() {
                 {chartData.map((entry, index) => (
                   <Cell
                     key={entry.key}
-                    fill={TEAM_COLORS[entry.key] ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length]}
+                    fill={getTeamColor(entry.key, index)}
                   />
                 ))}
               </Pie>
-              <Tooltip formatter={(val) => `${val}%`} />
+              <Tooltip
+                formatter={(val) => `${val}%`}
+                contentStyle={{ backgroundColor: cssVar("--card"), border: `1px solid ${cssVar("--border")}`, borderRadius: 8 }}
+                labelStyle={{ color: cssVar("--foreground") }}
+                itemStyle={{ color: cssVar("--foreground") }}
+              />
               <Legend />
             </PieChart>
           </ResponsiveContainer>

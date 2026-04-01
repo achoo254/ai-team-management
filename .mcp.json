@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "design-system": {
+      "type": "http",
+      "url": "https://viui.inet.vn/mcp",
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}

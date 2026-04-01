@@ -14,10 +14,25 @@ router.get('/', authenticate, async (req, res) => {
     const filter: Record<string, unknown> = {}
     if (seatId) filter.seat_id = seatId
 
-    const schedules = await Schedule.find(filter)
+    const raw = await Schedule.find(filter)
       .populate('user_id', 'name')
       .populate('seat_id', 'label')
       .lean()
+
+    // Flatten populated refs to match frontend ScheduleEntry interface
+    const schedules = raw.map((s) => {
+      const user = s.user_id as unknown as { _id: string; name: string } | null
+      const seat = s.seat_id as unknown as { _id: string; label: string } | null
+      return {
+        _id: s._id,
+        seat_id: seat?._id ?? s.seat_id,
+        user_id: user?._id ?? s.user_id,
+        user_name: user?.name ?? '',
+        seat_label: seat?.label ?? '',
+        day_of_week: s.day_of_week,
+        slot: s.slot,
+      }
+    })
 
     res.json({ schedules })
   } catch (error) {
@@ -116,7 +131,7 @@ router.post('/assign', authenticate, requireAdmin, async (req, res) => {
       res.status(404).json({ error: 'User not found' })
       return
     }
-    if (String(user.seat_id) !== String(seatId)) {
+    if (!user.seat_ids?.some((sid) => String(sid) === String(seatId))) {
       res.status(400).json({ error: 'User does not belong to this seat' })
       return
     }
@@ -161,7 +176,7 @@ router.patch('/swap', authenticate, requireAdmin, async (req, res) => {
       res.status(404).json({ error: 'User not found' })
       return
     }
-    if (String(user.seat_id) !== String(to.seatId)) {
+    if (!user.seat_ids?.some((sid) => String(sid) === String(to.seatId))) {
       res.status(400).json({ error: 'User does not belong to the target seat' })
       return
     }

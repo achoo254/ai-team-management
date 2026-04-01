@@ -44,12 +44,10 @@ export function UsageTable() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Label</TableHead>
+                <TableHead>Seat</TableHead>
                 <TableHead>Team</TableHead>
-                <TableHead className="hidden sm:table-cell">Users</TableHead>
-                <TableHead>All %</TableHead>
-                <TableHead className="hidden md:table-cell">Sonnet %</TableHead>
-                <TableHead className="hidden lg:table-cell">Last Logged</TableHead>
+                <TableHead>Usage %</TableHead>
+                <TableHead>Logged</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -58,26 +56,20 @@ export function UsageTable() {
                   <TableCell className="font-medium">{seat.label}</TableCell>
                   <TableCell>
                     <Badge variant={seat.team?.toLowerCase() === "dev" ? "default" : "secondary"}>
-                      {seat.team?.toUpperCase() ?? "—"}
+                      {seat.team?.toLowerCase() ?? "—"}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
-                    {seat.users?.length ?? 0}
                   </TableCell>
                   <TableCell className={pctColor(seat.weekly_all_pct ?? 0)}>
                     {seat.weekly_all_pct ?? 0}%
                   </TableCell>
-                  <TableCell className={`hidden md:table-cell ${pctColor(seat.weekly_sonnet_pct ?? 0)}`}>
-                    {seat.weekly_sonnet_pct ?? 0}%
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground text-sm">
+                  <TableCell className="text-muted-foreground text-sm">
                     {formatDate(seat.last_logged)}
                   </TableCell>
                 </TableRow>
               ))}
               {!data?.seats?.length && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     Chưa có dữ liệu
                   </TableCell>
                 </TableRow>

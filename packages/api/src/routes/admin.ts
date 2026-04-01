@@ -16,19 +16,18 @@ const COOLDOWN_MS = 60_000
 // GET /api/admin/users — list all users with populated seat
 router.get('/users', async (req, res) => {
   try {
-    const users = await User.find().populate('seat_id', 'label email').lean()
+    const users = await User.find().populate('seat_ids', 'label email').lean()
     const mapped = users.map((u) => {
-      const seat = u.seat_id as { _id: unknown; label?: string; email?: string } | null
+      const seats = (u.seat_ids ?? []) as { _id: unknown; label?: string; email?: string }[]
       return {
         id: u._id,
         name: u.name,
         email: u.email,
         role: u.role,
         team: u.team,
-        seat_id: seat?._id ?? null,
+        seat_ids: seats.map((s) => s._id),
         active: u.active,
-        seat_label: seat?.label ?? null,
-        seat_email: seat?.email ?? null,
+        seat_labels: seats.map((s) => s.label).filter(Boolean),
       }
     })
     res.json({ users: mapped })
@@ -42,7 +41,7 @@ router.get('/users', async (req, res) => {
 router.post('/users', async (req, res) => {
   try {
     const { name, email, role = 'user', team, seatId } = req.body
-    const user = await User.create({ name, email, role, team, seat_id: seatId ?? null })
+    const user = await User.create({ name, email, role, team, seat_ids: seatId ? [seatId] : [] })
     res.status(201).json(user)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -80,7 +79,7 @@ router.put('/users/:id', async (req, res) => {
     if (email !== undefined) update.email = email
     if (role !== undefined) update.role = role
     if (team !== undefined) update.team = team
-    if (seatId !== undefined) update.seat_id = seatId
+    if (seatId !== undefined) update.seat_ids = seatId ? [seatId] : []
     if (active !== undefined) update.active = active
 
     const updated = await User.findByIdAndUpdate(id, update, { new: true }).lean()

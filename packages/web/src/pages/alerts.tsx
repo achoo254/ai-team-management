@@ -1,4 +1,5 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bell } from "lucide-react";
 import { AlertCard } from "@/components/alert-card";
@@ -10,8 +11,17 @@ function AlertList({ resolved, isAdmin }: { resolved?: 0 | 1; isAdmin: boolean }
   const { data, isLoading } = useAlerts(resolved);
   const resolve = useResolveAlert();
 
-  if (isLoading) return <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>;
-  if (!data?.alerts.length) return <EmptyState icon={Bell} title="Không có cảnh báo nào" />;
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+      </div>
+    );
+  }
+
+  if (!data?.alerts.length) {
+    return <EmptyState icon={Bell} title="Không có cảnh báo" description="Hệ thống đang hoạt động bình thường" />;
+  }
 
   return (
     <div className="space-y-2">
@@ -23,17 +33,39 @@ function AlertList({ resolved, isAdmin }: { resolved?: 0 | 1; isAdmin: boolean }
   );
 }
 
+function TabLabel({ label, count }: { label: string; count?: number }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      {label}
+      {count !== undefined && count > 0 && (
+        <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] font-medium rounded-full">
+          {count}
+        </Badge>
+      )}
+    </span>
+  );
+}
+
 export default function AlertsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
+  // Fetch counts for tab badges
+  const { data: allData } = useAlerts();
+  const { data: unresolvedData } = useAlerts(0);
+  const unresolvedCount = unresolvedData?.alerts.length ?? 0;
+  const totalCount = allData?.alerts.length ?? 0;
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Cảnh báo</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Cảnh báo</h1>
+      </div>
+
       <Tabs defaultValue="unresolved">
-        <TabsList>
-          <TabsTrigger value="all">Tất cả</TabsTrigger>
-          <TabsTrigger value="unresolved">Chưa xử lý</TabsTrigger>
+        <TabsList variant="line" className="border-b border-border pb-0">
+          <TabsTrigger value="all"><TabLabel label="Tất cả" count={totalCount} /></TabsTrigger>
+          <TabsTrigger value="unresolved"><TabLabel label="Chưa xử lý" count={unresolvedCount} /></TabsTrigger>
           <TabsTrigger value="resolved">Đã xử lý</TabsTrigger>
         </TabsList>
         <TabsContent value="all" className="mt-4"><AlertList isAdmin={isAdmin} /></TabsContent>

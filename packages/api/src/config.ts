@@ -3,7 +3,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
   firebaseServiceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '',
   webUrl: process.env.WEB_URL || 'http://localhost:5173',
-  apiPort: parseInt(process.env.API_PORT || '3001'),
+  apiPort: parseInt(process.env.API_PORT || '8386'),
   alerts: {
     highUsagePct: 80,
     inactivityWeeks: 1,

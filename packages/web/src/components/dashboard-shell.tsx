@@ -11,9 +11,9 @@ export function DashboardShell() {
       <TooltipProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
-          <div className="flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col min-w-0">
             <Header />
-            <main className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6">
+            <main className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6 overflow-hidden">
               <Outlet />
             </main>
             <MobileNav />

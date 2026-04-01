@@ -16,26 +16,26 @@ export async function seedData() {
     { email: 'quanlm@inet.vn', label: 'TK Quân', team: 'mkt', max_users: 3 },
   ])
 
-  // Users
+  // Users (seat_ids is an array — user can belong to multiple seats)
   const users = await User.insertMany([
     // Dev team
-    { name: 'Đạt', email: 'quocdat254@gmail.com', role: 'admin', team: 'dev', seat_id: seats[0]._id },
-    { name: 'Hổ', email: 'hobv@inet.vn', role: 'user', team: 'dev', seat_id: seats[0]._id },
-    { name: 'Hoàng', email: 'hoangnh@inet.vn', role: 'user', team: 'dev', seat_id: seats[1]._id },
-    { name: 'Chương', email: 'chuongdt@inet.vn', role: 'user', team: 'dev', seat_id: seats[1]._id },
-    { name: 'ViệtNT', email: 'vietnt@inet.vn', role: 'user', team: 'dev', seat_id: seats[2]._id },
-    { name: 'Đức', email: 'ducnd@inet.vn', role: 'user', team: 'dev', seat_id: seats[2]._id },
-    { name: 'Tuấn Anh', email: 'anhtct@inet.vn', role: 'user', team: 'dev', seat_id: seats[2]._id },
+    { name: 'Đạt', email: 'quocdat254@gmail.com', role: 'admin', team: 'dev', seat_ids: [seats[0]._id] },
+    { name: 'Hổ', email: 'hobv@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[0]._id] },
+    { name: 'Hoàng', email: 'hoangnh@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[1]._id] },
+    { name: 'Chương', email: 'chuongdt@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[1]._id] },
+    { name: 'ViệtNT', email: 'vietnt@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[2]._id] },
+    { name: 'Đức', email: 'ducnd@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[2]._id] },
+    { name: 'Tuấn Anh', email: 'anhtct@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[2]._id] },
     // MKT team
-    { name: 'Trí', email: 'trihd@inet.vn', role: 'user', team: 'mkt', seat_id: seats[3]._id },
-    { name: 'Hậu', email: 'hault@inet.vn', role: 'user', team: 'mkt', seat_id: seats[3]._id },
-    { name: 'Trà', email: 'traht@inet.vn', role: 'user', team: 'mkt', seat_id: seats[3]._id },
-    { name: 'Quân', email: 'quanlm@inet.vn', role: 'user', team: 'mkt', seat_id: seats[4]._id },
-    { name: 'Ngọc', email: 'ngocptn@inet.vn', role: 'user', team: 'mkt', seat_id: seats[4]._id },
-    { name: 'Phương', email: 'phuongttt@inet.vn', role: 'user', team: 'mkt', seat_id: seats[4]._id },
+    { name: 'Trí', email: 'trihd@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[3]._id] },
+    { name: 'Hậu', email: 'hault@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[3]._id] },
+    { name: 'Trà', email: 'traht@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[3]._id] },
+    { name: 'Quân', email: 'quanlm@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[4]._id] },
+    { name: 'Ngọc', email: 'ngocptn@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[4]._id] },
+    { name: 'Phương', email: 'phuongttt@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[4]._id] },
   ])
 
-  // Schedules for 3-person seats
+  // Schedules for 3-person seats (schedule model uses seat_id — single seat per entry)
   const scheduleEntries = []
   // Seat 3 (anhtct): users[4]=VietNT, users[5]=Duc, users[6]=Tuan Anh
   for (let day = 0; day < 5; day++) {

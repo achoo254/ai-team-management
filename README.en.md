@@ -2,13 +2,13 @@
 
 Internal dashboard for managing Claude Teams accounts. Centralizes seat allocation, usage tracking, scheduling, alerting, and Telegram notifications.
 
-> [Phiên bản tiếng Việt (README.md)](./README.md)
+> [Phien ban tieng Viet (README.md)](./README.md)
 
 ## Quick Start
 
 ### Prerequisites
 - Node.js 18+
-- pnpm (recommended) or npm
+- pnpm 9+
 - MongoDB (local or cloud)
 - Firebase project with service account JSON
 - (Optional) Telegram bot for notifications
@@ -20,82 +20,111 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 pnpm install
 ```
 
-2. Create `.env` file from `.env.example`:
+2. Create `.env.local` files for each package:
 ```bash
-cp .env.example .env
+cp packages/api/.env.example packages/api/.env.local
+cp packages/web/.env.example packages/web/.env.local
 ```
 
-3. Fill in required environment variables:
-   - `JWT_SECRET`: Random 32+ character string
-   - `MONGO_URI`: MongoDB connection string
-   - `FIREBASE_SERVICE_ACCOUNT_PATH`: Path to Firebase service account JSON
+3. Fill in the required environment variables (see Environment Variables section below).
 
 4. Reset database with seed data:
 ```bash
-pnpm run db:reset
+pnpm db:reset
 ```
 
-5. Start development server:
+5. Start development servers:
 ```bash
 pnpm dev
 ```
 
-Access the app at `http://localhost:3000`
+- Frontend: `http://localhost:5173`
+- API: `http://localhost:8386`
 
 ## Commands
 
 | Command | Purpose |
 |---------|---------|
-| `pnpm install` | Install dependencies |
-| `pnpm dev` | Start with auto-reload (development) |
-| `pnpm start` | Start production server |
-| `pnpm run db:reset` | Drop MongoDB + re-seed with sample data |
+| `pnpm install` | Install all workspace dependencies |
+| `pnpm dev` | Start both web + api in parallel (dev) |
+| `pnpm dev:web` | Start Vite dev server (port 5173) |
+| `pnpm dev:api` | Start Express API (port 8386) |
+| `pnpm build` | Build all packages |
+| `pnpm build:staging` | Build for staging |
+| `pnpm lint` | Run ESLint |
+| `pnpm test` | Run Vitest tests |
+| `pnpm test:coverage` | Run tests with coverage |
+| `pnpm db:reset` | Drop MongoDB + re-seed with sample data |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | **Runtime** | Node.js 18+ |
-| **Backend** | Express 5 |
-| **Database** | MongoDB (via Mongoose) |
+| **Package Manager** | pnpm workspaces (monorepo) |
+| **Backend** | Express 5, TypeScript (ESM), tsx |
+| **Database** | MongoDB (Mongoose 9) |
 | **Auth** | Firebase Admin SDK + JWT |
-| **Frontend** | Vanilla JS (ES6+) SPA |
-| **Styling** | Tailwind CSS (CDN) |
-| **Framework** | Alpine.js |
+| **Frontend** | React 19, React Router v7, Vite |
+| **State** | TanStack React Query |
+| **Styling** | Tailwind CSS v4 (`@tailwindcss/vite`) |
+| **UI Components** | shadcn/ui (Radix UI), Lucide icons |
+| **Charts** | Recharts 3 |
+| **Drag & Drop** | dnd-kit |
 | **Async Tasks** | node-cron |
 | **Notifications** | Telegram Bot API |
+| **Testing** | Vitest |
+| **Linting** | ESLint 9 |
 
 ## Environment Variables
 
-### Required
+Each package has its own `.env.local`. See `.env.example` in each package.
+
+### API (`packages/api/.env.local`)
 - `JWT_SECRET` — JWT signing key (min 32 characters)
 - `MONGO_URI` — MongoDB connection string
 - `FIREBASE_SERVICE_ACCOUNT_PATH` — Path to Firebase service account JSON file
-
-### Optional
-- `PORT` — Server port (default: 3000)
+- `API_PORT` — API port (default: 8386)
+- `WEB_URL` — Frontend URL (default: http://localhost:5173)
 - `TELEGRAM_BOT_TOKEN` — Telegram bot token for notifications
 - `TELEGRAM_CHAT_ID` — Telegram chat ID for alerts
 - `TELEGRAM_TOPIC_ID` — Telegram topic ID (optional)
-- `APP_URL` — Public URL for links in messages (default: http://localhost:3000)
+- `ANTHROPIC_BASE_URL` — Anthropic API URL (default: https://api.anthropic.com)
+- `ANTHROPIC_ADMIN_KEY` — Anthropic admin key
+- `ANTHROPIC_VERSION` — Anthropic API version
 
-See `.env.example` for full reference.
+### Web (`packages/web/.env.local`)
+- `VITE_FIREBASE_API_KEY` — Firebase API key
+- `VITE_FIREBASE_AUTH_DOMAIN` — Firebase auth domain
+- `VITE_FIREBASE_PROJECT_ID` — Firebase project ID
+- `VITE_API_URL` — API backend URL (default: http://localhost:8386)
 
-## Architecture Overview
+## Architecture
 
-### Backend (Express 5)
-- **Auth**: Google sign-in via Firebase, JWT cookie-based authentication
-- **API**: 8 route files with 28 REST endpoints
+### Monorepo (pnpm workspaces)
+
+```
+packages/
+├── api/      — Express 5 + TypeScript backend (ESM)
+├── web/      — Vite + React 19 SPA
+└── shared/   — Shared TypeScript types
+```
+
+### Backend (`packages/api`)
+- **Auth**: Google sign-in via Firebase, JWT cookie (24h)
+- **API**: 8 route files with REST endpoints
 - **Models**: 6 Mongoose collections (seats, users, usage_logs, schedules, alerts, teams)
-- **Services**: Business logic for alerts, Telegram notifications, and usage tracking
-- **Cron Jobs**: Friday 15:00 & 17:00 Asia/Saigon for reminders and reports
+- **Services**: alert-service, telegram-service, usage-sync-service, anthropic-service
+- **Cron Jobs**: Friday 15:00 & 17:00 Asia/Saigon
+- **Dev**: `tsx watch --env-file .env.local`
 
-### Frontend (Vanilla JS SPA)
-- Single page application loaded from `public/index.html`
-- 8 dynamic view partials loaded on demand
-- Alpine.js for lightweight interactivity
-- Tailwind CSS for styling
-- No build step required
+### Frontend (`packages/web`)
+- React 19 SPA with React Router v7
+- 8 pages: dashboard, seats, teams, schedule, alerts, log-usage, admin, login
+- 20+ feature components + shadcn/ui components
+- 9 React Query hooks for data fetching
+- Recharts for charts, dnd-kit for drag-and-drop
+- Vite proxy `/api` → Express backend
 
 ### Database (MongoDB)
 ```
@@ -111,41 +140,42 @@ Collections:
 ## Project Structure
 
 ```
-quan-ly-team-claude/
-├── server/
-│   ├── index.js                    # Express app, async startup, cron jobs
-│   ├── config.js                   # Environment configuration
-│   ├── db/
-│   │   ├── database.js             # Mongoose connection
-│   │   └── migrations.js           # Database seed data
-│   ├── models/                     # Mongoose schemas (6 models)
-│   ├── middleware/
-│   │   └── auth-middleware.js      # JWT auth, role checks
-│   ├── routes/                     # REST API routes (8 files, 28 endpoints)
-│   ├── services/                   # Business logic
-│   ├── lib/
-│   │   └── firebase-admin-init.js  # Firebase Admin SDK setup
-│   └── scripts/
-│       └── db-reset.js             # Database reset utility
+ai-team-management/
+├── packages/
+│   ├── api/                           # Express 5 backend
+│   │   ├── src/
+│   │   │   ├── index.ts               # App entry, CORS, cron jobs
+│   │   │   ├── config.ts              # Env config
+│   │   │   ├── db.ts                  # Mongoose connection
+│   │   │   ├── middleware.ts           # JWT auth, role checks
+│   │   │   ├── firebase-admin.ts      # Firebase Admin SDK
+│   │   │   ├── seed-data.ts           # Database seed data
+│   │   │   ├── models/                # 6 Mongoose models
+│   │   │   ├── routes/                # 8 REST route files
+│   │   │   ├── services/              # Business logic (4 services)
+│   │   │   └── scripts/db-reset.ts    # DB reset utility
+│   │   └── .env.example
+│   │
+│   ├── web/                           # Vite + React 19 SPA
+│   │   ├── src/
+│   │   │   ├── main.tsx               # Entry point
+│   │   │   ├── app.tsx                # Router + QueryClient
+│   │   │   ├── pages/                 # 8 page components
+│   │   │   ├── components/            # Feature + shadcn/ui components
+│   │   │   ├── hooks/                 # 9 React Query hooks
+│   │   │   └── lib/                   # api-client, firebase, theme, utils
+│   │   ├── vite.config.ts             # Vite + Tailwind + proxy config
+│   │   └── .env.example
+│   │
+│   └── shared/                        # Shared TypeScript types
+│       └── types.ts
 │
-├── public/
-│   ├── index.html                  # SPA shell
-│   ├── login.html                  # Google sign-in page
-│   ├── js/
-│   │   ├── api-client.js           # Fetch wrapper
-│   │   ├── dashboard-app.js        # Main Alpine.js app
-│   │   ├── dashboard-helpers.js    # UI utilities
-│   │   └── dashboard-admin-actions.js # Admin functions
-│   └── views/                      # HTML partials (8 views)
-│
-├── docs/
-│   ├── codebase-summary.md         # Technical deep dive
-│   ├── code-standards.md           # Coding conventions
-│   └── project-overview-pdr.md     # Features & requirements
-│
-├── .env.example                    # Environment template
-├── package.json                    # Dependencies
-└── CLAUDE.md                       # Development guidance
+├── docs/                              # Documentation
+├── plans/                             # Implementation plans
+├── .env.example                       # Root env guide
+├── pnpm-workspace.yaml                # Workspace config
+├── package.json                       # Root scripts
+└── CLAUDE.md                          # Dev guidance
 ```
 
 ## Key Features
@@ -173,28 +203,39 @@ Google sign-in via Firebase. Server verifies and issues JWT cookie (24-hour expi
 
 ### Reset Database
 ```bash
-pnpm run db:reset
+pnpm db:reset
 ```
-Drops MongoDB and re-seeds with sample data.
 
-### View Logs
-Development server logs to console. Check terminal for requests, database operations, and cron job execution.
+### Run dev servers
+```bash
+pnpm dev          # Both web + api
+pnpm dev:web      # Frontend only (port 5173)
+pnpm dev:api      # Backend only (port 8386)
+```
 
-### Test API
-Use curl, Postman, or browser network tab. All endpoints require authentication (JWT cookie or Bearer token).
+### Build
+```bash
+pnpm build            # Production
+pnpm build:staging    # Staging
+```
 
-### Enable Telegram
-Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`. Cron jobs will automatically send notifications on Friday schedule.
+### Test & Lint
+```bash
+pnpm test             # Run tests
+pnpm test:coverage    # Tests with coverage
+pnpm lint             # ESLint
+```
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Cannot connect to MongoDB | Check `MONGO_URI` in `.env` and verify MongoDB is running |
+| Cannot connect to MongoDB | Check `MONGO_URI` in `packages/api/.env.local` |
 | "Invalid Firebase token" | Verify `FIREBASE_SERVICE_ACCOUNT_PATH` points to correct JSON file |
 | Google sign-in fails | Check Firebase project configuration and API keys |
 | Telegram notifications not sent | Verify `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set |
-| Server won't start | Check for port conflicts; default is 3000. Set `PORT` env var if needed |
+| API won't start | Check for port conflicts on 8386. Set `API_PORT` env var if needed |
+| Web can't reach API | Check `VITE_API_URL` in `packages/web/.env.local` |
 
 ## Documentation
 
@@ -205,21 +246,12 @@ Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`. Cron jobs will automa
 
 ## Development Notes
 
-- **Module System**: CommonJS throughout (no ES6 imports)
-- **Code Style**: 2-space indentation, async/await for all async operations
+- **Module system**: ESM (`"type": "module"`) for both API and Web
+- **TypeScript**: Strict mode, shared types via `@repo/shared`
+- **Code Style**: 2-space indentation, async/await, conventional commits
 - **File Size**: Keep under 200 LOC; consider splitting if larger
 - **Error Handling**: Try-catch in all async handlers
 - **Security**: JWT in httpOnly cookie; Firebase Admin SDK for verification
-
-## Future Improvements
-
-- Advanced analytics (trends, per-model breakdown)
-- Auto-assignment of users to available seats
-- Predictive alerts based on usage trends
-- Slack notifications alongside Telegram
-- Audit logs (who did what and when)
-- Mobile-responsive design refinements
-- Dark mode toggle
 
 ## License
 

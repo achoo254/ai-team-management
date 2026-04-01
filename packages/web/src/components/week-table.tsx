@@ -7,7 +7,7 @@ import { type UsageLogEntry } from "@/hooks/use-usage-log";
 interface Props {
   entries: UsageLogEntry[];
   isAdmin: boolean;
-  onChange: (seatId: string, field: "weeklyAllPct" | "weeklySonnetPct", value: number) => void;
+  onChange: (seatId: string, field: "weeklyAllPct", value: number) => void;
 }
 
 export function WeekTable({ entries, isAdmin, onChange }: Props) {
@@ -18,8 +18,7 @@ export function WeekTable({ entries, isAdmin, onChange }: Props) {
           <TableRow>
             <TableHead>Seat</TableHead>
             <TableHead>Team</TableHead>
-            <TableHead>All %</TableHead>
-            <TableHead>Sonnet %</TableHead>
+            <TableHead>Usage %</TableHead>
             <TableHead>Logged</TableHead>
           </TableRow>
         </TableHeader>
@@ -40,15 +39,6 @@ export function WeekTable({ entries, isAdmin, onChange }: Props) {
                     onChange={(e) => onChange(row.seatId, "weeklyAllPct", Number(e.target.value))} />
                 ) : (
                   <span>{row.weeklyAllPct ?? 0}%</span>
-                )}
-              </TableCell>
-              <TableCell>
-                {isAdmin ? (
-                  <Input type="number" min={0} max={100} className="w-20 h-7 text-sm"
-                    value={row.weeklySonnetPct ?? 0}
-                    onChange={(e) => onChange(row.seatId, "weeklySonnetPct", Number(e.target.value))} />
-                ) : (
-                  <span>{row.weeklySonnetPct ?? 0}%</span>
                 )}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">

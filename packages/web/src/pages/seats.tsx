@@ -6,7 +6,8 @@ import { SeatCard } from "@/components/seat-card";
 import { SeatFormDialog } from "@/components/seat-form-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
-import { useSeats, useCreateSeat, useUpdateSeat, useDeleteSeat, useUnassignUser, type Seat } from "@/hooks/use-seats";
+import { useSeats, useCreateSeat, useUpdateSeat, useDeleteSeat, useAssignUser, useUnassignUser, type Seat } from "@/hooks/use-seats";
+import { useAdminUsers } from "@/hooks/use-admin";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function SeatsPage() {
@@ -16,7 +17,9 @@ export default function SeatsPage() {
   const createSeat = useCreateSeat();
   const updateSeat = useUpdateSeat();
   const deleteSeat = useDeleteSeat();
+  const assign = useAssignUser();
   const unassign = useUnassignUser();
+  const { data: adminData } = useAdminUsers();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Seat | null>(null);
@@ -49,7 +52,9 @@ export default function SeatsPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.seats.map((seat) => (
             <SeatCard key={seat._id} seat={seat} isAdmin={isAdmin}
+              allUsers={adminData?.users ?? []}
               onEdit={handleEdit} onDelete={setDeleting}
+              onAssign={(seatId, userId) => assign.mutate({ seatId, userId })}
               onUnassign={(seatId, userId) => unassign.mutate({ seatId, userId })} />
           ))}
         </div>

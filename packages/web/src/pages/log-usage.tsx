@@ -22,7 +22,7 @@ export default function LogUsagePage() {
 
   const handleWeekChange = (w: string) => { setWeekStart(w); setLocal([]); };
 
-  const handleChange = useCallback((seatId: string, field: "weeklyAllPct" | "weeklySonnetPct", value: number) => {
+  const handleChange = useCallback((seatId: string, field: "weeklyAllPct", value: number) => {
     const base = local.length > 0 ? local : (data?.seats ?? []);
     setLocal(base.map((r) => r.seatId === seatId ? { ...r, [field]: value } : r));
   }, [local, data]);

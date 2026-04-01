@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScheduleGrid } from "@/components/schedule-grid";
@@ -30,6 +33,7 @@ export default function SchedulePage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [confirmClear, setConfirmClear] = useState(false);
+  const [activeData, setActiveData] = useState<{ userName: string } | null>(null);
 
   const { data: schedulesData, isLoading: loadingSchedules } = useSchedules();
   const { data: seatsData, isLoading: loadingSeats } = useSeatsWithUsers();
@@ -43,19 +47,39 @@ export default function SchedulePage() {
   const seats = seatsData?.seats ?? [];
   const isLoading = loadingSchedules || loadingSeats;
 
-  function handleAssign(seatId: string, userId: string, dayOfWeek: number, slot: string) {
-    assignMutation.mutate({ seatId, userId, dayOfWeek, slot });
-  }
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  );
 
-  function handleSwap(
-    from: { seatId: string; dayOfWeek: number; slot: string },
-    to: { seatId: string; dayOfWeek: number; slot: string },
-  ) {
-    swapMutation.mutate({ from, to });
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveData(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const src = active.data.current as { type: string; seatId: string; dayOfWeek: number; slot: string; userId: string; userName: string };
+    const dst = over.data.current as { seatId: string; dayOfWeek: number; slot: string };
+    if (!dst) return;
+
+    if (src.type === "member") {
+      assignMutation.mutate({ seatId: dst.seatId, userId: src.userId, dayOfWeek: dst.dayOfWeek, slot: dst.slot });
+    } else if (src.type === "cell") {
+      const sameCell = src.seatId === dst.seatId && src.dayOfWeek === dst.dayOfWeek && src.slot === dst.slot;
+      if (!sameCell) {
+        swapMutation.mutate({
+          from: { seatId: src.seatId, dayOfWeek: src.dayOfWeek, slot: src.slot },
+          to: { seatId: dst.seatId, dayOfWeek: dst.dayOfWeek, slot: dst.slot },
+        });
+      }
+    }
   }
 
   function handleDelete(seatId: string, dayOfWeek: number, slot: string) {
     deleteMutation.mutate({ seatId, dayOfWeek, slot });
+  }
+
+  function handleAssign(seatId: string, userId: string, dayOfWeek: number, slot: string) {
+    assignMutation.mutate({ seatId, userId, dayOfWeek, slot });
   }
 
   function handleClearAll() {
@@ -83,33 +107,43 @@ export default function SchedulePage() {
       {isLoading ? (
         <LoadingSkeleton />
       ) : (
-        <div className="flex gap-4 flex-1 min-h-0">
-          {/* Desktop grid */}
-          <div className="flex-1 overflow-auto hidden lg:block">
-            <ScheduleGrid
-              schedules={schedules}
-              seats={seats}
-              isAdmin={isAdmin}
-              onAssign={handleAssign}
-              onSwap={handleSwap}
-              onDelete={handleDelete}
-            />
+        <DndContext
+          sensors={sensors}
+          onDragStart={(e) => setActiveData(e.active.data.current as { userName: string })}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-4 flex-1 min-h-0">
+            {/* Desktop grid */}
+            <div className="flex-1 overflow-auto hidden lg:block">
+              <ScheduleGrid
+                schedules={schedules}
+                seats={seats}
+                isAdmin={isAdmin}
+                onDelete={handleDelete}
+              />
+            </div>
+
+            {/* Desktop sidebar */}
+            <MemberSidebar seats={seats} isAdmin={isAdmin} />
+
+            {/* Mobile tab view */}
+            <div className="flex-1 lg:hidden">
+              <DayTabView
+                schedules={schedules}
+                seats={seats}
+                isAdmin={isAdmin}
+                onAssign={handleAssign}
+                onDelete={handleDelete}
+              />
+            </div>
           </div>
 
-          {/* Desktop sidebar */}
-          <MemberSidebar seats={seats} isAdmin={isAdmin} />
-
-          {/* Mobile tab view */}
-          <div className="flex-1 lg:hidden">
-            <DayTabView
-              schedules={schedules}
-              seats={seats}
-              isAdmin={isAdmin}
-              onAssign={handleAssign}
-              onDelete={handleDelete}
-            />
-          </div>
-        </div>
+          <DragOverlay>
+            {activeData && (
+              <Badge className="shadow-lg text-sm px-3 py-1">{activeData.userName}</Badge>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* Confirm clear dialog */}

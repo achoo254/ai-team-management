@@ -158,7 +158,7 @@ router.get('/usage/by-seat', async (_req, res) => {
           _id: '$seat_email',
           weekly_all_pct: { $first: '$weekly_all_pct' },
           weekly_sonnet_pct: { $first: '$weekly_sonnet_pct' },
-          last_logged: { $first: '$week_start' },
+          last_logged: { $first: '$logged_at' },
         },
       },
     ])
@@ -167,19 +167,21 @@ router.get('/usage/by-seat', async (_req, res) => {
     for (const u of latestUsage) usageMap[u._id] = u
 
     const seats = await Seat.find().lean()
-    const users = await User.find({ active: true, seat_id: { $ne: null } }, 'name seat_id').lean()
+    const users = await User.find({ active: true, seat_ids: { $exists: true, $ne: [] } }, 'name seat_ids').lean()
 
     // Map seat _id → email
     const seatIdToEmail: Record<string, string> = {}
     for (const s of seats) seatIdToEmail[String(s._id)] = s.email
 
-    // Map seat email → user names
+    // Map seat email → user names (user can be in multiple seats)
     const usersBySeatEmail: Record<string, string[]> = {}
     for (const u of users) {
-      const seatEmail = seatIdToEmail[String(u.seat_id)]
-      if (seatEmail) {
-        if (!usersBySeatEmail[seatEmail]) usersBySeatEmail[seatEmail] = []
-        usersBySeatEmail[seatEmail].push(u.name)
+      for (const seatId of u.seat_ids) {
+        const seatEmail = seatIdToEmail[String(seatId)]
+        if (seatEmail) {
+          if (!usersBySeatEmail[seatEmail]) usersBySeatEmail[seatEmail] = []
+          usersBySeatEmail[seatEmail].push(u.name)
+        }
       }
     }
 

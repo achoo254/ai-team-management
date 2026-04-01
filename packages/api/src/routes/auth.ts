@@ -82,7 +82,7 @@ router.post('/logout', (_req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user!._id)
-      .select('name email role team seat_id')
+      .select('name email role team seat_ids')
       .lean()
     if (!user) {
       res.status(404).json({ error: 'User not found' })

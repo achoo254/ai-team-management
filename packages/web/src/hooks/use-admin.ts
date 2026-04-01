@@ -6,8 +6,8 @@ import { toast } from "sonner";
 
 export interface AdminUser {
   id: string; name: string; email: string; role: "admin" | "user";
-  team: string; seat_id?: string; active: boolean;
-  seat_label?: string; seat_email?: string;
+  team: string; seat_ids?: string[]; active: boolean;
+  seat_labels?: string[];
 }
 
 const KEY = ["admin", "users"];

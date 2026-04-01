@@ -11,6 +11,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardEnhanced } from "@/hooks/use-dashboard";
+import { cssVar } from "@/lib/chart-colors";
 
 function formatWeek(dateStr: string) {
   const d = new Date(dateStr);
@@ -39,13 +40,19 @@ export function TrendLineChart() {
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 4 }}>
               <XAxis dataKey="week" tick={{ fontSize: 12 }} />
               <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(val) => `${val}%`} />
+              <Tooltip
+                formatter={(val) => `${val}%`}
+                cursor={{ stroke: cssVar("--muted"), strokeWidth: 1, strokeOpacity: 0.5 }}
+                contentStyle={{ backgroundColor: cssVar("--card"), border: `1px solid ${cssVar("--border")}`, borderRadius: 8 }}
+                labelStyle={{ color: cssVar("--foreground") }}
+                itemStyle={{ color: cssVar("--foreground") }}
+              />
               <Legend />
               <Line
                 type="monotone"
                 dataKey="avg_all"
                 name="All models"
-                stroke="#14b8a6"
+                stroke={cssVar("--chart-1")}
                 strokeWidth={2}
                 dot={{ r: 3 }}
                 activeDot={{ r: 5 }}
@@ -54,7 +61,7 @@ export function TrendLineChart() {
                 type="monotone"
                 dataKey="avg_sonnet"
                 name="Sonnet"
-                stroke="#3b82f6"
+                stroke={cssVar("--chart-2")}
                 strokeWidth={2}
                 dot={{ r: 3 }}
                 activeDot={{ r: 5 }}

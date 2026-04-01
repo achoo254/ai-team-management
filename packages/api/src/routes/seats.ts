@@ -12,24 +12,27 @@ router.get('/', authenticate, async (_req, res) => {
   try {
     const seats = await Seat.find().sort({ _id: 1 }).lean()
     const users = await User.find(
-      { active: true, seat_id: { $ne: null } },
-      'name email seat_id',
+      { active: true, seat_ids: { $exists: true, $ne: [] } },
+      'name email seat_ids team',
     ).lean()
 
-    // Group users by seat_id string key
+    // Group users by each seat_id (user can appear in multiple seats)
     const usersBySeat: Record<string, typeof users> = {}
     for (const user of users) {
-      const key = String(user.seat_id)
-      if (!usersBySeat[key]) usersBySeat[key] = []
-      usersBySeat[key].push(user)
+      for (const seatId of user.seat_ids) {
+        const key = String(seatId)
+        if (!usersBySeat[key]) usersBySeat[key] = []
+        usersBySeat[key].push(user)
+      }
     }
 
     const enriched = seats.map((seat) => ({
       ...seat,
       users: (usersBySeat[String(seat._id)] || []).map((u) => ({
-        id: u._id,
+        _id: u._id,
         name: u.name,
         email: u.email,
+        team: u.team ?? seat.team,
       })),
     }))
 
@@ -103,8 +106,8 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
       return
     }
 
-    // Unassign all users from this seat
-    await User.updateMany({ seat_id: id }, { $set: { seat_id: null } })
+    // Remove this seat from all users' seat_ids
+    await User.updateMany({ seat_ids: id }, { $pull: { seat_ids: id } })
     // Clear all schedules for this seat
     await Schedule.deleteMany({ seat_id: id })
     await seat.deleteOne()
@@ -149,14 +152,14 @@ router.post('/:id/assign', authenticate, requireAdmin, async (req, res) => {
     }
 
     // Check seat capacity
-    const currentCount = await User.countDocuments({ seat_id: id, active: true })
+    const currentCount = await User.countDocuments({ seat_ids: id, active: true })
     if (currentCount >= seat.max_users) {
       res.status(400).json({ error: 'Seat is at maximum capacity' })
       return
     }
 
-    user.seat_id = new mongoose.Types.ObjectId(id)
-    await user.save()
+    // Add seat to user's seat_ids (avoid duplicates)
+    await User.findByIdAndUpdate(userId, { $addToSet: { seat_ids: new mongoose.Types.ObjectId(id) } })
 
     res.json({ message: 'User assigned to seat', user })
   } catch (error) {
@@ -185,16 +188,15 @@ router.delete('/:id/unassign/:userId', authenticate, requireAdmin, async (req, r
       res.status(404).json({ error: 'User not found' })
       return
     }
-    if (String(user.seat_id) !== id) {
+    if (!user.seat_ids?.some((sid: mongoose.Types.ObjectId) => String(sid) === id)) {
       res.status(400).json({ error: 'User is not assigned to this seat' })
       return
     }
 
     // Clear user's schedules for this seat
     await Schedule.deleteMany({ seat_id: id, user_id: userId })
-    // Unassign from seat
-    user.seat_id = null
-    await user.save()
+    // Remove seat from user's seat_ids
+    await User.findByIdAndUpdate(userId, { $pull: { seat_ids: new mongoose.Types.ObjectId(id) } })
 
     res.json({ message: 'User unassigned from seat' })
   } catch (error) {

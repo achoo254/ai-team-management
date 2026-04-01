@@ -14,6 +14,7 @@ import seatRoutes from './routes/seats.js'
 import teamRoutes from './routes/teams.js'
 import usageLogRoutes from './routes/usage-log.js'
 import { sendLogReminder, sendWeeklyReport } from './services/telegram-service.js'
+import { isVietnamHoliday } from './services/vietnam-holidays.js'
 
 const app = express()
 
@@ -42,14 +43,22 @@ async function start() {
   const { initializeDb } = await import('./seed-data.js')
   await initializeDb()
 
-  // Cron: Friday 15:00 Asia/Ho_Chi_Minh — log reminder
-  cron.schedule('0 15 * * 5', () => {
+  // Cron: Thursday 16:30 — log reminder (skip VN holidays)
+  cron.schedule('30 16 * * 4', () => {
+    if (isVietnamHoliday()) {
+      console.log('[Cron] Skipping log reminder — Vietnam holiday')
+      return
+    }
     console.log('[Cron] Triggering log reminder...')
     sendLogReminder().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
-  // Cron: Friday 17:00 Asia/Ho_Chi_Minh — weekly report
-  cron.schedule('0 17 * * 5', () => {
+  // Cron: Friday 08:00 — weekly report (skip VN holidays)
+  cron.schedule('0 8 * * 5', () => {
+    if (isVietnamHoliday()) {
+      console.log('[Cron] Skipping weekly report — Vietnam holiday')
+      return
+    }
     console.log('[Cron] Triggering weekly report...')
     sendWeeklyReport().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })

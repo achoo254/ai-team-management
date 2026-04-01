@@ -1,5 +1,6 @@
 import { useLocation } from "react-router";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 
 const pageTitles: Record<string, string> = {
@@ -31,6 +32,7 @@ export function Header() {
 
       <h1 className="flex-1 text-base font-semibold lg:text-lg">{title}</h1>
 
+      <ThemeToggle />
       <UserMenu />
     </header>
   );
