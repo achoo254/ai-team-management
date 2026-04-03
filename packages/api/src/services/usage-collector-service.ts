@@ -136,10 +136,14 @@ export async function collectAllUsage(): Promise<{
   }
 }
 
-/** Collect usage for a single seat by ID */
-export async function collectSeatUsage(seatId: string): Promise<void> {
+/** Collect usage for a single seat by ID (skips if no active token) */
+export async function collectSeatUsage(seatId: string): Promise<{ skipped?: boolean }> {
   const seat = await Seat.findById(seatId).select('+access_token').lean()
   if (!seat) throw new Error('Seat not found')
-  if (!seat.token_active || !seat.access_token) throw new Error('Seat has no active token')
+  if (!seat.token_active || !seat.access_token) {
+    console.log(`[Collector] Skipped ${seat.label}: no active token`)
+    return { skipped: true }
+  }
   await fetchSeatUsage(seat as any)
+  return {}
 }

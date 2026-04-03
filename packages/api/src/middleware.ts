@@ -8,7 +8,7 @@ export interface JwtPayload {
   name: string
   email: string
   role: 'admin' | 'user'
-  team: 'dev' | 'mkt'
+  team?: 'dev' | 'mkt'
 }
 
 // Extend Express Request with typed user property

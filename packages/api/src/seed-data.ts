@@ -9,7 +9,7 @@ export async function seedData() {
 
   // Seats
   const seats = await Seat.insertMany([
-    { email: 'quocdat254@gmail.com', label: 'TK Đạt', team: 'dev', max_users: 2 },
+    { email: 'dattqh@inet.vn', label: 'TK Đạt', team: 'dev', max_users: 2 },
     { email: 'hoangnh@inet.vn', label: 'TK Hoàng', team: 'dev', max_users: 2 },
     { email: 'anhtct@inet.vn', label: 'TK Tuấn Anh', team: 'dev', max_users: 3 },
     { email: 'trihd@inet.vn', label: 'TK Trí', team: 'mkt', max_users: 3 },
@@ -19,7 +19,8 @@ export async function seedData() {
   // Users (seat_ids is an array — user can belong to multiple seats)
   const users = await User.insertMany([
     // Dev team
-    { name: 'Đạt', email: 'quocdat254@gmail.com', role: 'admin', team: 'dev', seat_ids: [seats[0]._id] },
+    { name: 'Admin', email: 'quocdat254@gmail.com', role: 'admin' },
+    { name: 'Đạt', email: 'dattqh@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[0]._id] },
     { name: 'Hổ', email: 'hobv@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[0]._id] },
     { name: 'Hoàng', email: 'hoangnh@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[1]._id] },
     { name: 'Chương', email: 'chuongdt@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[1]._id] },
@@ -30,6 +31,7 @@ export async function seedData() {
     { name: 'Trí', email: 'trihd@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[3]._id] },
     { name: 'Hậu', email: 'hault@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[3]._id] },
     { name: 'Trà', email: 'traht@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[3]._id] },
+    { name: 'Hiền Kế Toán', email: 'hienkt@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[3]._id] },
     { name: 'Quân', email: 'quanlm@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[4]._id] },
     { name: 'Ngọc', email: 'ngocptn@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[4]._id] },
     { name: 'Phương', email: 'phuongttt@inet.vn', role: 'user', team: 'mkt', seat_ids: [seats[4]._id] },

@@ -25,7 +25,11 @@ router.post('/collect/:seatId', authenticate, requireAdmin, async (req, res) => 
       res.status(400).json({ error: 'Invalid seat ID' })
       return
     }
-    await collectSeatUsage(seatId)
+    const result = await collectSeatUsage(seatId)
+    if (result.skipped) {
+      res.json({ message: 'Skipped: no active token' })
+      return
+    }
     res.json({ message: 'Usage collected' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

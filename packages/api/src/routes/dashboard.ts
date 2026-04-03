@@ -165,7 +165,7 @@ router.get('/usage/by-seat', async (_req, res) => {
     // Map seat _id → user names (user can be in multiple seats)
     const usersBySeatId: Record<string, string[]> = {}
     for (const u of users) {
-      for (const seatId of u.seat_ids) {
+      for (const seatId of u.seat_ids ?? []) {
         const key = String(seatId)
         if (!usersBySeatId[key]) usersBySeatId[key] = []
         usersBySeatId[key].push(u.name)

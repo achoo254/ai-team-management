@@ -16,7 +16,7 @@ function pctColor(pct: number | null): string {
 
 function formatPct(pct: number | null): string {
   if (pct == null) return 'N/A'
-  return `${Math.round(pct * 100)}%`
+  return `${Math.round(pct)}%`
 }
 
 function formatTime(iso: string | null): string {
@@ -25,7 +25,7 @@ function formatTime(iso: string | null): string {
 }
 
 function ProgressBar({ label, pct, resetsAt }: { label: string; pct: number | null; resetsAt: string | null }) {
-  const width = pct != null ? Math.min(pct * 100, 100) : 0
+  const width = pct != null ? Math.min(pct, 100) : 0
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">

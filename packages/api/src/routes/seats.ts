@@ -20,7 +20,7 @@ router.get('/', authenticate, async (_req, res) => {
     // Group users by each seat_id (user can appear in multiple seats)
     const usersBySeat: Record<string, typeof users> = {}
     for (const user of users) {
-      for (const seatId of user.seat_ids) {
+      for (const seatId of user.seat_ids ?? []) {
         const key = String(seatId)
         if (!usersBySeat[key]) usersBySeat[key] = []
         usersBySeat[key].push(user)
@@ -29,6 +29,7 @@ router.get('/', authenticate, async (_req, res) => {
 
     const enriched = seats.map((seat) => ({
       ...seat,
+      has_token: !!seat.token_active,
       users: (usersBySeat[String(seat._id)] || []).map((u) => ({
         _id: u._id,
         name: u.name,

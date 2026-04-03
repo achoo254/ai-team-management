@@ -18,8 +18,8 @@ export interface User {
   name: string
   email?: string
   role: 'admin' | 'user'
-  team: 'dev' | 'mkt'
-  seat_id: string | null
+  team?: 'dev' | 'mkt'
+  seat_id?: string | null
   active: boolean
   created_at: string
 }
@@ -105,5 +105,5 @@ export interface AuthUser {
   name: string
   email: string
   role: 'admin' | 'user'
-  team: 'dev' | 'mkt'
+  team?: 'dev' | 'mkt'
 }
