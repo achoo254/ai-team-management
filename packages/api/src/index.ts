@@ -13,7 +13,9 @@ import scheduleRoutes from './routes/schedules.js'
 import seatRoutes from './routes/seats.js'
 import teamRoutes from './routes/teams.js'
 import usageLogRoutes from './routes/usage-log.js'
+import usageSnapshotRoutes from './routes/usage-snapshots.js'
 import { sendLogReminder, sendWeeklyReport } from './services/telegram-service.js'
+import { collectAllUsage } from './services/usage-collector-service.js'
 import { isVietnamHoliday } from './services/vietnam-holidays.js'
 
 const app = express()
@@ -32,6 +34,7 @@ app.use('/api/schedules', scheduleRoutes)
 app.use('/api/seats', seatRoutes)
 app.use('/api/teams', teamRoutes)
 app.use('/api/usage-log', usageLogRoutes)
+app.use('/api/usage-snapshots', usageSnapshotRoutes)
 
 // Global error handler — must be last
 app.use(errorHandler)
@@ -61,6 +64,12 @@ async function start() {
     }
     console.log('[Cron] Triggering weekly report...')
     sendWeeklyReport().catch(console.error)
+  }, { timezone: 'Asia/Ho_Chi_Minh' })
+
+  // Cron: Every 30 min — collect usage snapshots from Anthropic OAuth API
+  cron.schedule('*/30 * * * *', () => {
+    console.log('[Cron] Triggering usage collection...')
+    collectAllUsage().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
   app.listen(config.apiPort, () => {

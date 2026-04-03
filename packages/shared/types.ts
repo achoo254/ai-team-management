@@ -6,6 +6,10 @@ export interface Seat {
   label: string
   team: 'dev' | 'mkt'
   max_users: number
+  has_token?: boolean
+  token_active?: boolean
+  last_fetched_at?: string | null
+  last_fetch_error?: string | null
   created_at: string
 }
 
@@ -55,6 +59,27 @@ export interface UsageLog {
   weekly_all_pct: number
   user_id: string
   logged_at: string
+}
+
+export interface UsageSnapshot {
+  _id: string
+  seat_id: string
+  raw_response?: Record<string, unknown>
+  five_hour_pct: number | null
+  five_hour_resets_at: string | null
+  seven_day_pct: number | null
+  seven_day_resets_at: string | null
+  seven_day_sonnet_pct: number | null
+  seven_day_sonnet_resets_at: string | null
+  seven_day_opus_pct: number | null
+  seven_day_opus_resets_at: string | null
+  extra_usage: {
+    is_enabled: boolean
+    monthly_limit: number | null
+    used_credits: number | null
+    utilization: number | null
+  }
+  fetched_at: string
 }
 
 // Populated variants

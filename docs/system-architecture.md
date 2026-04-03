@@ -34,8 +34,9 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
 - **Connection**: Mongoose 9.3.1 ODM
-- **Collections**: 6 (seats, users, usage_logs, schedules, alerts, teams)
-- **Indexing**: Compound indexes on (user_id, week_start) and (seat_id, day_of_week, slot)
+- **Collections**: 7 (seats, users, usage_logs, schedules, alerts, teams, usage_snapshots)
+- **Indexing**: Compound indexes on (user_id, week_start), (seat_id, day_of_week, slot), and (seat_id, fetched_at)
+- **TTL**: usage_snapshots collection auto-expires after 90 days
 
 ### Monorepo & Shared (`packages/shared`)
 - **Package Manager**: pnpm workspaces
@@ -88,20 +89,23 @@ Subsequent requests: JWT read from cookie or Authorization header
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (8 files):
+**Route Structure** (9 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
-- `routes/seats.ts` — Seat CRUD, team assignment
+- `routes/seats.ts` — Seat CRUD, team assignment, token management
 - `routes/admin.ts` — User management
 - `routes/schedules.ts` — Schedule CRUD with conflict prevention
 - `routes/alerts.ts` — Alert creation, resolution, listing
 - `routes/teams.ts` — Team CRUD
 - `routes/usage-log.ts` — Usage logging, retrieval
+- `routes/usage-snapshots.ts` — Query snapshots, trigger collection
 
-**Service Layer** (4 files):
+**Service Layer** (6 files):
 - `services/alert-service.ts` — Alert generation and checking
 - `services/telegram-service.ts` — Telegram message formatting and sending
 - `services/usage-sync-service.ts` — Usage data synchronization
+- `services/crypto-service.ts` — AES-256-GCM encryption/decryption for access tokens
+- `services/usage-collector-service.ts` — Fetch usage data from Anthropic API, concurrent collection
 - `services/anthropic-service.ts` — Future Anthropic API integration
 
 ### 3. Database Layer (Mongoose + TypeScript)
@@ -118,6 +122,11 @@ Subsequent requests: JWT read from cookie or Authorization header
   label: String,
   team: String (enum: ['dev', 'mkt']),
   max_users: Number,
+  access_token: String | null (encrypted AES-256-GCM),
+  token_active: Boolean,
+  last_fetched_at: Date | null,
+  last_fetch_error: String | null,
+  has_token: Boolean (virtual),
   created_at: Date
 }
 ```
@@ -185,6 +194,32 @@ Subsequent requests: JWT read from cookie or Authorization header
 }
 ```
 
+#### UsageSnapshots
+```typescript
+{
+  _id: ObjectId,
+  seat_id: ObjectId (ref: Seat),
+  raw_response: Object (Anthropic API response),
+  five_hour_pct: Number | null,
+  five_hour_resets_at: Date | null,
+  seven_day_pct: Number | null,
+  seven_day_resets_at: Date | null,
+  seven_day_sonnet_pct: Number | null,
+  seven_day_sonnet_resets_at: Date | null,
+  seven_day_opus_pct: Number | null,
+  seven_day_opus_resets_at: Date | null,
+  extra_usage: {
+    is_enabled: Boolean,
+    monthly_limit: Number | null,
+    used_credits: Number | null,
+    utilization: Number | null
+  },
+  fetched_at: Date,
+  // Index: (seat_id, fetched_at) compound
+  // TTL: auto-delete after 90 days
+}
+```
+
 ### 4. Frontend SPA (React 19 + Vite)
 
 **Location**: `packages/web/src`
@@ -228,14 +263,20 @@ API calls via React Query (TanStack Query)
 
 ### 5. Scheduled Tasks (Cron)
 
-**Trigger**: Friday Asia/Saigon timezone via node-cron
+**Jobs** (via node-cron in `packages/api/src/index.ts`):
 
-**Jobs**:
-1. **15:00** — `sendLogReminder()` from telegram-service.js
+1. **Every 30 minutes** — `collectAllUsage()` from usage-collector-service.ts
+   - Fetches usage metrics from Anthropic API for all seats with active tokens
+   - Decrypts stored access tokens (AES-256-GCM)
+   - Stores snapshots in usage_snapshots collection with 90-day TTL
+   - Logs completion stats and errors per seat
+   - Mutex guard prevents overlapping runs
+
+2. **Friday 15:00 Asia/Saigon** — `sendLogReminder()` from telegram-service.ts
    - Reminds users to log past week usage
    - Sends to Telegram chat
 
-2. **17:00** — `sendWeeklyReport()` from telegram-service.js
+3. **Friday 17:00 Asia/Saigon** — `sendWeeklyReport()` from telegram-service.ts
    - Compiles usage summary by seat
    - Lists alerts triggered
    - Identifies inactive users
@@ -245,6 +286,7 @@ API calls via React Query (TanStack Query)
 - `packages/api/src/index.ts` — Cron schedule setup
 - `packages/api/src/services/telegram-service.ts` — Message formatting and sending
 - Requires `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- Requires `ENCRYPTION_KEY` (32-byte hex) for token decryption
 
 ### 6. Configuration & Environment
 
@@ -256,9 +298,10 @@ API calls via React Query (TanStack Query)
 **Environment Variables**:
 ```
 Required:
-  JWT_SECRET              — JWT signing key
+  JWT_SECRET              — JWT signing key (min 32 chars)
   MONGO_URI              — MongoDB connection URL
   FIREBASE_SERVICE_ACCOUNT_PATH — Firebase admin JSON path
+  ENCRYPTION_KEY         — 64-char hex string (32 bytes) for AES-256-GCM token encryption
 
 Optional:
   PORT                   — Server port (default: 3000)
@@ -330,6 +373,27 @@ Admin: Edit → PUT /api/seats/:id
 Admin: Delete → DELETE /api/seats/:id (cascade-safe)
     ↓
 Frontend: Refresh seats list
+```
+
+### Usage Collection Flow
+```
+Cron: Every 30 min → collectAllUsage()
+    ↓
+Query: Find all seats where token_active = true and access_token != null
+    ↓
+Decrypt: Decrypt each seat's access_token (AES-256-GCM)
+    ↓
+Fetch: Call Anthropic API /oauth/usage with Bearer token (15s timeout, 3 concurrent)
+    ↓
+Parse: Extract usage buckets (5-hour, 7-day, model-specific, extra_usage)
+    ↓
+Store: Create UsageSnapshot document per seat
+    ↓
+Update: Set Seat.last_fetched_at, clear Seat.last_fetch_error (or set on error)
+    ↓
+TTL: Auto-delete snapshots after 90 days
+    ↓
+Frontend: Query /api/usage-snapshots to display latest metrics
 ```
 
 ## Deployment Considerations

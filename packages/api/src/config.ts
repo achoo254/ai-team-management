@@ -13,6 +13,7 @@ export const config = {
     chatId: process.env.TELEGRAM_CHAT_ID || '',
     topicId: process.env.TELEGRAM_TOPIC_ID || '',
   },
+  encryptionKey: process.env.ENCRYPTION_KEY || '',
   anthropic: {
     baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
     adminKey: process.env.ANTHROPIC_ADMIN_KEY || '',

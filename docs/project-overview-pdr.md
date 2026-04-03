@@ -45,6 +45,15 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Manage teams (dev/mkt): name, label, color
 - Admin role gating for sensitive operations
 
+### 7. Usage Metrics Collection
+- Store Anthropic API access tokens (encrypted with AES-256-GCM)
+- Auto-collect usage every 30 minutes for all active seats
+- Track 5-hour, 7-day, and model-specific (Sonnet, Opus) utilization %
+- Monitor extra_usage credits (monthly limit, used, utilization)
+- Query and filter usage snapshots by seat and date range
+- View latest metrics (within 24h) with status indicators
+- Automatic cleanup: snapshots deleted after 90 days
+
 ## Technical Requirements
 
 ### Backend
@@ -52,7 +61,8 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Mongoose (MongoDB) with async/await
 - Firebase Admin SDK (Google sign-in verification)
 - JWT auth (24h expiry via httpOnly cookie)
-- node-cron (Friday reminders)
+- node-cron (Friday reminders + 30-min usage collection)
+- AES-256-GCM encryption for sensitive data (access tokens)
 
 ### Frontend
 - Vanilla JS SPA
@@ -62,8 +72,9 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 ### Database
 - MongoDB (via MONGO_URI env var)
-- Collections: seats, users, usage_logs, schedules, alerts, teams
+- Collections: seats, users, usage_logs, schedules, alerts, teams, usage_snapshots
 - Mongoose models with schema validation
+- TTL indexes for automatic data cleanup (usage_snapshots: 90-day retention)
 
 ### Auth
 - Google sign-in via Firebase client SDK
@@ -82,11 +93,14 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 1. All CRUD operations on seats, users, schedules, alerts functional
 2. Weekly usage logging & retrieval working
-3. Telegram notifications sent on schedule
-4. Alerts triggered and resolved correctly
-5. SPA navigation smooth, no page reloads
-6. Auth gating enforced for admin endpoints
-7. Zero data corruption with concurrent usage
+3. Usage metrics collected every 30 minutes for active seats
+4. Access tokens encrypted and stored securely
+5. Usage snapshots queryable with pagination and filtering
+6. Telegram notifications sent on schedule
+7. Alerts triggered and resolved correctly
+8. SPA navigation smooth, no page reloads
+9. Auth gating enforced for admin endpoints
+10. Zero data corruption with concurrent usage
 
 ## Acceptance Criteria
 
@@ -96,6 +110,10 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Admin role gating verified
 - Error handling graceful (400/401/403/500 responses)
 - Documentation complete and current
+- Usage collection cron job running every 30 minutes
+- Token encryption/decryption working correctly
+- Usage snapshots stored and queryable
+- Frontend displays latest metrics with status indicators
 
 ## Product Roadmap (Phase 1 Complete)
 
@@ -108,6 +126,10 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Telegram weekly reports & reminders
 - SPA dashboard with all views
 - Google sign-in + JWT auth
+- Usage metrics collection (30-min cron)
+- Anthropic API token management (encrypted AES-256-GCM)
+- Usage snapshots with 90-day TTL
+- Real-time usage metrics dashboard
 
 ### Potential Improvements (Phase 2)
 
@@ -143,6 +165,8 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - **Firebase Project**: Must have active project + service account JSON
 - **MongoDB**: Running instance accessible via MONGO_URI
 - **Telegram Bot**: Requires token and chat ID setup
+- **Encryption Key**: 32-byte (64 hex chars) for AES-256-GCM token encryption
+- **Anthropic OAuth**: Access token from Anthropic dashboard for usage API
 - **Environment**: Node.js 18+, pnpm package manager
 - **Browser**: Modern ES6+ support (Chrome, Firefox, Safari, Edge)
 - **Timezone**: All cron jobs use Asia/Ho_Chi_Minh (Asia/Saigon)

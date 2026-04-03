@@ -2,6 +2,7 @@ import { Router } from 'express'
 import mongoose from 'mongoose'
 import { authenticate, requireAdmin } from '../middleware.js'
 import { Seat } from '../models/seat.js'
+import { encrypt } from '../services/crypto-service.js'
 import { User } from '../models/user.js'
 import { Schedule } from '../models/schedule.js'
 
@@ -199,6 +200,65 @@ router.delete('/:id/unassign/:userId', authenticate, requireAdmin, async (req, r
     await User.findByIdAndUpdate(userId, { $pull: { seat_ids: new mongoose.Types.ObjectId(id) } })
 
     res.json({ message: 'User unassigned from seat' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// PUT /api/seats/:id/token — set/update access token (admin)
+router.put('/:id/token', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id as string
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: 'Invalid seat ID' })
+      return
+    }
+
+    const { access_token } = req.body
+    if (!access_token || typeof access_token !== 'string') {
+      res.status(400).json({ error: 'access_token is required' })
+      return
+    }
+
+    const encrypted = encrypt(access_token)
+    const seat = await Seat.findByIdAndUpdate(
+      id,
+      { access_token: encrypted, token_active: true },
+      { new: true },
+    )
+    if (!seat) {
+      res.status(404).json({ error: 'Seat not found' })
+      return
+    }
+
+    res.json({ message: 'Token updated', seat })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// DELETE /api/seats/:id/token — remove token (admin)
+router.delete('/:id/token', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id as string
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: 'Invalid seat ID' })
+      return
+    }
+
+    const seat = await Seat.findByIdAndUpdate(
+      id,
+      { access_token: null, token_active: false, last_fetch_error: null },
+      { new: true },
+    )
+    if (!seat) {
+      res.status(404).json({ error: 'Seat not found' })
+      return
+    }
+
+    res.json({ message: 'Token removed', seat })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

@@ -8,6 +8,8 @@ export interface SeatUser { id: string; name: string; email: string; }
 export interface Seat {
   _id: string; email: string; label: string; team: string;
   max_users: number; users: SeatUser[];
+  has_token?: boolean; token_active?: boolean;
+  last_fetched_at?: string | null; last_fetch_error?: string | null;
 }
 
 const KEY = ["seats"];

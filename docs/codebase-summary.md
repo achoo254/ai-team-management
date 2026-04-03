@@ -13,25 +13,29 @@ quan-ly-team-claude/
 │   │   │   ├── firebase-admin.ts    # Firebase Admin SDK init
 │   │   │   ├── middleware.ts        # Auth middleware
 │   │   │   ├── models/              # Mongoose schemas (TypeScript)
-│   │   │   │   ├── seat.ts
+│   │   │   │   ├── seat.ts           # Includes access_token (encrypted)
 │   │   │   │   ├── user.ts
 │   │   │   │   ├── usage-log.ts
 │   │   │   │   ├── schedule.ts
 │   │   │   │   ├── alert.ts
-│   │   │   │   └── team.ts
+│   │   │   │   ├── team.ts
+│   │   │   │   └── usage-snapshot.ts # Usage data from Anthropic API
 │   │   │   ├── routes/              # Express route handlers (TypeScript)
 │   │   │   │   ├── auth.ts
 │   │   │   │   ├── dashboard.ts
-│   │   │   │   ├── seats.ts
+│   │   │   │   ├── seats.ts           # Token management endpoints
 │   │   │   │   ├── schedules.ts
 │   │   │   │   ├── alerts.ts
 │   │   │   │   ├── admin.ts
 │   │   │   │   ├── teams.ts
-│   │   │   │   └── usage-log.ts
+│   │   │   │   ├── usage-log.ts
+│   │   │   │   └── usage-snapshots.ts # Query & collect usage snapshots
 │   │   │   ├── services/            # Business logic (TypeScript)
 │   │   │   │   ├── alert-service.ts
 │   │   │   │   ├── telegram-service.ts
-│   │   │   │   └── usage-sync-service.ts
+│   │   │   │   ├── usage-sync-service.ts
+│   │   │   │   ├── crypto-service.ts  # AES-256-GCM encryption/decryption
+│   │   │   │   └── usage-collector-service.ts # Collect usage from Anthropic API
 │   │   │   ├── scripts/
 │   │   │   │   └── db-reset.ts      # Drop MongoDB + re-seed
 │   │   │   └── seed-data.ts         # Seed data definitions
@@ -51,6 +55,7 @@ quan-ly-team-claude/
 │   │   │   │   ├── admin.tsx
 │   │   │   │   ├── teams.tsx
 │   │   │   │   ├── usage-log.tsx
+│   │   │   │   ├── usage-metrics.tsx  # Usage snapshots & token management
 │   │   │   │   └── login.tsx
 │   │   │   ├── components/          # Reusable React components
 │   │   │   │   ├── auth-provider.tsx
@@ -195,6 +200,32 @@ quan-ly-team-claude/
 }
 ```
 
+#### UsageSnapshot
+```typescript
+{
+  _id: ObjectId (auto),
+  seat_id: ObjectId (reference to Seat),
+  raw_response: Object (Anthropic API response),
+  five_hour_pct: Number | null,
+  five_hour_resets_at: Date | null,
+  seven_day_pct: Number | null,
+  seven_day_resets_at: Date | null,
+  seven_day_sonnet_pct: Number | null,
+  seven_day_sonnet_resets_at: Date | null,
+  seven_day_opus_pct: Number | null,
+  seven_day_opus_resets_at: Date | null,
+  extra_usage: {
+    is_enabled: Boolean,
+    monthly_limit: Number | null,
+    used_credits: Number | null,
+    utilization: Number | null
+  },
+  fetched_at: Date (auto)
+  // TTL index: auto-delete after 90 days
+  // Compound index: (seat_id, fetched_at)
+}
+```
+
 ## API Endpoints
 
 ### Auth
@@ -213,6 +244,8 @@ quan-ly-team-claude/
 - `POST /api/seats` — Create seat (admin only)
 - `PUT /api/seats/:id` — Update seat (admin only)
 - `DELETE /api/seats/:id` — Delete seat (admin only)
+- `PUT /api/seats/:id/token` — Set/update access token (admin only)
+- `DELETE /api/seats/:id/token` — Remove access token (admin only)
 
 ### Users
 - `GET /api/admin/users` — List users (admin only)
@@ -229,6 +262,12 @@ quan-ly-team-claude/
 - `GET /api/usage-log/user/:userId` — Get user's usage history
 - `POST /api/usage-log` — Log usage (user/admin)
 - `GET /api/usage-log/weekly` — Get weekly summary
+
+### Usage Snapshots
+- `GET /api/usage-snapshots` — Query snapshots (filter by seatId, date range, limit, offset)
+- `GET /api/usage-snapshots/latest` — Get latest snapshot per active seat (last 24h)
+- `POST /api/usage-snapshots/collect` — Trigger collection for all seats (admin only)
+- `POST /api/usage-snapshots/collect/:seatId` — Trigger collection for single seat (admin only)
 
 ### Alerts
 - `GET /api/alerts` — List alerts
@@ -278,14 +317,19 @@ quan-ly-team-claude/
 
 ## Cron Jobs
 
+### Every 30 minutes (Usage Collection)
+- Collects usage metrics from Anthropic API for all seats with active tokens
+- Called via `collectAllUsage()` in usage-collector-service.ts
+- Stores snapshots in usage_snapshots collection (TTL: 90 days)
+
 ### Friday 15:00 Asia/Saigon (Log Reminder)
 - Sends Telegram message to remind users to log usage
-- Called via `sendLogReminder()` in telegram-service.js
+- Called via `sendLogReminder()` in telegram-service.ts
 
 ### Friday 17:00 Asia/Saigon (Weekly Report)
 - Compiles usage summary, alerts, inactive users
 - Sends formatted report to Telegram
-- Called via `sendWeeklyReport()` in telegram-service.js
+- Called via `sendWeeklyReport()` in telegram-service.ts
 
 ## Environment Configuration
 
@@ -297,6 +341,7 @@ See `.env.example` for all variables. Key:
 | `JWT_SECRET` | Yes | - | JWT signing key (min 32 chars) |
 | `MONGO_URI` | Yes | - | MongoDB connection string |
 | `FIREBASE_SERVICE_ACCOUNT_PATH` | Yes | - | Path to Firebase service account JSON |
+| `ENCRYPTION_KEY` | Yes | - | 64-char hex string (32 bytes) for AES-256-GCM |
 | `TELEGRAM_BOT_TOKEN` | No | - | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | No | - | Telegram chat ID for notifications |
 | `TELEGRAM_TOPIC_ID` | No | - | Telegram topic ID (optional) |
