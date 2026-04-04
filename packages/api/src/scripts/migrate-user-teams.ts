@@ -52,34 +52,38 @@ async function main() {
   }
   console.log(`[Migration] Default created_by: ${admin.name} (${admin._id})`)
 
-  // 3. Upsert 3 default teams
+  // 3. Upsert 3 default teams (old enum key → new display name)
   const defaults = [
-    { name: 'dev', label: 'Development', color: '#3b82f6' },
-    { name: 'mkt', label: 'Marketing', color: '#f59e0b' },
-    { name: 'personal', label: 'Personal', color: '#10b981' },
+    { oldKey: 'dev', name: 'Development', color: '#3b82f6' },
+    { oldKey: 'mkt', name: 'Marketing', color: '#f59e0b' },
+    { oldKey: 'personal', name: 'Personal', color: '#10b981' },
   ]
+  // Maps old enum value → new team ObjectId
   const teamMap = new Map<string, mongoose.Types.ObjectId>()
 
   for (const def of defaults) {
-    const existing = await db.collection('teams').findOne({ name: def.name })
+    // Try finding by old name first, then new name
+    const existing = await db.collection('teams').findOne({ name: { $in: [def.oldKey, def.name] } })
     if (existing) {
-      teamMap.set(def.name, existing._id as mongoose.Types.ObjectId)
-      if (isExecute && !existing.created_by) {
-        await db.collection('teams').updateOne(
-          { _id: existing._id },
-          { $set: { created_by: admin._id } },
-        )
+      teamMap.set(def.oldKey, existing._id as mongoose.Types.ObjectId)
+      if (isExecute) {
+        // Rename old slug name to display name + ensure created_by
+        const updates: Record<string, unknown> = {}
+        if (existing.name === def.oldKey) updates.name = def.name
+        if (!existing.created_by) updates.created_by = admin._id
+        if (Object.keys(updates).length > 0) {
+          await db.collection('teams').updateOne({ _id: existing._id }, { $set: updates })
+        }
       }
-      console.log(`[Team] "${def.name}" exists → ${existing._id}`)
+      console.log(`[Team] "${def.oldKey}" exists → ${existing._id}`)
     } else if (isExecute) {
       const result = await db.collection('teams').insertOne({
         name: def.name,
-        label: def.label,
         color: def.color,
         created_by: admin._id,
         created_at: new Date(),
       })
-      teamMap.set(def.name, result.insertedId as mongoose.Types.ObjectId)
+      teamMap.set(def.oldKey, result.insertedId as mongoose.Types.ObjectId)
       console.log(`[Team] Created "${def.name}" → ${result.insertedId}`)
     } else {
       console.log(`[Team] Would create "${def.name}"`)

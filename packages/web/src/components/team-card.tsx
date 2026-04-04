@@ -23,8 +23,7 @@ export function TeamCard({ team, currentUserId, isAdmin, onEdit, onDelete }: Pro
           <div className="flex items-center gap-2 min-w-0">
             <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
             <div className="min-w-0">
-              <CardTitle className="text-base">{team.label}</CardTitle>
-              <p className="text-xs text-muted-foreground">{team.name}</p>
+              <CardTitle className="text-base">{team.name}</CardTitle>
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">

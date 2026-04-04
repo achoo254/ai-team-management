@@ -39,7 +39,7 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const allowed = await getAllowedSeatIds(req.user!)
     const seatFilter = allowed ? { _id: { $in: allowed } } : {}
-    const seats = await Seat.find(seatFilter).select('+oauth_credential').populate('owner_id', 'name email').populate('team_id', 'name label color').sort({ _id: 1 }).lean()
+    const seats = await Seat.find(seatFilter).select('+oauth_credential').populate('owner_id', 'name email').populate('team_id', 'name color').sort({ _id: 1 }).lean()
     const userFilter = allowed
       ? { active: true, seat_ids: { $in: allowed } }
       : { active: true, seat_ids: { $exists: true, $ne: [] } }
@@ -68,14 +68,14 @@ router.get('/', authenticate, async (req, res) => {
         : null
       // Normalize team_id populated object
       const populatedTeam = seatObj.team_id && typeof seatObj.team_id === 'object'
-        ? seatObj.team_id as unknown as { _id: string; name: string; label: string; color: string }
+        ? seatObj.team_id as unknown as { _id: string; name: string; color: string }
         : null
 
       return {
         ...seatObj,
         team_id: populatedTeam ? String(populatedTeam._id) : null,
         team: populatedTeam
-          ? { _id: String(populatedTeam._id), name: populatedTeam.name, label: populatedTeam.label, color: populatedTeam.color }
+          ? { _id: String(populatedTeam._id), name: populatedTeam.name, color: populatedTeam.color }
           : null,
         owner_id: populatedOwner ? String(populatedOwner._id) : null,
         owner: populatedOwner

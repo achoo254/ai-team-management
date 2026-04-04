@@ -45,7 +45,7 @@ export function UserTable({ users, onEdit, onDelete, onToggleActive }: Props) {
                     const t = teamMap.get(tid);
                     return t ? (
                       <Badge key={tid} variant="outline" className="text-xs" style={{ borderLeftColor: t.color, borderLeftWidth: 3 }}>
-                        {t.label}
+                        {t.name}
                       </Badge>
                     ) : null;
                   })}

@@ -17,7 +17,7 @@ export function useAdminUsers() {
 export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Pick<AdminUser, "name" | "email" | "role" | "team_ids"> & { seatId?: string }) =>
+    mutationFn: (body: Pick<AdminUser, "name" | "email" | "role" | "team_ids"> & { seat_ids?: string[] }) =>
       api.post("/api/admin/users", body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Tạo user thành công"); },
     onError: (e: Error) => toast.error(e.message),
@@ -27,7 +27,7 @@ export function useCreateUser() {
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: Partial<AdminUser> & { id: string; seatId?: string }) =>
+    mutationFn: ({ id, ...body }: Partial<AdminUser> & { id: string; seat_ids?: string[] }) =>
       api.put(`/api/admin/users/${id}`, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Cập nhật thành công"); },
     onError: (e: Error) => toast.error(e.message),

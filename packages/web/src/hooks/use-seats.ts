@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 export interface SeatUser { id: string; name: string; email: string; }
 export interface SeatOwner { _id: string; name: string; email: string; }
-export interface SeatTeam { _id: string; name: string; label: string; color: string; }
+export interface SeatTeam { _id: string; name: string; color: string; }
 export interface Seat {
   _id: string; email: string; label: string;
   team_id: string | null; team?: SeatTeam | null;

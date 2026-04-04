@@ -119,7 +119,7 @@ export function DashboardSeatFilter({ value, onChange }: DashboardSeatFilterProp
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
-                    {seat.team?.label ?? "—"}
+                    {seat.team?.name ?? "—"}
                   </span>
                   <span className="truncate text-sm">{seat.label}</span>
                 </div>

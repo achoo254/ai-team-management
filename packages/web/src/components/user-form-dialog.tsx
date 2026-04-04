@@ -13,13 +13,13 @@ import { useSeats } from "@/hooks/use-seats";
 interface Props {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<AdminUser> & { seatId?: string }) => void;
+  onSubmit: (data: Partial<AdminUser> & { seat_ids?: string[] }) => void;
   loading?: boolean;
   initial?: AdminUser | null;
 }
 
-type FormState = { name: string; email: string; role: "admin" | "user"; team_ids: string[]; seatId: string };
-const empty: FormState = { name: "", email: "", role: "user", team_ids: [], seatId: "" };
+type FormState = { name: string; email: string; role: "admin" | "user"; team_ids: string[]; seat_ids: string[] };
+const empty: FormState = { name: "", email: "", role: "user", team_ids: [], seat_ids: [] };
 
 export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Props) {
   const [form, setForm] = useState<FormState>(empty);
@@ -28,7 +28,7 @@ export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
 
   useEffect(() => {
     setForm(initial
-      ? { name: initial.name, email: initial.email, role: initial.role, team_ids: initial.team_ids ?? [], seatId: initial.seat_ids?.[0] ?? "" }
+      ? { name: initial.name, email: initial.email, role: initial.role, team_ids: initial.team_ids ?? [], seat_ids: (initial.seat_ids ?? []).map(String) }
       : empty);
   }, [initial, open]);
 
@@ -38,9 +38,13 @@ export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
   const seats = seatsData?.seats ?? [];
   const selectedTeamIds = new Set(form.team_ids);
   const availableTeams = teams.filter((t) => !selectedTeamIds.has(t._id));
+  const selectedSeatIds = new Set(form.seat_ids);
+  const availableSeats = seats.filter((s) => !selectedSeatIds.has(s._id));
 
   const addTeam = (teamId: string) => setForm((f) => ({ ...f, team_ids: [...f.team_ids, teamId] }));
   const removeTeam = (teamId: string) => setForm((f) => ({ ...f, team_ids: f.team_ids.filter((id) => id !== teamId) }));
+  const addSeat = (seatId: string) => setForm((f) => ({ ...f, seat_ids: [...f.seat_ids, seatId] }));
+  const removeSeat = (seatId: string) => setForm((f) => ({ ...f, seat_ids: f.seat_ids.filter((id) => id !== seatId) }));
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -72,7 +76,7 @@ export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
                 const t = teams.find((x) => x._id === tid);
                 return (
                   <Badge key={tid} variant="outline" className="gap-1 pr-1">
-                    {t?.label ?? tid}
+                    {t?.name ?? tid}
                     <button type="button" onClick={() => removeTeam(tid)} className="hover:text-destructive">
                       <X className="h-3 w-3" />
                     </button>
@@ -85,30 +89,37 @@ export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
                 <SelectTrigger><SelectValue placeholder="Thêm team..." /></SelectTrigger>
                 <SelectContent>
                   {availableTeams.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>{t.label}</SelectItem>
+                    <SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
           </div>
           <div className="grid gap-1.5">
-            <Label>Seat (tuỳ chọn)</Label>
-            <div className="relative">
-              <Select key={form.seatId || "__empty__"} value={form.seatId || undefined} onValueChange={(v) => set("seatId", v)}>
-                <SelectTrigger><SelectValue placeholder="Chọn seat" /></SelectTrigger>
+            <Label>Seats</Label>
+            <div className="flex flex-wrap gap-1 mb-1">
+              {form.seat_ids.map((sid) => {
+                const s = seats.find((x) => x._id === sid);
+                return (
+                  <Badge key={sid} variant="outline" className="gap-1 pr-1">
+                    {s?.label ?? s?.email ?? sid}
+                    <button type="button" onClick={() => removeSeat(sid)} className="hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                );
+              })}
+            </div>
+            {availableSeats.length > 0 && (
+              <Select value="" onValueChange={(v) => { if (v) addSeat(v); }}>
+                <SelectTrigger><SelectValue placeholder="Thêm seat..." /></SelectTrigger>
                 <SelectContent>
-                  {seats.map((s) => (
-                    <SelectItem key={s._id} value={s._id}>{s.email}</SelectItem>
+                  {availableSeats.map((s) => (
+                    <SelectItem key={s._id} value={s._id}>{s.label || s.email}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {form.seatId && (
-                <button type="button" onClick={() => set("seatId", "")}
-                  className="absolute right-8 top-1/2 -translate-y-1/2 rounded-sm p-0.5 hover:bg-muted">
-                  <X className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
         <DialogFooter>

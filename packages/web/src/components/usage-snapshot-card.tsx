@@ -47,7 +47,7 @@ function ProgressBar({ label, pct, resetsAt }: { label: string; pct: number | nu
 
 interface Props {
   snapshot: UsageSnapshot
-  seat?: { label?: string; team?: { label: string; color?: string } | null }
+  seat?: { label?: string; team?: { name: string; color?: string } | null }
 }
 
 export function UsageSnapshotCard({ snapshot, seat }: Props) {
@@ -64,7 +64,7 @@ export function UsageSnapshotCard({ snapshot, seat }: Props) {
           </CardTitle>
           <div className="flex items-center gap-1">
             {seat?.team && (
-              <Badge variant="secondary" className="text-xs">{seat.team.label}</Badge>
+              <Badge variant="secondary" className="text-xs">{seat.team.name}</Badge>
             )}
             {isAdmin && (
               <Button

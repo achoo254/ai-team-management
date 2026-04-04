@@ -8,7 +8,7 @@ export interface AvailableSeat {
   label: string;
   email: string;
   team_id: string | null;
-  team?: { _id: string; name: string; label: string; color: string } | null;
+  team?: { _id: string; name: string; color: string } | null;
 }
 
 export interface UserSettings {

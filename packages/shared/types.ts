@@ -12,7 +12,7 @@ export interface Seat {
   email: string
   label: string
   team_id: string | null
-  team?: { _id: string; name: string; label: string; color: string } | null
+  team?: { _id: string; name: string; color: string } | null
   max_users: number
   owner_id: string | null
   owner?: { _id: string; name: string; email: string } | null
@@ -93,7 +93,6 @@ export interface UserAlertSettings {
 export interface Team {
   _id: string
   name: string
-  label: string
   color: string
   created_by: string
   creator?: { _id: string; name: string; email: string }

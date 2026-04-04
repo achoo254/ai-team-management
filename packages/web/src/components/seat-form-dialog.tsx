@@ -52,10 +52,14 @@ export function SeatFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
             <Label>Team</Label>
             <div className="relative">
               <Select key={form.team_id || "__empty__"} value={form.team_id || undefined} onValueChange={(v) => set("team_id", v)}>
-                <SelectTrigger><SelectValue placeholder="Chọn team" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn team">
+                    {form.team_id ? teams.find((t) => t._id === form.team_id)?.name ?? "—" : undefined}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {teams.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>{t.label}</SelectItem>
+                    <SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

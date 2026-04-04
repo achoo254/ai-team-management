@@ -47,7 +47,7 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {seat.team ? (
-              <Badge variant="secondary" style={{ borderLeftColor: seat.team.color, borderLeftWidth: 3 }}>{seat.team.label}</Badge>
+              <Badge variant="secondary" style={{ borderLeftColor: seat.team.color, borderLeftWidth: 3 }}>{seat.team.name}</Badge>
             ) : (
               <Badge variant="outline">No team</Badge>
             )}

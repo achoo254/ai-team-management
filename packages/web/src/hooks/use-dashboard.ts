@@ -36,7 +36,7 @@ export interface UsageTrendPoint {
 // Team breakdown stats
 export interface TeamUsageItem {
   team_id: string;
-  team_label: string;
+  team_name: string;
   avg_5h_pct: number;
   avg_7d_pct: number;
   seat_count: number;

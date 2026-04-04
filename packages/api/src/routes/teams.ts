@@ -92,19 +92,18 @@ router.get('/', authenticate, async (req, res) => {
 // POST /api/teams — create team (any authenticated user)
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { name, label, color } = req.body
-    if (!name || !label) {
-      res.status(400).json({ error: 'name and label are required' })
+    const { name, color } = req.body
+    if (!name?.trim()) {
+      res.status(400).json({ error: 'name is required' })
       return
     }
-    const trimmed = String(name).trim().toLowerCase()
-    if (trimmed.length < 2 || trimmed.length > 50 || !/^[a-z0-9-]+$/.test(trimmed)) {
-      res.status(400).json({ error: 'name must be 2-50 chars, alphanumeric + hyphens only' })
+    const trimmed = String(name).trim()
+    if (trimmed.length > 50) {
+      res.status(400).json({ error: 'name must be under 50 chars' })
       return
     }
     const team = await Team.create({
       name: trimmed,
-      label,
       color,
       created_by: req.user!._id,
     })
@@ -118,9 +117,9 @@ router.post('/', authenticate, async (req, res) => {
 // PUT /api/teams/:id — update team (owner or admin)
 router.put('/:id', authenticate, validateObjectId('id'), requireTeamOwnerOrAdmin, async (req, res) => {
   try {
-    const { label, color } = req.body
+    const { name, color } = req.body
     const update: Record<string, unknown> = {}
-    if (label !== undefined) update.label = label
+    if (name !== undefined) update.name = String(name).trim().slice(0, 50)
     if (color !== undefined) update.color = color
 
     const team = await Team.findByIdAndUpdate(req.params.id as string, update, { new: true })

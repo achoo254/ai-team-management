@@ -27,7 +27,7 @@ function UsageBar({ value, color }: { value: number; color: string }) {
 /* ---------- Team row (tabular layout) ---------- */
 
 function TeamRow({ team }: { team: TeamUsageItem }) {
-  const name = team.team_label;
+  const name = team.team_name;
   const density = team.user_count > 0 && team.seat_count > 0
     ? (team.user_count / team.seat_count).toFixed(1)
     : "—";

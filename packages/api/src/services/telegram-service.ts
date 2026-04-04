@@ -141,7 +141,7 @@ async function fetchReportData() {
   }
 
   const teamLabels: Record<string, string> = {}
-  for (const t of teamRows) teamLabels[String(t._id)] = t.label
+  for (const t of teamRows) teamLabels[String(t._id)] = t.name
 
   return { snapMap, usersBySeat, teamLabels }
 }

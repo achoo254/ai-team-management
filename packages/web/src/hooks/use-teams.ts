@@ -7,7 +7,7 @@ export interface TeamCreator {
 }
 
 export interface Team {
-  _id: string; name: string; label: string; color: string;
+  _id: string; name: string; color: string;
   created_by: string; creator?: TeamCreator | null;
   user_count: number; seat_count: number;
   created_at: string;
@@ -29,7 +29,7 @@ export function useTeams(params?: { owner?: string; mine?: boolean }) {
 export function useCreateTeam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Pick<Team, "name" | "label" | "color">) => api.post("/api/teams", body),
+    mutationFn: (body: Pick<Team, "name" | "color">) => api.post("/api/teams", body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Tạo team thành công"); },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -38,7 +38,7 @@ export function useCreateTeam() {
 export function useUpdateTeam() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: { id: string; label?: string; color?: string }) =>
+    mutationFn: ({ id, ...body }: { id: string; name?: string; color?: string }) =>
       api.put(`/api/teams/${id}`, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Cập nhật thành công"); },
     onError: (e: Error) => toast.error(e.message),

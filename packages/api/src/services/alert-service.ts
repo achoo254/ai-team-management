@@ -95,7 +95,7 @@ export async function emitTeamEvent(params: {
   ])
   if (!targetUser || !team) return
 
-  const teamLabel = team.label || params.team_id
+  const teamLabel = team.name || params.team_id
   const messages: Record<string, string> = {
     'team.member_added': `Bạn đã được thêm vào team ${teamLabel}`,
     'team.member_removed': `Bạn đã bị xóa khỏi team ${teamLabel}`,

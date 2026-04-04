@@ -31,9 +31,9 @@ export default function TeamsPage() {
   const [editing, setEditing] = useState<Team | null>(null);
   const [deleting, setDeleting] = useState<Team | null>(null);
 
-  const handleSubmit = (body: Pick<Team, "name" | "label" | "color">) => {
+  const handleSubmit = (body: Pick<Team, "name" | "color">) => {
     const mut = editing
-      ? updateTeam.mutateAsync({ id: editing._id, label: body.label, color: body.color })
+      ? updateTeam.mutateAsync({ id: editing._id, name: body.name, color: body.color })
       : createTeam.mutateAsync(body);
     mut.then(() => { setFormOpen(false); setEditing(null); });
   };
@@ -50,7 +50,13 @@ export default function TeamsPage() {
         <div className="flex flex-wrap items-center gap-2">
           {isAdmin && adminData?.users && (
             <Select value={ownerFilter || "__all__"} onValueChange={(v) => { setOwnerFilter(v === "__all__" || !v ? "" : v); setMineOnly(false); }}>
-              <SelectTrigger className="w-48 h-9 text-sm"><SelectValue placeholder="Filter by owner" /></SelectTrigger>
+              <SelectTrigger className="w-48 h-9 text-sm">
+                <SelectValue placeholder="Filter by owner">
+                  {ownerFilter
+                    ? adminData.users.find((u) => u.id === ownerFilter)?.name ?? "—"
+                    : "Tất cả"}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Tất cả</SelectItem>
                 {adminData.users.map((u) => (
@@ -90,7 +96,7 @@ export default function TeamsPage() {
 
       <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={handleDelete}
         loading={deleteTeam.isPending} title="Xoá Team"
-        description={`Bạn có chắc muốn xoá team "${deleting?.label}"? Team phải rỗng mới xoá được.`} />
+        description={`Bạn có chắc muốn xoá team "${deleting?.name}"? Team phải rỗng mới xoá được.`} />
     </div>
   );
 }

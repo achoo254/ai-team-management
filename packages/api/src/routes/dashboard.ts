@@ -76,16 +76,21 @@ router.get('/enhanced', async (req, res) => {
     const seatIdMatch = effectiveIds ? { seat_id: { $in: effectiveIds } } : {}
     const dayOfWeek = new Date().getDay()
 
-    // User/seat counts
+    // User/seat counts (scoped for non-admin)
+    const seatCountFilter = effectiveIds ? { _id: { $in: effectiveIds } } : {}
+    const userCountFilter = effectiveIds ? { active: true, seat_ids: { $in: effectiveIds } } : { active: true }
     const [totalUsers, activeUsers, totalSeats, unresolvedAlerts] = await Promise.all([
-      User.countDocuments(),
-      User.countDocuments({ active: true }),
-      Seat.countDocuments(),
-      Alert.countDocuments({ resolved: false }),
+      effectiveIds ? User.countDocuments({ seat_ids: { $in: effectiveIds } }) : User.countDocuments(),
+      User.countDocuments(userCountFilter),
+      Seat.countDocuments(seatCountFilter),
+      Alert.countDocuments({ resolved: false, ...seatIdMatch }),
     ])
 
-    // Today's schedules
-    const schedules = await Schedule.find({ day_of_week: dayOfWeek })
+    // Today's schedules (scoped)
+    const scheduleFilter = effectiveIds
+      ? { day_of_week: dayOfWeek, seat_id: { $in: effectiveIds } }
+      : { day_of_week: dayOfWeek }
+    const schedules = await Schedule.find(scheduleFilter)
       .populate('user_id', 'name')
       .populate('seat_id', 'label')
       .sort({ seat_id: 1, start_hour: 1 })
@@ -204,13 +209,13 @@ router.get('/enhanced', async (req, res) => {
     // Resolve team labels
     const teamIds = Object.keys(teamCalc).filter(k => k !== 'unassigned')
     const teamDocs = teamIds.length > 0
-      ? await Team.find({ _id: { $in: teamIds } }, 'name label').lean()
+      ? await Team.find({ _id: { $in: teamIds } }, 'name').lean()
       : []
-    const teamLabelMap = new Map(teamDocs.map(t => [String(t._id), t.label]))
+    const teamNameMap = new Map(teamDocs.map(t => [String(t._id), t.name]))
 
     const teamUsage = Object.entries(teamCalc).map(([teamId, d]) => ({
       team_id: teamId,
-      team_label: teamId === 'unassigned' ? 'Unassigned' : (teamLabelMap.get(teamId) ?? teamId),
+      team_name: teamId === 'unassigned' ? 'Unassigned' : (teamNameMap.get(teamId) ?? teamId),
       avg_5h_pct: d.count_5h > 0 ? Math.round(d.total_5h / d.count_5h) : 0,
       avg_7d_pct: d.count_7d > 0 ? Math.round(d.total_7d / d.count_7d) : 0,
       seat_count: d.seat_count,
@@ -298,10 +303,12 @@ router.get('/efficiency', async (req, res) => {
     const effectiveIds = allowed
       ? (querySeatIds ? querySeatIds.filter((id) => allowed.some((a) => String(a) === String(id))) : allowed)
       : querySeatIds
+    const singleSeatId = typeof req.query.seatId === 'string' && mongoose.Types.ObjectId.isValid(req.query.seatId)
+      ? req.query.seatId : null
     const seatFilter: Record<string, unknown> = effectiveIds
       ? { seat_id: { $in: effectiveIds } }
-      : req.query.seatId
-        ? { seat_id: req.query.seatId }
+      : singleSeatId
+        ? { seat_id: singleSeatId }
         : {}
 
     // 1. Aggregated metrics from SessionMetric

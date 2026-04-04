@@ -35,8 +35,8 @@ router.get('/users', async (req, res) => {
 // POST /api/admin/users — create user
 router.post('/users', async (req, res) => {
   try {
-    const { name, email, role = 'user', team_ids, seatId } = req.body
-    const user = await User.create({ name, email, role, team_ids: team_ids || [], seat_ids: seatId ? [seatId] : [] })
+    const { name, email, role = 'user', team_ids, seat_ids } = req.body
+    const user = await User.create({ name, email, role, team_ids: team_ids || [], seat_ids: seat_ids || [] })
     res.status(201).json(user)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -61,7 +61,7 @@ router.patch('/users/bulk-active', async (req, res) => {
 router.put('/users/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { name, email, role, team_ids, seatId, active } = req.body
+    const { name, email, role, team_ids, seat_ids, active } = req.body
 
     // Can't deactivate self
     if (active === false && req.user!._id === id) {
@@ -74,7 +74,7 @@ router.put('/users/:id', async (req, res) => {
     if (email !== undefined) update.email = email
     if (role !== undefined) update.role = role
     if (team_ids !== undefined) update.team_ids = team_ids || []
-    if (seatId !== undefined) update.seat_ids = seatId ? [seatId] : []
+    if (seat_ids !== undefined) update.seat_ids = seat_ids || []
     if (active !== undefined) update.active = active
 
     const updated = await User.findByIdAndUpdate(id, update, { new: true }).lean()

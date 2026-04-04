@@ -8,19 +8,19 @@ import { type Team } from "@/hooks/use-teams";
 interface Props {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: Pick<Team, "name" | "label" | "color">) => void;
+  onSubmit: (data: Pick<Team, "name" | "color">) => void;
   loading?: boolean;
   initial?: Team | null;
 }
 
 const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#3b82f6", "#8b5cf6", "#ec4899"];
-const empty = { name: "", label: "", color: "#6366f1" };
+const empty = { name: "", color: "#6366f1" };
 
 export function TeamFormDialog({ open, onClose, onSubmit, loading, initial }: Props) {
   const [form, setForm] = useState(empty);
 
   useEffect(() => {
-    setForm(initial ? { name: initial.name, label: initial.label, color: initial.color } : empty);
+    setForm(initial ? { name: initial.name, color: initial.color } : empty);
   }, [initial, open]);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -31,13 +31,8 @@ export function TeamFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
         <DialogHeader><DialogTitle>{initial ? "Sửa Team" : "Thêm Team"}</DialogTitle></DialogHeader>
         <div className="grid gap-4 py-2">
           <div className="grid gap-1.5">
-            <Label>Name (slug)</Label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)}
-              placeholder="my-team" disabled={!!initial} />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Label</Label>
-            <Input value={form.label} onChange={(e) => set("label", e.target.value)} placeholder="Development" />
+            <Label>Tên team</Label>
+            <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Team của tôi" />
           </div>
           <div className="grid gap-1.5">
             <Label>Màu</Label>
@@ -53,7 +48,7 @@ export function TeamFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={loading}>Huỷ</Button>
-          <Button onClick={() => onSubmit(form)} disabled={loading || !form.name || !form.label}>
+          <Button onClick={() => onSubmit(form)} disabled={loading || !form.name.trim()}>
             {loading ? "Đang lưu..." : "Lưu"}
           </Button>
         </DialogFooter>

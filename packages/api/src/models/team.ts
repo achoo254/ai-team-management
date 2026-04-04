@@ -2,7 +2,6 @@ import mongoose, { Schema, type Document, type Types } from 'mongoose'
 
 export interface ITeam extends Document {
   name: string
-  label: string
   color: string
   created_by: Types.ObjectId
   created_at: Date
@@ -10,8 +9,7 @@ export interface ITeam extends Document {
 
 const teamSchema = new Schema<ITeam>(
   {
-    name: { type: String, required: true, lowercase: true },
-    label: { type: String, required: true },
+    name: { type: String, required: true },
     color: { type: String, default: '#3b82f6' },
     created_by: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   },

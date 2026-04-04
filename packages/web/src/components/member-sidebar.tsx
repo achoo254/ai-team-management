@@ -48,7 +48,7 @@ export function MemberSidebar({ seats, isAdmin }: Props) {
                 userId={user._id}
                 userName={user.name}
                 seatId={seat._id}
-                team={seat.team?.label ?? "—"}
+                team={seat.team?.name ?? "—"}
               />
             ))}
             {(!seat.users || seat.users.length === 0) && (
