@@ -1,11 +1,11 @@
+import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
 import { decrypt, encrypt } from './crypto-service.js'
 import { sendTokenRefreshAlert } from './telegram-service.js'
 import { parallelLimit } from '../utils/parallel-limit.js'
 
 const REFRESH_URL = 'https://api.anthropic.com/v1/oauth/token'
-const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
-const EXPIRY_BUFFER_MS = 5 * 60 * 1000 // 5 minutes before expiry
+const EXPIRY_BUFFER_MS = 10 * 60 * 1000 // 10 minutes before expiry (> cron interval)
 const FETCH_TIMEOUT_MS = 15_000
 const CONCURRENCY = 3
 const MAX_ERROR_LENGTH = 200
@@ -24,7 +24,7 @@ async function refreshTokenForSeat(seat: {
     body: JSON.stringify({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
-      client_id: CLIENT_ID,
+      client_id: config.anthropic.oauthClientId,
     }),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   })
@@ -35,16 +35,28 @@ async function refreshTokenForSeat(seat: {
   }
 
   const data = await res.json()
+
+  // Validate response shape before encrypting
+  if (!data.access_token || typeof data.expires_in !== 'number') {
+    throw new Error('Invalid refresh response: missing access_token or expires_in')
+  }
+
   const expiresAt = new Date(Date.now() + data.expires_in * 1000)
 
-  await Seat.findByIdAndUpdate(seat._id, {
+  const update: Record<string, unknown> = {
     'oauth_credential.access_token': encrypt(data.access_token),
-    'oauth_credential.refresh_token': encrypt(data.refresh_token),
     'oauth_credential.expires_at': expiresAt,
     'oauth_credential.scopes': (data.scope || '').split(' ').filter(Boolean),
     last_refreshed_at: new Date(),
     last_fetch_error: null,
-  })
+  }
+
+  // Only update refresh_token if API returns a new one
+  if (data.refresh_token) {
+    update['oauth_credential.refresh_token'] = encrypt(data.refresh_token)
+  }
+
+  await Seat.findByIdAndUpdate(seat._id, update)
 
   console.log(`[TokenRefresh] ✓ ${seat.label} — expires ${expiresAt.toISOString()}`)
 }

@@ -18,5 +18,6 @@ export const config = {
     baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
     adminKey: process.env.ANTHROPIC_ADMIN_KEY || '',
     version: process.env.ANTHROPIC_VERSION || '2023-06-01',
+    oauthClientId: process.env.ANTHROPIC_OAUTH_CLIENT_ID || '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
   },
 }

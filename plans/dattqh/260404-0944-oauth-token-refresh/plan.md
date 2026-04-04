@@ -1,6 +1,6 @@
 ---
 name: OAuth Token Refresh & Enhanced Credential Management
-status: in-progress
+status: done
 created: 2026-04-04
 branch: main
 phases: 4

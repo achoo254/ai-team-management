@@ -6,7 +6,8 @@ export async function parallelLimit<T>(
 ): Promise<void> {
   const executing: Promise<void>[] = []
   for (const item of items) {
-    const p = fn(item).then(() => { executing.splice(executing.indexOf(p), 1) })
+    const cleanup = () => { executing.splice(executing.indexOf(p), 1) }
+    const p = fn(item).then(cleanup, cleanup)
     executing.push(p)
     if (executing.length >= limit) await Promise.race(executing)
   }

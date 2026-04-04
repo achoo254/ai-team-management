@@ -55,9 +55,9 @@ function formatExpiry(expiresAt: string | number | null): { text: string; varian
   return { text: `Hết hạn sau ${mins} phút`, variant: 'destructive' }
 }
 
-/** Truncate token for display */
+/** Mask token for display — show only last 4 chars */
 function maskToken(token: string): string {
-  return token.length > 20 ? token.slice(0, 20) + '...' : token
+  return token.length > 8 ? '...' + token.slice(-4) : '****'
 }
 
 export function SeatTokenDialog({ seat, open, onOpenChange }: Props) {
