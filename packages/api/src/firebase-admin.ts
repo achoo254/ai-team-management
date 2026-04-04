@@ -16,3 +16,7 @@ function getFirebaseAdmin(): typeof admin {
 export function getAdminAuth(): admin.auth.Auth {
   return getFirebaseAdmin().auth()
 }
+
+export function getMessaging(): admin.messaging.Messaging {
+  return getFirebaseAdmin().messaging()
+}

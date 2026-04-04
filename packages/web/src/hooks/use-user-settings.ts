@@ -12,9 +12,12 @@ export interface AvailableSeat {
 
 export interface UserSettings {
   telegram_chat_id: string | null;
+  telegram_topic_id: string | null;
   has_telegram_bot: boolean;
+  watched_seat_ids: string[];
   notification_settings: NotificationSettings | null;
   alert_settings: UserAlertSettings | null;
+  push_enabled: boolean;
   available_seats: AvailableSeat[];
 }
 
@@ -31,8 +34,11 @@ export function useUpdateUserSettings() {
     mutationFn: (body: {
       telegram_bot_token?: string | null;
       telegram_chat_id?: string | null;
+      telegram_topic_id?: string | null;
+      watched_seat_ids?: string[];
       notification_settings?: NotificationSettings;
       alert_settings?: UserAlertSettings;
+      push_enabled?: boolean;
     }) => api.put("/api/user/settings", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["user-settings"] });

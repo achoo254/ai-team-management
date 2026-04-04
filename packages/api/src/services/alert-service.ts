@@ -6,6 +6,7 @@ import { ActiveSession } from '../models/active-session.js'
 import { SessionMetric } from '../models/session-metric.js'
 import { User } from '../models/user.js'
 import { sendAlertToUser } from './telegram-service.js'
+import { sendPushToUser } from './fcm-service.js'
 import type { AlertType } from '@repo/shared/types'
 
 /** Atomically insert alert if no recent alert exists for same seat+type (1h cooldown). Notifies subscribed users. */
@@ -18,23 +19,16 @@ async function insertIfNew(
   /** The actual value to compare against per-user thresholds (e.g. usage pct) */
   triggerValue?: number,
 ): Promise<boolean> {
-  // Cooldown: skip if any alert (resolved or not) exists for same seat+type in last 1 hour
+  // Cooldown: skip if any alert exists for same seat+type in last 1 hour
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
   const recentAlert = await Alert.findOne({
     seat_id: seatId, type, created_at: { $gte: oneHourAgo },
   })
   if (recentAlert) return false
 
-  const result = await Alert.findOneAndUpdate(
-    { seat_id: seatId, type, resolved: false },
-    { $setOnInsert: { seat_id: seatId, type, message, metadata, resolved: false } },
-    { upsert: true, new: true, rawResult: true },
-  ) as unknown as { lastErrorObject?: { updatedExisting?: boolean } }
-  if (!result.lastErrorObject?.updatedExisting) {
-    await notifySubscribedUsers(seatId, type, seatLabel, metadata, triggerValue)
-    return true
-  }
-  return false
+  const alert = await Alert.create({ seat_id: seatId, type, message, metadata, read_by: [] })
+  await notifySubscribedUsers(seatId, type, seatLabel, metadata, triggerValue, String(alert._id))
+  return true
 }
 
 /** Notify subscribed users, filtering by their individual thresholds */
@@ -44,12 +38,11 @@ async function notifySubscribedUsers(
   seatLabel: string,
   metadata: Record<string, unknown>,
   triggerValue?: number,
+  alertId?: string,
 ) {
   const users = await User.find({
     'alert_settings.enabled': true,
-    'alert_settings.subscribed_seat_ids': seatId,
-    telegram_bot_token: { $ne: null },
-    telegram_chat_id: { $ne: null },
+    watched_seat_ids: seatId,
   })
 
   const eligible = users.filter((user) => {
@@ -61,9 +54,16 @@ async function notifySubscribedUsers(
     return true
   })
 
-  await Promise.allSettled(
-    eligible.map((user) => sendAlertToUser(user, type, seatLabel, metadata)),
-  )
+  await Promise.allSettled([
+    // Telegram notifications
+    ...eligible
+      .filter(u => u.telegram_bot_token && u.telegram_chat_id)
+      .map(u => sendAlertToUser(u, type, seatLabel, metadata)),
+    // FCM push notifications (imported in Phase 2)
+    ...(alertId ? eligible
+      .filter(u => u.push_enabled && u.fcm_tokens?.length > 0)
+      .map(u => sendPushToUser(String(u._id), type, seatLabel, '', alertId)) : []),
+  ])
 }
 
 /** Check alerts based on latest UsageSnapshot data + seat token status. Uses per-user thresholds. */
@@ -86,10 +86,10 @@ export async function checkSnapshotAlerts() {
   ).lean()
   const seatMap = new Map(seats.map((s) => [String(s._id), s]))
 
-  // Batch-load all users with alerts enabled who subscribe to any of these seats
+  // Batch-load all users with alerts enabled who watch any of these seats
   const subscribedUsers = await User.find({
     'alert_settings.enabled': true,
-    'alert_settings.subscribed_seat_ids': { $in: seatIds },
+    watched_seat_ids: { $in: seatIds },
     telegram_bot_token: { $ne: null },
     telegram_chat_id: { $ne: null },
   })
@@ -98,7 +98,7 @@ export async function checkSnapshotAlerts() {
   const seatThresholds = new Map<string, { rate_limit_pct: number; extra_credit_pct: number }>()
   for (const u of subscribedUsers) {
     const as = u.alert_settings!
-    for (const sid of as.subscribed_seat_ids) {
+    for (const sid of u.watched_seat_ids ?? []) {
       const key = String(sid)
       const existing = seatThresholds.get(key)
       seatThresholds.set(key, {
@@ -116,27 +116,27 @@ export async function checkSnapshotAlerts() {
     const thresholds = seatThresholds.get(String(seatId))
     if (!thresholds) continue // no users subscribed to this seat
 
-    // Rate limit: check all windows against lowest user threshold
+    // Rate limit: check all sessions against lowest user threshold
     const resetsAtMap: Record<string, string | null> = {
       '5h': snapshot.five_hour_resets_at ?? null,
       '7d': snapshot.seven_day_resets_at ?? null,
       '7d_sonnet': snapshot.seven_day_sonnet_resets_at ?? null,
       '7d_opus': snapshot.seven_day_opus_resets_at ?? null,
     }
-    const allWindows = [
+    const allSessions = [
       { key: '5h' as const, pct: snapshot.five_hour_pct },
       { key: '7d' as const, pct: snapshot.seven_day_pct },
       { key: '7d_sonnet' as const, pct: snapshot.seven_day_sonnet_pct },
       { key: '7d_opus' as const, pct: snapshot.seven_day_opus_pct },
     ].filter((w) => w.pct != null)
 
-    const windows = allWindows.filter((w) => w.pct! >= thresholds.rate_limit_pct)
-    if (windows.length > 0) {
-      const worst = windows.reduce((a, b) => (a.pct! > b.pct! ? a : b))
+    const sessions = allSessions.filter((w) => w.pct! >= thresholds.rate_limit_pct)
+    if (sessions.length > 0) {
+      const worst = sessions.reduce((a, b) => (a.pct! > b.pct! ? a : b))
       const resetsAt = resetsAtMap[worst.key] ?? null
-      const msg = `Seat ${label}: ${worst.pct}% usage (${worst.key} window)`
+      const msg = `Seat ${label}: ${worst.pct}% usage (${worst.key} session)`
       if (await insertIfNew(String(seatId), 'rate_limit', msg, {
-        window: worst.key, pct: worst.pct, resets_at: resetsAt,
+        session: worst.key, pct: worst.pct, resets_at: resetsAt,
       }, label, worst.pct)) created++
     }
 
@@ -240,7 +240,7 @@ export async function checkBudgetAlerts() {
 
       if (await insertIfNew(seatId, 'usage_exceeded',
         `${userName} vượt budget: ${worst.delta.toFixed(1)}% / ${schedule.usage_budget_pct}% (${worst.key})`,
-        { delta: worst.delta, budget: schedule.usage_budget_pct, window: worst.key, user_id: userId, user_name: userName },
+        { delta: worst.delta, budget: schedule.usage_budget_pct, session: worst.key, user_id: userId, user_name: userName },
         label, schedule.usage_budget_pct ?? undefined,
       )) created++
 
@@ -283,12 +283,6 @@ async function cleanupExpiredSessions(dayOfWeek: number, currentHour: number) {
     if (!sched || sched.day_of_week !== dayOfWeek || sched.end_hour <= currentHour) {
       // Persist SessionMetric before deleting
       await persistSessionMetric(session, sched)
-
-      // Auto-resolve usage_exceeded alerts
-      await Alert.updateMany(
-        { seat_id: session.seat_id, type: 'usage_exceeded', resolved: false },
-        { $set: { resolved: true, resolved_at: new Date() } },
-      )
       await session.deleteOne()
     }
   }
@@ -311,7 +305,7 @@ async function persistSessionMetric(session: any, sched: any) {
 
   const durationHours = sched ? (sched.end_hour - sched.start_hour) : 0
   const impactRatio = delta5h > 0 ? delta7d / delta5h : null
-  // Utilization: how much of the 5h window was used, normalized by session duration
+  // Utilization: how much of the 5h session was used, normalized by session duration
   const utilization = durationHours > 0 ? Math.min(100, (delta5h / (durationHours / 5 * 100)) * 100) : 0
 
   const today = new Date()
@@ -351,7 +345,7 @@ async function persistSessionMetric(session: any, sched: any) {
     const label = seat?.label || seat?.email || seatId
     const userName = sched?.user_id?.name || ''
     await insertIfNew(seatId, 'session_waste',
-      `${userName} dùng ${durationHours}h nhưng chỉ dùng ${delta5h.toFixed(1)}% 5h window`,
+      `${userName} dùng ${durationHours}h nhưng chỉ dùng ${delta5h.toFixed(1)}% 5h session`,
       { delta: delta5h, duration: durationHours, user_id: userId, user_name: userName },
       label,
     )

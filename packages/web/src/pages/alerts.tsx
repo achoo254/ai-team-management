@@ -1,77 +1,104 @@
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bell } from "lucide-react";
 import { AlertCard } from "@/components/alert-card";
+import { AlertFeedFilters } from "@/components/alert-feed-filters";
 import { EmptyState } from "@/components/empty-state";
-import { useAlerts, useResolveAlert } from "@/hooks/use-alerts";
-import { useAuth } from "@/hooks/use-auth";
+import { useAlerts, useMarkAlertsRead } from "@/hooks/use-alerts";
+import { useUserSettings } from "@/hooks/use-user-settings";
+import type { Alert } from "@repo/shared/types";
 
-function AlertList({ resolved, isAdmin }: { resolved?: 0 | 1; isAdmin: boolean }) {
-  const { data, isLoading } = useAlerts(resolved);
-  const resolve = useResolveAlert();
+function groupByDate(alerts: Alert[]): { label: string; alerts: Alert[] }[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
-      </div>
-    );
+  const groups: Record<string, Alert[]> = {};
+  const order: string[] = [];
+
+  for (const a of alerts) {
+    const d = new Date(a.created_at);
+    d.setHours(0, 0, 0, 0);
+    const key =
+      d >= today
+        ? "Hôm nay"
+        : d >= yesterday
+          ? "Hôm qua"
+          : d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+    if (!groups[key]) {
+      groups[key] = [];
+      order.push(key);
+    }
+    groups[key].push(a);
   }
-
-  if (!data?.alerts.length) {
-    return <EmptyState icon={Bell} title="Không có cảnh báo" description="Hệ thống đang hoạt động bình thường" />;
-  }
-
-  return (
-    <div className="space-y-2">
-      {data.alerts.map((alert) => (
-        <AlertCard key={alert._id} alert={alert} isAdmin={isAdmin}
-          onResolve={(id) => resolve.mutate(id)} resolving={resolve.isPending} />
-      ))}
-    </div>
-  );
-}
-
-function TabLabel({ label, count }: { label: string; count?: number }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      {label}
-      {count !== undefined && count > 0 && (
-        <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] font-medium rounded-full">
-          {count}
-        </Badge>
-      )}
-    </span>
-  );
+  return order.map((label) => ({ label, alerts: groups[label] }));
 }
 
 export default function AlertsPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const [typeFilter, setTypeFilter] = useState("");
+  const [seatFilter, setSeatFilter] = useState("");
 
-  // Fetch counts for tab badges
-  const { data: allData } = useAlerts();
-  const { data: unresolvedData } = useAlerts(0);
-  const unresolvedCount = unresolvedData?.alerts.length ?? 0;
-  const totalCount = allData?.alerts.length ?? 0;
+  const filters = {
+    ...(typeFilter ? { type: typeFilter } : {}),
+    ...(seatFilter ? { seat: seatFilter } : {}),
+  };
+  const { data, isLoading } = useAlerts(Object.keys(filters).length > 0 ? filters : undefined);
+  const { data: settings } = useUserSettings();
+  const markRead = useMarkAlertsRead();
+
+  // Auto-mark visible alerts as read on mount
+  useEffect(() => {
+    if (data?.alerts?.length) {
+      const unreadIds = data.alerts
+        .filter((a) => !a.read_by?.includes("me")) // server handles actual user check
+        .map((a) => a._id);
+      if (unreadIds.length > 0) {
+        markRead.mutate(unreadIds);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.alerts]);
+
+  const groups = data?.alerts ? groupByDate(data.alerts) : [];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Cảnh báo</h1>
+        <AlertFeedFilters
+          type={typeFilter}
+          seat={seatFilter}
+          onTypeChange={setTypeFilter}
+          onSeatChange={setSeatFilter}
+          seats={settings?.available_seats ?? []}
+        />
       </div>
 
-      <Tabs defaultValue="unresolved">
-        <TabsList variant="line" className="border-b border-border pb-0">
-          <TabsTrigger value="all"><TabLabel label="Tất cả" count={totalCount} /></TabsTrigger>
-          <TabsTrigger value="unresolved"><TabLabel label="Chưa xử lý" count={unresolvedCount} /></TabsTrigger>
-          <TabsTrigger value="resolved">Đã xử lý</TabsTrigger>
-        </TabsList>
-        <TabsContent value="all" className="mt-4"><AlertList isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="unresolved" className="mt-4"><AlertList resolved={0} isAdmin={isAdmin} /></TabsContent>
-        <TabsContent value="resolved" className="mt-4"><AlertList resolved={1} isAdmin={isAdmin} /></TabsContent>
-      </Tabs>
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-lg" />
+          ))}
+        </div>
+      ) : groups.length === 0 ? (
+        <EmptyState icon={Bell} title="Không có cảnh báo" description="Hệ thống đang hoạt động bình thường" />
+      ) : (
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                {group.label}
+              </h2>
+              <div className="space-y-2">
+                {group.alerts.map((alert) => (
+                  <AlertCard key={alert._id} alert={alert} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

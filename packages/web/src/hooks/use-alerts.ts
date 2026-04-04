@@ -1,45 +1,39 @@
-
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
-import { toast } from "sonner";
+import type { Alert, AlertType } from "@repo/shared/types";
 
-export interface Alert {
-  _id: string;
-  seat_id: { _id: string; email: string; label: string } | string;
-  type: 'rate_limit' | 'extra_credit' | 'token_failure';
-  message: string;
-  metadata?: {
-    window?: string;
-    pct?: number;
-    credits_used?: number;
-    credits_limit?: number;
-    error?: string;
-  };
-  resolved: boolean;
-  resolved_by?: string;
-  resolved_at?: string;
-  created_at: string;
-}
+export type { Alert, AlertType };
 
-const KEY = ["alerts"];
+// Main feed query with optional filters
+export function useAlerts(filters?: { type?: string; seat?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.type) params.set("type", filters.type);
+  if (filters?.seat) params.set("seat", filters.seat);
+  const qs = params.toString() ? `?${params}` : "";
 
-export function useAlerts(resolved?: 0 | 1) {
-  const param = resolved !== undefined ? `?resolved=${resolved}` : "";
-  return useQuery<{ alerts: Alert[] }>({
-    queryKey: [...KEY, resolved],
-    queryFn: () => api.get(`/api/alerts${param}`),
+  return useQuery<{ alerts: Alert[]; has_more: boolean }>({
+    queryKey: ["alerts", filters],
+    queryFn: () => api.get(`/api/alerts${qs}`),
   });
 }
 
-export function useResolveAlert() {
+// Unread count for bell badge
+export function useUnreadAlertCount() {
+  return useQuery<{ count: number }>({
+    queryKey: ["alerts", "unread-count"],
+    queryFn: () => api.get("/api/alerts/unread-count"),
+    refetchInterval: 60_000,
+  });
+}
+
+// Mark alerts as read
+export function useMarkAlertsRead() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.put(`/api/alerts/${id}/resolve`),
+    mutationFn: (alertIds: string[]) =>
+      api.post("/api/alerts/mark-read", { alert_ids: alertIds }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEY });
-      toast.success("Đã đánh dấu xử lý");
+      qc.invalidateQueries({ queryKey: ["alerts"] });
     },
-    onError: (e: Error) => toast.error(e.message),
   });
 }

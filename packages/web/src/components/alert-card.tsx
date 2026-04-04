@@ -1,100 +1,144 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { CheckCircle, AlertTriangle, TrendingUp, CreditCard, KeyRound } from "lucide-react";
-import { type Alert } from "@/hooks/use-alerts";
-
-interface Props {
-  alert: Alert;
-  isAdmin: boolean;
-  onResolve: (id: string) => void;
-  resolving?: boolean;
-}
+import {
+  AlertTriangle, TrendingUp, CreditCard, KeyRound, Clock, ChevronDown,
+} from "lucide-react";
+import type { Alert } from "@/hooks/use-alerts";
 
 const TYPE_CONFIG: Record<string, { label: string; variant: "destructive" | "secondary" | "outline"; icon: typeof TrendingUp }> = {
   rate_limit: { label: "Rate Limit", variant: "destructive", icon: TrendingUp },
   extra_credit: { label: "Extra Credit", variant: "secondary", icon: CreditCard },
   token_failure: { label: "Token Error", variant: "outline", icon: KeyRound },
+  usage_exceeded: { label: "Vượt Budget", variant: "destructive", icon: AlertTriangle },
+  session_waste: { label: "Lãng phí", variant: "secondary", icon: Clock },
+  "7d_risk": { label: "7d Risk", variant: "destructive", icon: TrendingUp },
 };
 
-function MetadataInfo({ alert }: { alert: Alert }) {
+function UsageBar({ label, pct }: { label: string; pct: number }) {
+  const color = pct >= 80 ? "bg-destructive" : pct >= 50 ? "bg-yellow-500" : "bg-green-500";
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-14 text-muted-foreground shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+      </div>
+      <span className="w-10 text-right font-mono">{pct}%</span>
+    </div>
+  );
+}
+
+function ExpandedMetadata({ alert }: { alert: Alert }) {
   const m = alert.metadata;
   if (!m) return null;
 
   switch (alert.type) {
-    case 'rate_limit':
+    case "rate_limit":
       return (
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {m.window && <Badge variant="outline" className="text-[10px]">{m.window}</Badge>}
-          {m.pct != null && <Badge variant="outline" className="text-[10px]">{m.pct}%</Badge>}
+        <div className="space-y-1.5 pt-2 border-t border-border/50">
+          {m.session && <UsageBar label={m.session} pct={m.pct ?? 0} />}
+          {m.resets_at && (
+            <p className="text-[11px] text-muted-foreground">
+              Reset: {new Date(m.resets_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
         </div>
       );
-    case 'extra_credit':
-      return m.credits_used != null ? (
-        <div className="text-xs text-muted-foreground mt-1">
-          Credits: ${m.credits_used}/{m.credits_limit != null ? `$${m.credits_limit}` : '?'}
+    case "extra_credit":
+      return (
+        <div className="space-y-1.5 pt-2 border-t border-border/50">
+          {m.pct != null && <UsageBar label="Credits" pct={m.pct} />}
+          {m.credits_used != null && (
+            <p className="text-[11px] text-muted-foreground">
+              ${m.credits_used} / ${m.credits_limit ?? "?"}
+            </p>
+          )}
+        </div>
+      );
+    case "token_failure":
+      return m.error ? (
+        <div className="pt-2 border-t border-border/50">
+          <code className="block text-[11px] text-muted-foreground break-all">{m.error}</code>
+          <p className="text-[11px] text-amber-600 mt-1">Cần re-import credential</p>
         </div>
       ) : null;
-    case 'token_failure':
-      return m.error ? (
-        <code className="block text-[11px] text-muted-foreground mt-1 truncate max-w-xs">{m.error}</code>
-      ) : null;
+    case "usage_exceeded":
+      return (
+        <div className="space-y-1.5 pt-2 border-t border-border/50">
+          {m.user_name && <p className="text-xs font-medium">{m.user_name}</p>}
+          {m.delta != null && m.budget != null && (
+            <UsageBar label={m.session ?? "Δ"} pct={Math.round((m.delta / m.budget) * 100)} />
+          )}
+        </div>
+      );
+    case "session_waste":
+      return (
+        <div className="pt-2 border-t border-border/50">
+          {m.duration != null && <p className="text-[11px] text-muted-foreground">Thời gian: {m.duration}h</p>}
+          {m.delta != null && <p className="text-[11px] text-muted-foreground">Δ5h: {m.delta}%</p>}
+          <p className="text-[11px] text-amber-600 mt-1">Cân nhắc rút ngắn session</p>
+        </div>
+      );
+    case "7d_risk":
+      return (
+        <div className="space-y-1.5 pt-2 border-t border-border/50">
+          {m.current_7d != null && <UsageBar label="7d hiện" pct={Math.round(m.current_7d)} />}
+          {m.projected != null && <UsageBar label="Dự kiến" pct={Math.round(m.projected)} />}
+          {m.remaining_sessions != null && (
+            <p className="text-[11px] text-muted-foreground">Còn {m.remaining_sessions} session hôm nay</p>
+          )}
+        </div>
+      );
     default:
       return null;
   }
 }
 
-export function AlertCard({ alert, isAdmin, onResolve, resolving }: Props) {
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "vừa xong";
+  if (mins < 60) return `${mins} phút trước`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} giờ trước`;
+  const days = Math.floor(hours / 24);
+  return `${days} ngày trước`;
+}
+
+export function AlertCard({ alert }: { alert: Alert }) {
+  const [expanded, setExpanded] = useState(false);
   const cfg = TYPE_CONFIG[alert.type] ?? { label: alert.type, variant: "outline" as const, icon: AlertTriangle };
   const Icon = cfg.icon;
-  const date = new Date(alert.created_at).toLocaleDateString("vi-VN", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+  const seatLabel = typeof alert.seat_id === "object" ? (alert.seat_id.label ?? alert.seat_id.email) : "";
 
   return (
-    <div className={`group flex items-start gap-3 rounded-lg border px-4 py-3 transition-colors
-      ${alert.resolved
-        ? "border-border/50 bg-muted/30 opacity-70"
-        : "border-border bg-card hover:bg-accent/5"
-      }`}
+    <div
+      className="group rounded-lg border border-border bg-card hover:bg-accent/5 transition-colors cursor-pointer px-4 py-3"
+      onClick={() => setExpanded(!expanded)}
     >
-      {/* Status icon */}
-      <div className={`mt-0.5 shrink-0 rounded-full p-1.5 ${
-        alert.resolved ? "bg-green-500/10 text-green-500" : "bg-destructive/10 text-destructive"
-      }`}>
-        {alert.resolved
-          ? <CheckCircle className="h-3.5 w-3.5" />
-          : <Icon className="h-3.5 w-3.5" />}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={cfg.variant} className="text-[10px] uppercase tracking-wider font-medium">
-            {cfg.label}
-          </Badge>
-          <span className="text-xs font-medium text-foreground/70">
-            {typeof alert.seat_id === 'object' ? alert.seat_id.label ?? alert.seat_id.email : ''}
-          </span>
+      <div className="flex items-start gap-3">
+        {/* Icon */}
+        <div className="mt-0.5 shrink-0 rounded-full p-1.5 bg-destructive/10 text-destructive">
+          <Icon className="h-3.5 w-3.5" />
         </div>
-        <p className="text-sm leading-relaxed">{alert.message}</p>
-        <MetadataInfo alert={alert} />
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-          <span>{date}</span>
-          {alert.resolved && alert.resolved_by && (
-            <span>Xử lý: <span className="font-medium text-foreground/60">{alert.resolved_by}</span></span>
-          )}
-        </div>
-      </div>
 
-      {/* Action */}
-      {isAdmin && !alert.resolved && (
-        <Button size="sm" variant="outline" className="shrink-0 h-8 text-xs"
-          onClick={() => onResolve(alert._id)} disabled={resolving}>
-          <CheckCircle className="h-3 w-3 mr-1" />
-          Xử lý
-        </Button>
-      )}
+        {/* Content */}
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={cfg.variant} className="text-[10px] uppercase tracking-wider font-medium">
+              {cfg.label}
+            </Badge>
+            <span className="text-xs font-medium text-foreground/70">{seatLabel}</span>
+          </div>
+          <p className="text-sm leading-relaxed">{alert.message}</p>
+          <span className="text-[11px] text-muted-foreground">{timeAgo(alert.created_at)}</span>
+
+          {/* Expanded metadata */}
+          {expanded && <ExpandedMetadata alert={alert} />}
+        </div>
+
+        {/* Expand indicator */}
+        <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </div>
     </div>
   );
 }

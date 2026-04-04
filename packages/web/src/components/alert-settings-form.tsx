@@ -4,13 +4,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useUserSettings, useUpdateUserSettings } from "@/hooks/use-user-settings";
+import { useEnablePush, useUnregisterFcmToken } from "@/hooks/use-fcm";
 import type { UserAlertSettings } from "@repo/shared/types";
 
 const DEFAULT_SETTINGS: UserAlertSettings = {
   enabled: false,
   rate_limit_pct: 80,
   extra_credit_pct: 80,
-  subscribed_seat_ids: [],
 };
 
 export function AlertSettingsForm() {
@@ -27,32 +27,30 @@ export function AlertSettingsForm() {
     }
   }, [settings?.alert_settings]);
 
-  function toggleSeat(seatId: string) {
-    setDirty(true);
-    setAs((prev) => ({
-      ...prev,
-      subscribed_seat_ids: prev.subscribed_seat_ids.includes(seatId)
-        ? prev.subscribed_seat_ids.filter((id) => id !== seatId)
-        : [...prev.subscribed_seat_ids, seatId],
-    }));
-  }
-
   function handleSave() {
     updateMutation.mutate({ alert_settings: as }, { onSuccess: () => setDirty(false) });
+  }
+
+  const enablePush = useEnablePush();
+  const unregisterFcm = useUnregisterFcmToken();
+  const pushSupported = typeof window !== "undefined" && "Notification" in window && "serviceWorker" in navigator;
+  const pushDenied = typeof window !== "undefined" && "Notification" in window && Notification.permission === "denied";
+  const pushEnabled = settings?.push_enabled ?? false;
+
+  async function handleTogglePush() {
+    if (pushEnabled) {
+      const token = localStorage.getItem("fcm_token");
+      if (token) await unregisterFcm.mutateAsync(token);
+      updateMutation.mutate({ push_enabled: false });
+    } else {
+      await enablePush.mutateAsync();
+      updateMutation.mutate({ push_enabled: true });
+    }
   }
 
   if (isLoading) return null;
 
   const hasTelegram = settings?.has_telegram_bot;
-  const availableSeats = settings?.available_seats ?? [];
-  const disabled = !as.enabled;
-
-  // Group seats by team
-  const seatsByTeam: Record<string, typeof availableSeats> = {};
-  for (const seat of availableSeats) {
-    if (!seatsByTeam[seat.team]) seatsByTeam[seat.team] = [];
-    seatsByTeam[seat.team].push(seat);
-  }
 
   return (
     <Card>
@@ -85,6 +83,28 @@ export function AlertSettingsForm() {
           </Button>
         </div>
 
+        {/* Desktop push notification */}
+        <div className="flex items-center gap-3">
+          <Label className="text-xs">Desktop Push Notification</Label>
+          {!pushSupported ? (
+            <span className="text-xs text-muted-foreground">Trình duyệt không hỗ trợ</span>
+          ) : pushDenied ? (
+            <span className="text-xs text-amber-600">
+              Đã bị chặn. Vào Settings trình duyệt để bật lại.
+            </span>
+          ) : (
+            <Button
+              size="sm"
+              variant={pushEnabled ? "default" : "outline"}
+              onClick={handleTogglePush}
+              disabled={enablePush.isPending || unregisterFcm.isPending}
+            >
+              {(enablePush.isPending || unregisterFcm.isPending) && <Loader2 size={14} className="animate-spin mr-1" />}
+              {pushEnabled ? "Đang bật" : "Bật"}
+            </Button>
+          )}
+        </div>
+
         {/* Thresholds */}
         <div>
           <Label className="text-xs">Ngưỡng cảnh báo</Label>
@@ -96,7 +116,7 @@ export function AlertSettingsForm() {
                 min={1}
                 max={100}
                 value={as.rate_limit_pct}
-                disabled={disabled}
+                disabled={!as.enabled}
                 onChange={(e) => {
                   setDirty(true);
                   setAs((prev) => ({ ...prev, rate_limit_pct: Number(e.target.value) || 80 }));
@@ -111,7 +131,7 @@ export function AlertSettingsForm() {
                 min={1}
                 max={100}
                 value={as.extra_credit_pct}
-                disabled={disabled}
+                disabled={!as.enabled}
                 onChange={(e) => {
                   setDirty(true);
                   setAs((prev) => ({ ...prev, extra_credit_pct: Number(e.target.value) || 80 }));
@@ -121,35 +141,6 @@ export function AlertSettingsForm() {
             </label>
           </div>
         </div>
-
-        {/* Seat subscription */}
-        {availableSeats.length > 0 && (
-          <div>
-            <Label className="text-xs">Seats theo dõi</Label>
-            <div className="mt-1 space-y-2">
-              {Object.entries(seatsByTeam).map(([team, seats]) => (
-                <div key={team}>
-                  <span className="text-xs font-medium text-muted-foreground uppercase">{team}</span>
-                  <div className="space-y-1 mt-1">
-                    {seats.map((seat) => (
-                      <label key={seat._id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={as.subscribed_seat_ids.includes(seat._id)}
-                          disabled={disabled}
-                          onChange={() => toggleSeat(seat._id)}
-                          className="rounded border-border"
-                        />
-                        <span className={disabled ? "opacity-50" : ""}>{seat.label}</span>
-                        <span className="text-xs text-muted-foreground">({seat.email})</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending || !dirty}>
           {updateMutation.isPending && <Loader2 size={14} className="animate-spin mr-1" />}

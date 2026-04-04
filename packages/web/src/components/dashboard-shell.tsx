@@ -4,8 +4,11 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AppSidebar } from '@/components/app-sidebar'
 import { Header } from '@/components/header'
 import { MobileNav } from '@/components/mobile-nav'
+import { useForegroundMessages } from '@/hooks/use-fcm'
 
 export function DashboardShell() {
+  useForegroundMessages()
+
   return (
     <SidebarProvider>
       <TooltipProvider>

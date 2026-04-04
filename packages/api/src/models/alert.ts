@@ -5,9 +5,7 @@ export interface IAlert extends Document {
   type: 'rate_limit' | 'extra_credit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
   message: string
   metadata: Record<string, unknown>
-  resolved: boolean
-  resolved_by: string | null
-  resolved_at: Date | null
+  read_by: Types.ObjectId[]
   created_at: Date
 }
 
@@ -17,14 +15,16 @@ const alertSchema = new Schema<IAlert>(
     type: { type: String, required: true, enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk'] },
     message: { type: String, required: true },
     metadata: { type: Schema.Types.Mixed, default: {} },
-    resolved: { type: Boolean, default: false },
-    resolved_by: { type: String, default: null },
-    resolved_at: { type: Date, default: null },
+    read_by: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } },
 )
 
-// Compound index for dedup queries: 1 unresolved alert per seat+type
-alertSchema.index({ seat_id: 1, type: 1, resolved: 1 })
+// Feed queries: seat+type sorted by time, dedup cooldown
+alertSchema.index({ seat_id: 1, type: 1, created_at: -1 })
+// Unread queries per user
+alertSchema.index({ read_by: 1 })
+// Feed sorting
+alertSchema.index({ created_at: -1 })
 
 export const Alert = mongoose.model<IAlert>('Alert', alertSchema)
