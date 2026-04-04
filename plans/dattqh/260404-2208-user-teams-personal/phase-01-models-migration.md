@@ -1,6 +1,6 @@
 # Phase 1: Models + Migration Script
 
-**Status:** pending | **Priority:** high | **Effort:** M
+**Status:** done | **Priority:** high | **Effort:** M
 
 ## Goal
 Update Mongoose models + migration script để convert enum → ObjectId refs an toàn.
@@ -76,13 +76,13 @@ Steps:
 9. Dry-run mode: log what would change, skip writes
 
 ## Todo
-- [ ] Update team.ts model (add created_by, drop unique)
-- [ ] Update user.ts model (team_ids array)
-- [ ] Update seat.ts model (team_id)
-- [ ] Update shared/types.ts
-- [ ] Write migration script với dry-run flag
-- [ ] Test migration trên local DB copy
-- [ ] Document rollback procedure
+- [x] Update team.ts model (add created_by, drop unique)
+- [x] Update user.ts model (team_ids array)
+- [x] Update seat.ts model (team_id)
+- [x] Update shared/types.ts
+- [x] Write migration script với dry-run flag
+- [x] Test migration trên local DB copy
+- [x] Document rollback procedure
 
 ## Success Criteria
 - Models compile (no TS errors)

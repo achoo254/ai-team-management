@@ -6,8 +6,10 @@ import { toast } from "sonner";
 
 export interface SeatUser { id: string; name: string; email: string; }
 export interface SeatOwner { _id: string; name: string; email: string; }
+export interface SeatTeam { _id: string; name: string; label: string; color: string; }
 export interface Seat {
-  _id: string; email: string; label: string; team: string;
+  _id: string; email: string; label: string;
+  team_id: string | null; team?: SeatTeam | null;
   max_users: number; users: SeatUser[];
   owner_id: string | null;
   owner?: SeatOwner | null;
@@ -72,7 +74,7 @@ export function useUnassignUser() {
 
 /** Active users available for seat assignment — works for all authenticated users */
 export function useAvailableUsers() {
-  return useQuery<{ users: Array<{ id: string; name: string; email: string; team: string; active: boolean; seat_labels: string[] }> }>({
+  return useQuery<{ users: Array<{ id: string; name: string; email: string; team_ids: string[]; active: boolean; seat_labels: string[] }> }>({
     queryKey: AVAILABLE_USERS_KEY,
     queryFn: () => api.get("/api/seats/available-users"),
   });

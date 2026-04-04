@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -34,7 +33,7 @@ export function TeamFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
           <div className="grid gap-1.5">
             <Label>Name (slug)</Label>
             <Input value={form.name} onChange={(e) => set("name", e.target.value)}
-              placeholder="dev" disabled={!!initial} />
+              placeholder="my-team" disabled={!!initial} />
           </div>
           <div className="grid gap-1.5">
             <Label>Label</Label>

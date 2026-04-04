@@ -81,8 +81,8 @@ export function AppSidebar() {
               <span className="truncate text-sm font-medium">{user.name}</span>
               <span className="truncate text-xs text-muted-foreground">{user.email}</span>
             </div>
-            <Badge variant="secondary" className="shrink-0 uppercase text-xs">
-              {user.team}
+            <Badge variant="secondary" className="shrink-0 text-xs">
+              {user.role}
             </Badge>
           </div>
         )}

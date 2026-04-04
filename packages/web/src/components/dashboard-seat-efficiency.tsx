@@ -13,7 +13,7 @@ function calcEfficiency(seat: SeatUsageItem) {
   const occupancy = seat.max_users > 0 ? seat.user_count / seat.max_users : 0;
   return {
     label: seat.label,
-    team: seat.team,
+    team_id: seat.team_id,
     seven_day_pct: seat.seven_day_pct ?? 0,
     occupancy_pct: Math.round(occupancy * 100),
     user_count: seat.user_count,
@@ -64,7 +64,7 @@ function EfficiencyTooltip({ active, payload }: any) {
         />
         <p className="font-semibold text-foreground">{d.label}</p>
         <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60">
-          {d.team.toUpperCase()}
+          {d.team_id ?? "—"}
         </span>
       </div>
       <div className="space-y-1.5 text-xs">

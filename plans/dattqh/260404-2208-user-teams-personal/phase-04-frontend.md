@@ -1,6 +1,6 @@
 # Phase 4: Frontend (Pages + Components + Hooks)
 
-**Status:** pending | **Priority:** high | **Effort:** L
+**Status:** done | **Priority:** high | **Effort:** L
 **Depends on:** Phase 2
 
 ## Goal
@@ -73,16 +73,16 @@ useRemoveTeamSeat() // DELETE /teams/:id/seats/:sid
 - Group aggregation by team_id
 
 ## Todo
-- [ ] Add new hooks in use-teams.ts
-- [ ] Update types import (Seat.team_id, User.team_ids)
-- [ ] Teams page: all-teams view + admin filter
-- [ ] Team card: creator badge + conditional actions
-- [ ] Team form dialog: 3-tab layout
-- [ ] team-members-manager component
-- [ ] team-seats-manager component
-- [ ] Seats page: dynamic team dropdown
-- [ ] Dashboard team stats: dynamic fetch
-- [ ] Grep cleanup `'dev'|'mkt'|'personal'` in web package
+- [x] Add new hooks in use-teams.ts
+- [x] Update types import (Seat.team_id, User.team_ids)
+- [x] Teams page: all-teams view + admin filter
+- [x] Team card: creator badge + conditional actions
+- [x] Team form dialog: 3-tab layout
+- [x] team-members-manager component
+- [x] team-seats-manager component
+- [x] Seats page: dynamic team dropdown
+- [x] Dashboard team stats: dynamic fetch
+- [x] Grep cleanup `'dev'|'mkt'|'personal'` in web package
 
 ## Success Criteria
 - User tạo team → thấy trong list with "by me" badge

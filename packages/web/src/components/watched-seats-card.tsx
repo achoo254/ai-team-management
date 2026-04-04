@@ -35,11 +35,12 @@ export function WatchedSeatsCard() {
   const availableSeats = settings?.available_seats ?? [];
   if (availableSeats.length === 0) return null;
 
-  // Group seats by team
+  // Group seats by team label
   const seatsByTeam: Record<string, typeof availableSeats> = {};
   for (const seat of availableSeats) {
-    if (!seatsByTeam[seat.team]) seatsByTeam[seat.team] = [];
-    seatsByTeam[seat.team].push(seat);
+    const key = seat.team?.label ?? seat.team_id ?? 'Unassigned'
+    if (!seatsByTeam[key]) seatsByTeam[key] = [];
+    seatsByTeam[key].push(seat);
   }
 
   return (

@@ -130,20 +130,20 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```typescript
 {
   _id: ObjectId,
-  email: String (unique),
-  label: String,
-  team: String (enum: ['dev', 'mkt']),
-  max_users: Number,
+  email: String (required, unique),
+  label: String (required),
+  team_id: ObjectId | null (ref: Team, default: null, index: true),
+  max_users: Number (default: 3),
   owner_id: ObjectId | null (ref: User, index: true),
   oauth_credential: {
-    access_token: String | null (encrypted),
+    access_token: String | null (encrypted AES-256-GCM),
     refresh_token: String | null (encrypted),
     expires_at: Date | null,
     scopes: [String],
     subscription_type: String | null,
     rate_limit_tier: String | null
   } | null (select: false),
-  token_active: Boolean,
+  token_active: Boolean (default: false),
   last_fetched_at: Date | null,
   last_fetch_error: String | null,
   last_refreshed_at: Date | null,
@@ -155,12 +155,12 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```typescript
 {
   _id: ObjectId,
-  name: String,
-  email: String (unique),
-  role: String (enum: ['admin', 'user']),
-  team: String,
+  name: String (required),
+  email: String (unique, sparse),
+  role: String (enum: ['admin', 'user'], default: 'user'),
+  team_ids: [ObjectId] (ref: Team, default: [], multi-team support),
   seat_ids: [ObjectId] (ref: Seat),
-  active: Boolean,
+  active: Boolean (default: true),
   telegram_bot_token: String | null (encrypted AES-256-GCM),
   telegram_chat_id: String | null,
   telegram_topic_id: String | null,
@@ -169,12 +169,14 @@ Subsequent requests: JWT read from cookie or Authorization header
     report_enabled: Boolean (default: false),
     report_days: [Number] (default: [5], 0=Sun, 6=Sat),
     report_hour: Number (0-23, default: 8)
-  } | null,
+  },
   alert_settings: {
     enabled: Boolean (default: false),
     rate_limit_pct: Number (default: 80),
     extra_credit_pct: Number (default: 80)
-  } | null,
+  },
+  fcm_tokens: [String] (Firebase Cloud Messaging tokens, default: []),
+  push_enabled: Boolean (FCM push notifications, default: false),
   created_at: Date
 }
 ```
@@ -225,10 +227,13 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```typescript
 {
   _id: ObjectId,
-  name: String (unique),
-  label: String,
-  color: String,
-  created_at: Date
+  name: String (required, lowercase),
+  label: String (required),
+  color: String (default: '#3b82f6'),
+  created_by: ObjectId (ref: User, required, index: true),
+  created_at: Date,
+  // Compound unique index: (created_by, name)
+  // Any authenticated user can create teams (not admin-only)
 }
 ```
 

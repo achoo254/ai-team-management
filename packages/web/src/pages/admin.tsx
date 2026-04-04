@@ -38,6 +38,11 @@ export default function AdminPage() {
   const handleDelete = () => {
     if (deleting) deleteUser.mutate(deleting.id, { onSuccess: () => setDeleting(null) });
   };
+  const handleToggleActive = (u: AdminUser) => {
+    // Guard: API blocks deactivating self, skip client-side
+    if (u.id === user?._id && u.active) return;
+    updateUser.mutate({ id: u.id, active: !u.active });
+  };
 
   if (!isAdmin) return <div className="py-16 text-center text-muted-foreground">Bạn không có quyền truy cập trang này.</div>;
 
@@ -66,7 +71,7 @@ export default function AdminPage() {
       ) : !data?.users.length ? (
         <EmptyState icon={Users} title="Chưa có user nào" />
       ) : (
-        <UserTable users={data.users} onEdit={handleEdit} onDelete={setDeleting} />
+        <UserTable users={data.users} onEdit={handleEdit} onDelete={setDeleting} onToggleActive={handleToggleActive} />
       )}
 
       <UserFormDialog open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}

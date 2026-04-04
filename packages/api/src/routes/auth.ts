@@ -36,13 +36,23 @@ router.post('/google', async (req, res) => {
 
     let user = await User.findOne({ email }).lean()
     if (!user) {
-      // Auto-provision new user from Google account on first login
+      // Auto-provision new user from Google account on first login.
       const created = await User.create({
         name: decoded.name || email.split('@')[0],
         email,
         role: 'user',
+        active: true,
       })
       user = created.toObject()
+    }
+
+    // Block login for deactivated users (admin ban)
+    if (!user.active) {
+      res.status(403).json({
+        error: 'Tài khoản đã bị vô hiệu hoá. Vui lòng liên hệ quản trị viên.',
+        code: 'ACCOUNT_DISABLED',
+      })
+      return
     }
 
     const payload = {
@@ -50,7 +60,7 @@ router.post('/google', async (req, res) => {
       name: user.name,
       email: user.email ?? email,
       role: user.role,
-      team: user.team,
+      team_ids: (user.team_ids ?? []).map(String),
     }
 
     const token = signToken(payload)
@@ -68,7 +78,7 @@ router.post('/google', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        team: user.team,
+        team_ids: (user.team_ids ?? []).map(String),
       },
     })
   } catch (error) {
@@ -87,7 +97,7 @@ router.post('/logout', (_req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user!._id)
-      .select('name email role team seat_ids')
+      .select('name email role team_ids seat_ids')
       .lean()
     if (!user) {
       res.status(404).json({ error: 'User not found' })

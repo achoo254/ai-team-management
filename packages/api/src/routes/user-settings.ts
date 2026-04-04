@@ -20,11 +20,11 @@ router.get('/settings', async (req, res) => {
     // Available seats: admin → all, user → owned + assigned
     let availableSeats
     if (req.user!.role === 'admin') {
-      availableSeats = await Seat.find({}, '_id label email team').lean()
+      availableSeats = await Seat.find({}, '_id label email team_id').lean()
     } else {
-      const ownedSeats = await Seat.find({ owner_id: req.user!._id }, '_id label email team').lean()
+      const ownedSeats = await Seat.find({ owner_id: req.user!._id }, '_id label email team_id').lean()
       const assignedSeats = user.seat_ids?.length
-        ? await Seat.find({ _id: { $in: user.seat_ids } }, '_id label email team').lean()
+        ? await Seat.find({ _id: { $in: user.seat_ids } }, '_id label email team_id').lean()
         : []
       const seatMap = new Map<string, any>()
       for (const s of [...ownedSeats, ...assignedSeats]) seatMap.set(String(s._id), s)

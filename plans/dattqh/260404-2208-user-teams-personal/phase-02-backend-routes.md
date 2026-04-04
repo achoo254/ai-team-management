@@ -1,6 +1,6 @@
 # Phase 2: Backend Routes + Access Control
 
-**Status:** pending | **Priority:** high | **Effort:** L
+**Status:** done | **Priority:** high | **Effort:** L
 **Depends on:** Phase 1
 
 ## Goal
@@ -69,14 +69,14 @@ grep -rn "'dev'\|'mkt'\|'personal'" packages/api/src packages/web/src
 Replace all hardcoded refs.
 
 ## Todo
-- [ ] Add requireTeamOwnerOrAdmin middleware
-- [ ] Rewrite teams.ts routes (GET/POST/PUT/DELETE)
-- [ ] Add members sub-endpoints
-- [ ] Add seats sub-endpoints
-- [ ] Update seats.ts team validation
-- [ ] Update dashboard.ts aggregations
-- [ ] Update auth.ts JWT payload
-- [ ] Grep cleanup hardcoded enums
+- [x] Add requireTeamOwnerOrAdmin middleware
+- [x] Rewrite teams.ts routes (GET/POST/PUT/DELETE)
+- [x] Add members sub-endpoints
+- [x] Add seats sub-endpoints
+- [x] Update seats.ts team validation
+- [x] Update dashboard.ts aggregations
+- [x] Update auth.ts JWT payload
+- [x] Grep cleanup hardcoded enums
 
 ## Success Criteria
 - Regular user creates/edits own team, cannot edit other's team (403)

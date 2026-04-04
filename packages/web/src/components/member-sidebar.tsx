@@ -23,8 +23,8 @@ function DraggableMember({ userId, userName, seatId, team }: {
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}
       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-grab active:cursor-grabbing select-none">
       <span className="text-sm truncate flex-1">{userName}</span>
-      <Badge variant={team?.toLowerCase() === "dev" ? "default" : "secondary"} className="text-xs shrink-0">
-        {team?.toUpperCase() ?? "—"}
+      <Badge variant="secondary" className="text-xs shrink-0">
+        {team ?? "—"}
       </Badge>
     </div>
   );
@@ -48,7 +48,7 @@ export function MemberSidebar({ seats, isAdmin }: Props) {
                 userId={user._id}
                 userName={user.name}
                 seatId={seat._id}
-                team={user.team ?? seat.team}
+                team={seat.team?.label ?? "—"}
               />
             ))}
             {(!seat.users || seat.users.length === 0) && (

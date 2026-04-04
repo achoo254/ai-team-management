@@ -47,7 +47,7 @@ export default function LoginPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.message ?? "Đăng nhập thất bại. Vui lòng thử lại.");
+        throw new Error(data.error ?? data.message ?? "Đăng nhập thất bại. Vui lòng thử lại.");
       }
 
       navigate("/");

@@ -18,10 +18,11 @@ export interface SeatWithUsers {
   _id: string;
   email: string;
   label: string;
-  team: string;
+  team_id: string | null;
+  team?: { _id: string; name: string; label: string; color: string } | null;
   max_users: number;
   owner_id: string | null;
-  users: { _id: string; name: string; email: string; team: string }[];
+  users: { _id: string; name: string; email: string }[];
 }
 
 export function useSchedules() {

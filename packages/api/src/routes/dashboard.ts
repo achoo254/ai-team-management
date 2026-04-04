@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
-import { authenticate } from '../middleware.js'
+import { authenticate, getAllowedSeatIds } from '../middleware.js'
 import { Seat } from '../models/seat.js'
+import { Team } from '../models/team.js'
 import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Alert } from '../models/alert.js'
@@ -13,10 +14,14 @@ const router = Router()
 
 router.use(authenticate)
 
-// GET /api/dashboard/summary — basic stats
-router.get('/summary', async (_req, res) => {
+// GET /api/dashboard/summary — basic stats (scoped to user's seats)
+router.get('/summary', async (req, res) => {
   try {
+    const allowed = await getAllowedSeatIds(req.user!)
+    const seatFilter = allowed ? { seat_id: { $in: allowed } } : {}
+
     const latestSnapshots = await UsageSnapshot.aggregate([
+      ...(allowed ? [{ $match: { seat_id: { $in: allowed } } }] : []),
       { $sort: { fetched_at: -1 } },
       { $group: { _id: '$seat_id', seven_day_pct: { $first: '$seven_day_pct' } } },
     ])
@@ -25,8 +30,8 @@ router.get('/summary', async (_req, res) => {
       ? Math.round(valid.reduce((s, r) => s + r.seven_day_pct, 0) / valid.length)
       : 0
 
-    const activeAlerts = await Alert.countDocuments({ resolved: false })
-    const totalSnapshots = await UsageSnapshot.countDocuments()
+    const activeAlerts = await Alert.countDocuments({ resolved: false, ...seatFilter })
+    const totalSnapshots = await UsageSnapshot.countDocuments(seatFilter)
 
     res.json({ avgAllPct: avgAll, activeAlerts, totalSnapshots })
   } catch (error) {
@@ -61,9 +66,14 @@ router.get('/enhanced', async (req, res) => {
     const range = typeof req.query.range === 'string' && RANGE_MS[req.query.range]
       ? req.query.range
       : 'month'
-    const seatIdFilter = parseSeatIds(req.query.seatIds)
-    const seatMatch = seatIdFilter ? { _id: { $in: seatIdFilter } } : {}
-    const seatIdMatch = seatIdFilter ? { seat_id: { $in: seatIdFilter } } : {}
+    const allowed = await getAllowedSeatIds(req.user!)
+    const querySeatIds = parseSeatIds(req.query.seatIds)
+    // Intersect query filter with allowed seats for non-admin
+    const effectiveIds = allowed
+      ? (querySeatIds ? querySeatIds.filter((id) => allowed.some((a) => String(a) === String(id))) : allowed)
+      : querySeatIds
+    const seatMatch = effectiveIds ? { _id: { $in: effectiveIds } } : {}
+    const seatIdMatch = effectiveIds ? { seat_id: { $in: effectiveIds } } : {}
     const dayOfWeek = new Date().getDay()
 
     // User/seat counts
@@ -102,7 +112,7 @@ router.get('/enhanced', async (req, res) => {
 
     // Latest snapshot per seat with model-specific data, reset times, extra_usage
     const latestSnapshots = await UsageSnapshot.aggregate([
-      ...(seatIdFilter ? [{ $match: seatIdMatch }] : []),
+      ...(effectiveIds ? [{ $match: seatIdMatch }] : []),
       { $sort: { fetched_at: -1 } },
       { $group: {
         _id: '$seat_id',
@@ -141,7 +151,7 @@ router.get('/enhanced', async (req, res) => {
       return {
         seat_id: key,
         label: s.label,
-        team: s.team,
+        team_id: s.team_id ? String(s.team_id) : null,
         five_hour_pct: snap?.five_hour_pct ?? null,
         five_hour_resets_at: snap?.five_hour_resets_at ?? null,
         seven_day_pct: snap?.seven_day_pct ?? null,
@@ -175,24 +185,32 @@ router.get('/enhanced', async (req, res) => {
       }},
     ])
 
-    // Team usage breakdown with richer stats
+    // Team usage breakdown with richer stats (keyed by team_id)
     const teamCalc: Record<string, {
       total_5h: number; count_5h: number
       total_7d: number; count_7d: number
       seat_count: number; user_count: number
     }> = {}
     for (const s of seats) {
-      const team = s.team
+      const teamKey = s.team_id ? String(s.team_id) : 'unassigned'
       const key = String(s._id)
       const snap = snapshotMap.get(key)
-      if (!teamCalc[team]) teamCalc[team] = { total_5h: 0, count_5h: 0, total_7d: 0, count_7d: 0, seat_count: 0, user_count: 0 }
-      teamCalc[team].seat_count++
-      teamCalc[team].user_count += (usersBySeatId[key] || []).length
-      if (snap?.five_hour_pct != null) { teamCalc[team].total_5h += snap.five_hour_pct; teamCalc[team].count_5h++ }
-      if (snap?.seven_day_pct != null) { teamCalc[team].total_7d += snap.seven_day_pct; teamCalc[team].count_7d++ }
+      if (!teamCalc[teamKey]) teamCalc[teamKey] = { total_5h: 0, count_5h: 0, total_7d: 0, count_7d: 0, seat_count: 0, user_count: 0 }
+      teamCalc[teamKey].seat_count++
+      teamCalc[teamKey].user_count += (usersBySeatId[key] || []).length
+      if (snap?.five_hour_pct != null) { teamCalc[teamKey].total_5h += snap.five_hour_pct; teamCalc[teamKey].count_5h++ }
+      if (snap?.seven_day_pct != null) { teamCalc[teamKey].total_7d += snap.seven_day_pct; teamCalc[teamKey].count_7d++ }
     }
-    const teamUsage = Object.entries(teamCalc).map(([team, d]) => ({
-      team,
+    // Resolve team labels
+    const teamIds = Object.keys(teamCalc).filter(k => k !== 'unassigned')
+    const teamDocs = teamIds.length > 0
+      ? await Team.find({ _id: { $in: teamIds } }, 'name label').lean()
+      : []
+    const teamLabelMap = new Map(teamDocs.map(t => [String(t._id), t.label]))
+
+    const teamUsage = Object.entries(teamCalc).map(([teamId, d]) => ({
+      team_id: teamId,
+      team_label: teamId === 'unassigned' ? 'Unassigned' : (teamLabelMap.get(teamId) ?? teamId),
       avg_5h_pct: d.count_5h > 0 ? Math.round(d.total_5h / d.count_5h) : 0,
       avg_7d_pct: d.count_7d > 0 ? Math.round(d.total_7d / d.count_7d) : 0,
       seat_count: d.seat_count,
@@ -216,10 +234,12 @@ router.get('/enhanced', async (req, res) => {
   }
 })
 
-// GET /api/dashboard/usage/by-seat — per-seat usage with user names
-router.get('/usage/by-seat', async (_req, res) => {
+// GET /api/dashboard/usage/by-seat — per-seat usage with user names (scoped)
+router.get('/usage/by-seat', async (req, res) => {
   try {
+    const allowed = await getAllowedSeatIds(req.user!)
     const latestSnapshots = await UsageSnapshot.aggregate([
+      ...(allowed ? [{ $match: { seat_id: { $in: allowed } } }] : []),
       { $sort: { fetched_at: -1 } },
       { $group: {
         _id: '$seat_id',
@@ -230,7 +250,7 @@ router.get('/usage/by-seat', async (_req, res) => {
     ])
     const snapshotMap = new Map(latestSnapshots.map(s => [String(s._id), s]))
 
-    const seats = await Seat.find().lean()
+    const seats = await Seat.find(allowed ? { _id: { $in: allowed } } : {}).lean()
     const users = await User.find({ active: true, seat_ids: { $exists: true, $ne: [] } }, 'name seat_ids').lean()
 
     // Map seat _id → user names
@@ -251,7 +271,7 @@ router.get('/usage/by-seat', async (_req, res) => {
           seat_id: s._id,
           seat_email: s.email,
           label: s.label,
-          team: s.team,
+          team_id: s.team_id ? String(s.team_id) : null,
           five_hour_pct: snap?.five_hour_pct ?? null,
           seven_day_pct: snap?.seven_day_pct ?? null,
           last_fetched_at: snap?.last_fetched_at ?? null,
@@ -273,9 +293,13 @@ router.get('/efficiency', async (req, res) => {
   try {
     const rangeMs = RANGE_MS[typeof req.query.range === 'string' ? req.query.range : 'month'] ?? RANGE_MS.month
     const rangeStart = new Date(Date.now() - rangeMs)
-    const seatIdFilter = parseSeatIds(req.query.seatIds)
-    const seatFilter: Record<string, unknown> = seatIdFilter
-      ? { seat_id: { $in: seatIdFilter } }
+    const allowed = await getAllowedSeatIds(req.user!)
+    const querySeatIds = parseSeatIds(req.query.seatIds)
+    const effectiveIds = allowed
+      ? (querySeatIds ? querySeatIds.filter((id) => allowed.some((a) => String(a) === String(id))) : allowed)
+      : querySeatIds
+    const seatFilter: Record<string, unknown> = effectiveIds
+      ? { seat_id: { $in: effectiveIds } }
       : req.query.seatId
         ? { seat_id: req.query.seatId }
         : {}
@@ -347,8 +371,9 @@ router.get('/efficiency', async (req, res) => {
       { $project: { date: '$_id', _id: 0, avg_utilization: { $round: ['$avg_utilization', 1] }, avg_delta_5h: { $round: ['$avg_delta_5h', 1] }, sessions: 1 } },
     ])
 
-    // 5. Active sessions (real-time)
-    const activeSessions = await ActiveSession.find({}).populate('schedule_id').populate('user_id', 'name').lean()
+    // 5. Active sessions (real-time, scoped)
+    const sessionFilter = effectiveIds ? { seat_id: { $in: effectiveIds } } : {}
+    const activeSessions = await ActiveSession.find(sessionFilter).populate('schedule_id').populate('user_id', 'name').lean()
     const liveMetrics = []
     for (const s of activeSessions) {
       const snap = await UsageSnapshot.findOne({ seat_id: s.seat_id }).sort({ fetched_at: -1 }).lean()

@@ -114,8 +114,8 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={s.team === "dev" ? "default" : "secondary"}>
-                      {s.team}
+                    <Badge variant="secondary">
+                      {s.team_id ?? "—"}
                     </Badge>
                   </TableCell>
                   <TableCell>{occupancyBadge(s.user_count, s.max_users)}</TableCell>

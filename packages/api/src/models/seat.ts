@@ -12,7 +12,7 @@ export interface IOAuthCredential {
 export interface ISeat extends Document {
   email: string
   label: string
-  team: 'dev' | 'mkt' | 'personal'
+  team_id: Types.ObjectId | null
   max_users: number
   owner_id: Types.ObjectId | null
   oauth_credential: IOAuthCredential | null
@@ -27,7 +27,7 @@ const seatSchema = new Schema<ISeat>(
   {
     email: { type: String, required: true, unique: true },
     label: { type: String, required: true },
-    team: { type: String, required: true, enum: ['dev', 'mkt', 'personal'] },
+    team_id: { type: Schema.Types.ObjectId, ref: 'Team', default: null, index: true },
     max_users: { type: Number, default: 3 },
     owner_id: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     oauth_credential: {

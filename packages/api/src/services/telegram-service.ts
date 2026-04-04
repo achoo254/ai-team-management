@@ -41,7 +41,7 @@ interface SeatRow {
   seat_id: unknown
   email: string
   label: string
-  team: string
+  team_id: string | null
   five_hour_pct: number | null
   seven_day_pct: number | null
   extra_usage: { is_enabled: boolean; used_credits: number | null; monthly_limit: number | null; utilization: number | null } | null
@@ -53,17 +53,18 @@ function buildReportHtml(
   usersBySeat: Record<string, string[]>,
   teamLabels: Record<string, string>,
 ): string {
-  // Group seats by team
+  // Group seats by team_id
   const teams: Record<string, SeatRow[]> = {}
   for (const r of rows) {
-    if (!teams[r.team]) teams[r.team] = []
-    teams[r.team].push(r)
+    const key = r.team_id ?? 'unassigned'
+    if (!teams[key]) teams[key] = []
+    teams[key].push(r)
   }
 
   let msg = `📊 <b>Báo cáo Usage — ${new Date().toLocaleDateString('vi-VN')}</b>\n\n`
 
-  for (const [team, teamSeats] of Object.entries(teams)) {
-    const label = teamLabels[team] || team
+  for (const [teamId, teamSeats] of Object.entries(teams)) {
+    const label = teamLabels[teamId] || (teamId === 'unassigned' ? 'Chưa gán team' : teamId)
     msg += `<b>📌 ${esc(label)} Team</b>\n`
     msg += `${'─'.repeat(24)}\n`
 
@@ -140,7 +141,7 @@ async function fetchReportData() {
   }
 
   const teamLabels: Record<string, string> = {}
-  for (const t of teamRows) teamLabels[t.name] = t.label
+  for (const t of teamRows) teamLabels[String(t._id)] = t.label
 
   return { snapMap, usersBySeat, teamLabels }
 }
@@ -153,7 +154,7 @@ function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
       seat_id: s._id,
       email: s.email,
       label: s.label,
-      team: s.team,
+      team_id: s.team_id ? String(s.team_id) : null,
       five_hour_pct: snap?.five_hour_pct ?? null,
       seven_day_pct: snap?.seven_day_pct ?? null,
       extra_usage: snap?.extra_usage ?? null,
@@ -171,7 +172,7 @@ export async function sendUserReport(userId: string) {
   const watchedIds = (user.watched_seat_ids ?? []).map(String)
   let seats
   if (watchedIds.length > 0) {
-    seats = await Seat.find({ _id: { $in: watchedIds } }).sort({ team: 1 }).lean()
+    seats = await Seat.find({ _id: { $in: watchedIds } }).sort({ team_id: 1 }).lean()
   } else {
     // Fallback: owned + assigned seats
     const ownedSeats = await Seat.find({ owner_id: userId }).lean()
@@ -180,7 +181,7 @@ export async function sendUserReport(userId: string) {
       : []
     const seatMap = new Map<string, any>()
     for (const s of [...ownedSeats, ...assignedSeats]) seatMap.set(String(s._id), s)
-    seats = Array.from(seatMap.values()).sort((a: any, b: any) => a.team.localeCompare(b.team))
+    seats = Array.from(seatMap.values()).sort((a: any, b: any) => String(a.team_id ?? '').localeCompare(String(b.team_id ?? '')))
   }
 
   if (seats.length === 0) return

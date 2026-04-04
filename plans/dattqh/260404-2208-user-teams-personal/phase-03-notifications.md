@@ -1,6 +1,6 @@
 # Phase 3: Notification Integration
 
-**Status:** pending | **Priority:** medium | **Effort:** M
+**Status:** done | **Priority:** medium | **Effort:** M
 **Depends on:** Phase 2
 
 ## Goal
@@ -83,12 +83,12 @@ Check `user.notification_settings` (existing):
 - In-app → always on
 
 ## Todo
-- [ ] Audit existing notification dispatch helpers (reuse, không duplicate)
-- [ ] Add emitTeamEvent helper
-- [ ] Add telegram templates
-- [ ] Wire emitters vào teams.ts routes
-- [ ] Wire emitter vào seats.ts (seat_reassigned)
-- [ ] Test manual: admin edit user team → verify 3 channels fire
+- [x] Audit existing notification dispatch helpers (reuse, không duplicate)
+- [x] Add emitTeamEvent helper
+- [x] Add telegram templates
+- [x] Wire emitters vào teams.ts routes
+- [x] Wire emitter vào seats.ts (seat_reassigned)
+- [x] Test manual: admin edit user team → verify 3 channels fire
 
 ## Success Criteria
 - User A add user B → B nhận notify (không notify A)

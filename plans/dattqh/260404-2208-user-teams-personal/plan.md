@@ -1,10 +1,10 @@
 ---
 name: User-Created Teams (Personal Teams)
-status: pending
+status: done
 created: 2026-04-04
 branch: main
 phases: 5
-blockedBy: []
+blockedBy: [260404-2252-open-login-user-scoped-api]
 blocks: []
 ---
 
@@ -33,11 +33,11 @@ blocks: []
 
 | # | Phase | Status | Effort |
 |---|-------|--------|--------|
-| 1 | [Models + Migration Script](./phase-01-models-migration.md) | pending | M |
-| 2 | [Backend Routes + Access Control](./phase-02-backend-routes.md) | pending | L |
-| 3 | [Notification Integration](./phase-03-notifications.md) | pending | M |
-| 4 | [Frontend (Pages + Hooks)](./phase-04-frontend.md) | pending | L |
-| 5 | [Testing + Docs](./phase-05-testing.md) | pending | S |
+| 1 | [Models + Migration Script](./phase-01-models-migration.md) | done | M |
+| 2 | [Backend Routes + Access Control](./phase-02-backend-routes.md) | done | L |
+| 3 | [Notification Integration](./phase-03-notifications.md) | done | M |
+| 4 | [Frontend (Pages + Hooks)](./phase-04-frontend.md) | done | L |
+| 5 | [Testing + Docs](./phase-05-testing.md) | done | S |
 
 ## Key Decisions
 - **ObjectId refs** thay vì string name (vì bỏ unique name)

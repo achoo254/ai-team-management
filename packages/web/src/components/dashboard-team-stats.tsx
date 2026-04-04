@@ -27,7 +27,7 @@ function UsageBar({ value, color }: { value: number; color: string }) {
 /* ---------- Team row (tabular layout) ---------- */
 
 function TeamRow({ team }: { team: TeamUsageItem }) {
-  const name = team.team.toUpperCase();
+  const name = team.team_label;
   const density = team.user_count > 0 && team.seat_count > 0
     ? (team.user_count / team.seat_count).toFixed(1)
     : "—";
@@ -110,7 +110,7 @@ export function DashboardTeamStats({ range, seatIds }: { range: DashboardRange; 
           <p className="text-sm text-muted-foreground text-center py-8">Chưa có dữ liệu</p>
         ) : (
           <div className="divide-y divide-border/40">
-            {teams.map((t) => <TeamRow key={t.team} team={t} />)}
+            {teams.map((t) => <TeamRow key={t.team_id} team={t} />)}
           </div>
         )}
       </CardContent>

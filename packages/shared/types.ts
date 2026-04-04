@@ -11,7 +11,8 @@ export interface Seat {
   _id: string
   email: string
   label: string
-  team: 'dev' | 'mkt' | 'personal'
+  team_id: string | null
+  team?: { _id: string; name: string; label: string; color: string } | null
   max_users: number
   owner_id: string | null
   owner?: { _id: string; name: string; email: string } | null
@@ -29,7 +30,7 @@ export interface User {
   name: string
   email?: string
   role: 'admin' | 'user'
-  team?: 'dev' | 'mkt'
+  team_ids: string[]
   seat_id?: string | null
   active: boolean
   telegram_chat_id?: string | null
@@ -94,6 +95,8 @@ export interface Team {
   name: string
   label: string
   color: string
+  created_by: string
+  creator?: { _id: string; name: string; email: string }
   created_at: string
 }
 
@@ -155,5 +158,5 @@ export interface AuthUser {
   name: string
   email: string
   role: 'admin' | 'user'
-  team?: 'dev' | 'mkt'
+  team_ids: string[]
 }

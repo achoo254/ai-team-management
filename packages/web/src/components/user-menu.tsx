@@ -44,8 +44,8 @@ export function UserMenu() {
             <div className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate font-medium">{user.name}</span>
-                <Badge variant="secondary" className="shrink-0 uppercase text-xs">
-                  {user.team}
+                <Badge variant="secondary" className="shrink-0 text-xs">
+                  {user.role}
                 </Badge>
               </div>
               <span className="truncate text-xs text-muted-foreground">

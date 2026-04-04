@@ -3,13 +3,24 @@ import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { config } from './config.js'
 import { Seat } from './models/seat.js'
+import { Team, type ITeam } from './models/team.js'
+import { User } from './models/user.js'
 
 export interface JwtPayload {
   _id: string
   name: string
   email: string
   role: 'admin' | 'user'
-  team?: string | null
+  team_ids: string[]
+}
+
+// Extend Express Request with team property for requireTeamOwnerOrAdmin
+declare global {
+  namespace Express {
+    interface Request {
+      team?: ITeam
+    }
+  }
 }
 
 // Extend Express Request with typed user property
@@ -96,6 +107,43 @@ export function requireSeatOwnerOrAdmin(paramName = 'id') {
     }
     next()
   }
+}
+
+/** Allows admin or team creator to proceed. Attaches team to req.team. Must be after `authenticate`. */
+export async function requireTeamOwnerOrAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' })
+    return
+  }
+  const team = await Team.findById(req.params.id)
+  if (!team) {
+    res.status(404).json({ error: 'Team not found' })
+    return
+  }
+  if (req.user.role === 'admin') {
+    req.team = team
+    return next()
+  }
+  if (team.created_by.toString() !== req.user._id) {
+    res.status(403).json({ error: 'Not team owner' })
+    return
+  }
+  req.team = team
+  next()
+}
+
+/** Get seat IDs user owns or is assigned to. Returns null for admin (= no filter). */
+export async function getAllowedSeatIds(user: JwtPayload): Promise<mongoose.Types.ObjectId[] | null> {
+  if (user.role === 'admin') return null
+  const [dbUser, ownedSeats] = await Promise.all([
+    User.findById(user._id, 'seat_ids').lean(),
+    Seat.find({ owner_id: user._id }, '_id').lean(),
+  ])
+  const assigned = (dbUser?.seat_ids ?? []).map((id) => new mongoose.Types.ObjectId(String(id)))
+  const owned = ownedSeats.map((s) => new mongoose.Types.ObjectId(String(s._id)))
+  const map = new Map<string, mongoose.Types.ObjectId>()
+  for (const id of [...assigned, ...owned]) map.set(String(id), id)
+  return [...map.values()]
 }
 
 export function validateObjectId(paramName: string) {

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
-import { authenticate, requireAdmin, requireSeatOwnerOrAdmin, validateObjectId } from '../middleware.js'
+import { authenticate, requireAdmin, requireSeatOwnerOrAdmin, validateObjectId, getAllowedSeatIds } from '../middleware.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { collectAllUsage, collectSeatUsage } from '../services/usage-collector-service.js'
 
@@ -33,15 +33,24 @@ router.post('/collect/:seatId', authenticate, validateObjectId('seatId'), requir
   }
 })
 
-// GET /api/usage-snapshots — query snapshots (auth)
+// GET /api/usage-snapshots — query snapshots (scoped to user's seats)
 // Query: ?seatId=&from=ISO&to=ISO&limit=50&offset=0&includeRaw=true
 router.get('/', authenticate, async (req, res) => {
   try {
+    const allowed = await getAllowedSeatIds(req.user!)
     const { seatId, from, to, limit = '50', offset = '0', includeRaw } = req.query
     const filter: Record<string, unknown> = {}
 
     if (seatId && mongoose.Types.ObjectId.isValid(seatId as string)) {
+      // Validate access to requested seat
+      if (allowed && !allowed.some((id) => String(id) === seatId)) {
+        res.status(403).json({ error: 'Access denied to this seat' })
+        return
+      }
       filter.seat_id = seatId
+    } else if (allowed) {
+      // No specific seat requested: scope to allowed seats
+      filter.seat_id = { $in: allowed }
     }
     if (from || to) {
       const dateFilter: Record<string, Date> = {}
@@ -69,12 +78,16 @@ router.get('/', authenticate, async (req, res) => {
   }
 })
 
-// GET /api/usage-snapshots/latest — latest per active seat (auth)
-router.get('/latest', authenticate, async (_req, res) => {
+// GET /api/usage-snapshots/latest — latest per active seat (scoped)
+router.get('/latest', authenticate, async (req, res) => {
   try {
+    const allowed = await getAllowedSeatIds(req.user!)
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const matchFilter = allowed
+      ? { fetched_at: { $gte: oneDayAgo }, seat_id: { $in: allowed } }
+      : { fetched_at: { $gte: oneDayAgo } }
     const latest = await UsageSnapshot.aggregate([
-      { $match: { fetched_at: { $gte: oneDayAgo } } },
+      { $match: matchFilter },
       { $sort: { fetched_at: -1 } },
       { $group: {
         _id: '$seat_id',

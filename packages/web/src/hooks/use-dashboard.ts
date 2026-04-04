@@ -12,7 +12,7 @@ export interface SeatExtraUsage {
 export interface SeatUsageItem {
   seat_id: string;
   label: string;
-  team: string;
+  team_id: string | null;
   five_hour_pct: number | null;
   five_hour_resets_at: string | null;
   seven_day_pct: number | null;
@@ -35,7 +35,8 @@ export interface UsageTrendPoint {
 
 // Team breakdown stats
 export interface TeamUsageItem {
-  team: string;
+  team_id: string;
+  team_label: string;
   avg_5h_pct: number;
   avg_7d_pct: number;
   seat_count: number;
