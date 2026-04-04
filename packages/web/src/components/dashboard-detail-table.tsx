@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { useDashboardEnhanced, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
+import { useDashboardEnhanced, formatRangeDate, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
 
 type SortKey = "label" | "five_hour_pct" | "seven_day_pct" | "seven_day_sonnet_pct" | "seven_day_opus_pct" | "user_count";
 
@@ -40,8 +40,8 @@ function sortSeats(seats: SeatUsageItem[], key: SortKey, asc: boolean): SeatUsag
   });
 }
 
-export function DashboardDetailTable({ range }: { range: DashboardRange }) {
-  const { data, isLoading } = useDashboardEnhanced(range);
+export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
+  const { data, isLoading } = useDashboardEnhanced(range, seatIds);
   const [sortKey, setSortKey] = useState<SortKey>("seven_day_pct");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -60,7 +60,10 @@ export function DashboardDetailTable({ range }: { range: DashboardRange }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Chi tiết Usage — Tất cả Seats</CardTitle>
+        <CardTitle className="text-base">Chi tiết sử dụng — Tất cả Seat</CardTitle>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Bảng tổng hợp mức dùng 5 giờ, 7 ngày, và phân tách theo model · <span className="font-medium">{formatRangeDate(range)}</span>
+        </p>
       </CardHeader>
       <CardContent className="p-0 overflow-x-auto">
         {isLoading ? (
@@ -75,7 +78,7 @@ export function DashboardDetailTable({ range }: { range: DashboardRange }) {
                   Seat{arrow("label")}
                 </TableHead>
                 <TableHead>Team</TableHead>
-                <TableHead>Members</TableHead>
+                <TableHead>Thành viên</TableHead>
                 <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("five_hour_pct")}>
                   5h %{arrow("five_hour_pct")}
                 </TableHead>
@@ -89,7 +92,7 @@ export function DashboardDetailTable({ range }: { range: DashboardRange }) {
                   Opus{arrow("seven_day_opus_pct")}
                 </TableHead>
                 <TableHead className="text-right">Credits</TableHead>
-                <TableHead>Fetched</TableHead>
+                <TableHead>Cập nhật</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -100,7 +103,7 @@ export function DashboardDetailTable({ range }: { range: DashboardRange }) {
                       {s.label}
                       {overBudgetMap.has(s.seat_id) && (
                         <Badge variant="destructive" className="text-[10px] px-1 py-0">
-                          OVER BUDGET
+                          VƯỢT HẠN MỨC
                         </Badge>
                       )}
                     </div>

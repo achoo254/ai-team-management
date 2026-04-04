@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEfficiency, type DashboardRange } from "@/hooks/use-dashboard";
+import { useEfficiency, formatRangeDate, type DashboardRange } from "@/hooks/use-dashboard";
 
 function StatBox({ label, value, suffix, warn }: { label: string; value: string | number; suffix?: string; warn?: boolean }) {
   return (
@@ -14,13 +14,13 @@ function StatBox({ label, value, suffix, warn }: { label: string; value: string 
   );
 }
 
-export function DashboardEfficiency({ range }: { range: DashboardRange }) {
-  const { data, isLoading } = useEfficiency(range);
+export function DashboardEfficiency({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
+  const { data, isLoading } = useEfficiency(range, seatIds);
 
   if (isLoading) {
     return (
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Usage Efficiency</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-base">Hiệu suất sử dụng</CardTitle></CardHeader>
         <CardContent><Skeleton className="h-32 w-full" /></CardContent>
       </Card>
     );
@@ -30,7 +30,7 @@ export function DashboardEfficiency({ range }: { range: DashboardRange }) {
   if (!s || s.total_sessions === 0) {
     return (
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Usage Efficiency</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-base">Hiệu suất sử dụng</CardTitle></CardHeader>
         <CardContent><p className="text-sm text-muted-foreground text-center py-4">Chưa có dữ liệu session</p></CardContent>
       </Card>
     );
@@ -42,10 +42,15 @@ export function DashboardEfficiency({ range }: { range: DashboardRange }) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Usage Efficiency</CardTitle>
+          <div>
+            <CardTitle className="text-base">Hiệu suất sử dụng</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Phân tích mức sử dụng thực tế và lãng phí dựa trên dữ liệu session · <span className="font-medium">{formatRangeDate(range)}</span>
+            </p>
+          </div>
           {(data?.activeSessions?.length ?? 0) > 0 && (
             <Badge variant="default" className="text-[10px]">
-              {data!.activeSessions.length} session đang active
+              {data!.activeSessions.length} phiên đang hoạt động
             </Badge>
           )}
         </div>
@@ -53,16 +58,16 @@ export function DashboardEfficiency({ range }: { range: DashboardRange }) {
       <CardContent className="space-y-4">
         {/* Summary stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatBox label="Avg Utilization" value={Math.round(s.avg_utilization)} suffix="%" />
-          <StatBox label="5h→7d Impact" value={s.avg_impact_ratio != null ? s.avg_impact_ratio.toFixed(2) : "—"} />
-          <StatBox label="Sessions" value={s.total_sessions} />
-          <StatBox label="Waste Rate" value={wasteRate} suffix="%" warn={wasteRate > 20} />
+          <StatBox label="TB sử dụng" value={Math.round(s.avg_utilization)} suffix="%" />
+          <StatBox label="Tác động 5h→7d" value={s.avg_impact_ratio != null ? s.avg_impact_ratio.toFixed(2) : "—"} />
+          <StatBox label="Phiên" value={s.total_sessions} />
+          <StatBox label="Tỷ lệ lãng phí" value={wasteRate} suffix="%" warn={wasteRate > 20} />
         </div>
 
         {/* Active sessions (real-time) */}
         {data?.activeSessions && data.activeSessions.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1.5">Sessions đang chạy</p>
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">Phiên đang chạy</p>
             <div className="space-y-1">
               {data.activeSessions.map((a, i) => (
                 <div key={i} className="flex items-center justify-between text-xs bg-muted/40 rounded px-2 py-1.5">
@@ -70,7 +75,7 @@ export function DashboardEfficiency({ range }: { range: DashboardRange }) {
                   <div className="flex items-center gap-3 text-muted-foreground">
                     <span>Δ5h: <b className="text-foreground">{a.delta_5h}%</b></span>
                     <span>Δ7d: <b className="text-foreground">{a.delta_7d}%</b></span>
-                    <span>Resets: {a.reset_count}</span>
+                    <span>Đặt lại: {a.reset_count}</span>
                   </div>
                 </div>
               ))}
@@ -81,7 +86,7 @@ export function DashboardEfficiency({ range }: { range: DashboardRange }) {
         {/* Per-user breakdown */}
         {data?.perUser && data.perUser.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1.5">Per-user</p>
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">Theo người dùng</p>
             <div className="space-y-1">
               {data.perUser
                 .sort((a, b) => b.avg_utilization - a.avg_utilization)
@@ -89,9 +94,9 @@ export function DashboardEfficiency({ range }: { range: DashboardRange }) {
                   <div key={u.user_id} className="flex items-center justify-between text-xs">
                     <span className="truncate max-w-[120px]">{u.name}</span>
                     <div className="flex items-center gap-3 text-muted-foreground">
-                      <span>Util: <b className="text-foreground">{Math.round(u.avg_utilization)}%</b></span>
-                      <span>Avg Δ5h: {u.avg_delta_5h.toFixed(1)}%</span>
-                      <span>{u.session_count} sessions · {u.total_hours}h</span>
+                      <span>Dùng: <b className="text-foreground">{Math.round(u.avg_utilization)}%</b></span>
+                      <span>TB Δ5h: {u.avg_delta_5h.toFixed(1)}%</span>
+                      <span>{u.session_count} phiên · {u.total_hours}h</span>
                     </div>
                   </div>
                 ))}

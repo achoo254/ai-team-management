@@ -34,10 +34,15 @@ router.post('/google', async (req, res) => {
       return
     }
 
-    const user = await User.findOne({ email }).lean()
+    let user = await User.findOne({ email }).lean()
     if (!user) {
-      res.status(401).json({ error: 'User not found' })
-      return
+      // Auto-provision new user from Google account on first login
+      const created = await User.create({
+        name: decoded.name || email.split('@')[0],
+        email,
+        role: 'user',
+      })
+      user = created.toObject()
     }
 
     const payload = {

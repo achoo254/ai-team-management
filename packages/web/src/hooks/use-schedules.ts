@@ -20,6 +20,7 @@ export interface SeatWithUsers {
   label: string;
   team: string;
   max_users: number;
+  owner_id: string | null;
   users: { _id: string; name: string; email: string; team: string }[];
 }
 

@@ -161,17 +161,19 @@ function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
   })
 }
 
-/** Send usage report for a specific user, filtered by their seats */
-export async function sendUserReport(userId: string, scope: 'own' | 'all') {
+/** Send usage report for a specific user, filtered by their watched seats */
+export async function sendUserReport(userId: string) {
   if (!isEncryptionConfigured()) return
 
-  const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id name seat_ids')
+  const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id telegram_topic_id watched_seat_ids name seat_ids')
   if (!user?.telegram_bot_token || !user?.telegram_chat_id) return
 
+  const watchedIds = (user.watched_seat_ids ?? []).map(String)
   let seats
-  if (scope === 'all') {
-    seats = await Seat.find().sort({ team: 1 }).lean()
+  if (watchedIds.length > 0) {
+    seats = await Seat.find({ _id: { $in: watchedIds } }).sort({ team: 1 }).lean()
   } else {
+    // Fallback: owned + assigned seats
     const ownedSeats = await Seat.find({ owner_id: userId }).lean()
     const assignedSeats = user.seat_ids?.length
       ? await Seat.find({ _id: { $in: user.seat_ids } }).lean()
@@ -188,7 +190,7 @@ export async function sendUserReport(userId: string, scope: 'own' | 'all') {
   const msg = buildReportHtml(rows, usersBySeat, teamLabels)
 
   const token = decrypt(user.telegram_bot_token)
-  await sendMessageWithBot(token, user.telegram_chat_id, msg)
+  await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined)
 }
 
 /** Check all users with enabled schedules and send if matching current day/hour */
@@ -214,7 +216,7 @@ export async function checkAndSendScheduledReports() {
 
   for (const user of users) {
     try {
-      await sendUserReport(String(user._id), user.notification_settings?.report_scope ?? 'own')
+      await sendUserReport(String(user._id))
       console.log(`[Scheduler] Sent report to ${user.name}`)
     } catch (err) {
       console.error(`[Scheduler] Failed for ${user.name}:`, err)
@@ -231,14 +233,29 @@ export async function sendAlertToUser(
 ): Promise<void> {
   if (!user.telegram_bot_token || !user.telegram_chat_id || !isEncryptionConfigured()) return
 
-  let msg = ''
+  let msg: string
   switch (type) {
     case 'rate_limit': {
-      const resetsAt = metadata.resets_at ? new Date(metadata.resets_at as string).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
-      msg = `🔴 <b>Rate Limit Warning</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Window: ${esc(String(metadata.window ?? ''))} | Usage: ${esc(String(metadata.pct ?? ''))}%`
-        + (resetsAt ? `\nReset: ${esc(resetsAt)}` : '')
+      const sessions = (metadata.sessions as Array<{ key: string; pct: number; resets_at?: string | null }>) ?? []
+      if (sessions.length > 0) {
+        // Combined message with all exceeded sessions
+        const lines = sessions.map((s) => {
+          const resetStr = s.resets_at
+            ? ` (reset ${new Date(s.resets_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })})`
+            : ''
+          return `  • ${esc(s.key)}: <b>${esc(String(s.pct))}%</b>${resetStr}`
+        }).join('\n')
+        msg = `🔴 <b>Rate Limit Warning</b>\n`
+          + `Seat: <b>${esc(seatLabel)}</b>\n`
+          + lines
+      } else {
+        // Fallback for legacy single-session format
+        const resetsAt = metadata.resets_at ? new Date(metadata.resets_at as string).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
+        msg = `🔴 <b>Rate Limit Warning</b>\n`
+          + `Seat: <b>${esc(seatLabel)}</b>\n`
+          + `Session: ${esc(String(metadata.session ?? ''))} | Usage: ${esc(String(metadata.pct ?? ''))}%`
+          + (resetsAt ? `\nReset: ${esc(resetsAt)}` : '')
+      }
       break
     }
     case 'extra_credit':
@@ -262,7 +279,7 @@ export async function sendAlertToUser(
           + `Seat: <b>${esc(seatLabel)}</b>\n`
           + `User: ${esc(String(metadata.user_name ?? ''))}\n`
           + `Usage: ${esc(String(metadata.delta ?? ''))}% / Budget: ${esc(String(metadata.budget ?? ''))}%\n`
-          + `Window: ${esc(String(metadata.window ?? ''))}\n`
+          + `Session: ${esc(String(metadata.session ?? ''))}\n`
           + `→ Vui lòng dừng sử dụng ngay`
       }
       break
@@ -283,7 +300,7 @@ export async function sendAlertToUser(
   }
 
   const token = decrypt(user.telegram_bot_token)
-  await sendMessageWithBot(token, user.telegram_chat_id, msg)
+  await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined)
 }
 
 /** Send via arbitrary bot token + chat ID */
@@ -315,10 +332,10 @@ async function sendMessageWithBot(botToken: string, chatId: string, text: string
 export async function sendToUser(userId: string, message: string) {
   if (!isEncryptionConfigured()) return
   try {
-    const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id')
+    const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id telegram_topic_id')
     if (user?.telegram_bot_token && user?.telegram_chat_id) {
       const token = decrypt(user.telegram_bot_token)
-      await sendMessageWithBot(token, user.telegram_chat_id, message)
+      await sendMessageWithBot(token, user.telegram_chat_id, message, user.telegram_topic_id ?? undefined)
     }
   } catch (err) {
     console.error(`[Telegram] Personal bot failed for user ${userId}:`, err)

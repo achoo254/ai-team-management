@@ -28,12 +28,7 @@ cp packages/web/.env.example packages/web/.env.local
 
 3. Fill in the required environment variables (see Environment Variables section below).
 
-4. Reset database with seed data:
-```bash
-pnpm db:reset
-```
-
-5. Start development servers:
+4. Start development servers:
 ```bash
 pnpm dev
 ```
@@ -54,7 +49,6 @@ pnpm dev
 | `pnpm lint` | Run ESLint |
 | `pnpm test` | Run Vitest tests |
 | `pnpm test:coverage` | Run tests with coverage |
-| `pnpm db:reset` | Drop MongoDB + re-seed with sample data |
 
 ## Tech Stack
 
@@ -129,12 +123,13 @@ packages/
 ### Database (MongoDB)
 ```
 Collections:
-  - seats: Claude Teams accounts with capacity
-  - users: Team members and their assignments
-  - usage_logs: Weekly usage percentages per user
-  - schedules: Time-based slot assignments (day + morning/afternoon)
-  - alerts: High usage and inactivity notifications
+  - seats: Claude Teams accounts with capacity (owner_id, oauth_credential)
+  - users: Team members with alert_settings, notification_settings
+  - usage_snapshots: Periodic usage snapshots
+  - schedules: Time-based assignments (day + start_hour/end_hour)
+  - alerts: High usage and token failure notifications
   - teams: Team definitions with metadata
+  - active_sessions: Running sessions for budget tracking
 ```
 
 ## Project Structure
@@ -149,11 +144,9 @@ ai-team-management/
 │   │   │   ├── db.ts                  # Mongoose connection
 │   │   │   ├── middleware.ts           # JWT auth, role checks
 │   │   │   ├── firebase-admin.ts      # Firebase Admin SDK
-│   │   │   ├── seed-data.ts           # Database seed data
-│   │   │   ├── models/                # 6 Mongoose models
+│   │   │   ├── models/                # 8 Mongoose models
 │   │   │   ├── routes/                # 8 REST route files
-│   │   │   ├── services/              # Business logic (4 services)
-│   │   │   └── scripts/db-reset.ts    # DB reset utility
+│   │   │   └── services/              # Business logic (5 services)
 │   │   └── .env.example
 │   │
 │   ├── web/                           # Vite + React 19 SPA
@@ -186,25 +179,23 @@ Create, update, and delete Claude Teams seats. Assign to teams. Track seat capac
 ### Usage Logging
 Users log weekly usage percentage (0-100%) for all models and per-model breakdown. Stored per-user per-week with compound indexing.
 
-### Scheduling
-Define morning (8:00-12:00) and afternoon (13:00-17:00) time slots. Assign users to day-of-week + slot combinations. Prevents double-booking.
+### Scheduling (Hourly)
+Define flexible hourly time slots (start_hour to end_hour). Assign users to day-of-week + hour ranges. Allocate usage budget per schedule. Prevents double-booking.
 
-### Alerts
-Automatic alerts for high usage (>80%) or inactivity (>1 week). Admins can create, view, and resolve alerts.
+### Real-time Alerts & Per-User Settings
+Each user configures own alert thresholds (rate_limit_pct, extra_credit_pct). Watch specific seats (watched_seat_ids). Auto-alert on high usage, token errors, budget overruns.
 
-### Telegram Notifications
-- **Friday 15:00**: Reminder to log past week usage
-- **Friday 17:00**: Weekly summary with usage stats and alerts
+### Seat Ownership & Management
+Create, edit, delete seats. Seat owner manages details; admin manages all (except credential export of others' seats). Track capacity and assigned users.
 
-### Authentication
-Google sign-in via Firebase. Server verifies and issues JWT cookie (24-hour expiry). All endpoints require authentication; admin operations require admin role.
+### Telegram Notifications (Per-User)
+- **Every hour**: Report to user matching schedule (personal encrypted bot)
+- **Friday 17:00**: Weekly summary (system bot)
+
+### Authentication & Permissions
+Google sign-in via Firebase. JWT cookie (24h). Admin has all user permissions EXCEPT credential export of seats owned by others.
 
 ## Common Tasks
-
-### Reset Database
-```bash
-pnpm db:reset
-```
 
 ### Run dev servers
 ```bash

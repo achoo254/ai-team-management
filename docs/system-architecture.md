@@ -89,21 +89,20 @@ Subsequent requests: JWT read from cookie or Authorization header
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (9 files):
+**Route Structure** (8 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
 - `routes/seats.ts` — Seat CRUD (owner auto-set), user assignment, token management, credentials export
-  - `POST /seats` — Any auth user (auto-sets owner)
+  - `POST /seats` — Any auth user (auto-sets owner to req.user._id)
   - `GET /seats` — List all seats with owner + assigned users
   - `GET /seats/available-users` — List active users for assignment
-  - `GET /seats/credentials/export` — Export all (admin)
-  - `GET /seats/:id/credentials/export` — Export single (owner or admin)
-  - `PUT /seats/:id` — Update seat details (owner or admin)
+  - `GET /seats/:id/credentials/export` — Export single seat (owner only, no admin bypass)
+  - `PUT /seats/:id` — Update seat details (owner or admin via requireSeatOwnerOrAdmin)
   - `DELETE /seats/:id` — Delete seat (owner or admin)
   - `POST /seats/:id/assign` — Assign user (owner or admin)
   - `DELETE /seats/:id/unassign/:userId` — Unassign user (owner or admin)
   - `PUT /seats/:id/token` — Set/update credential (owner or admin)
-  - `PUT /seats/:id/transfer` — Transfer ownership (admin)
+  - `PUT /seats/:id/transfer` — Transfer ownership to another user (admin only)
 - `routes/admin.ts` — User management, manual alert check trigger
 - `routes/schedules.ts` — Schedule CRUD with conflict prevention, hourly time slots, budget allocation
 - `routes/alerts.ts` — Alert creation, resolution, listing
@@ -164,17 +163,17 @@ Subsequent requests: JWT read from cookie or Authorization header
   active: Boolean,
   telegram_bot_token: String | null (encrypted AES-256-GCM),
   telegram_chat_id: String | null,
+  telegram_topic_id: String | null,
+  watched_seat_ids: [ObjectId] (ref: Seat, seats subscribed to for alerts),
   notification_settings: {
     report_enabled: Boolean (default: false),
     report_days: [Number] (default: [5], 0=Sun, 6=Sat),
-    report_hour: Number (0-23, default: 8),
-    report_scope: String (enum: ['own', 'all'], default: 'own', enforced 'own' for non-admin)
+    report_hour: Number (0-23, default: 8)
   } | null,
   alert_settings: {
     enabled: Boolean (default: false),
     rate_limit_pct: Number (default: 80),
-    extra_credit_pct: Number (default: 80),
-    subscribed_seat_ids: [ObjectId] (ref: Seat)
+    extra_credit_pct: Number (default: 80)
   } | null,
   created_at: Date
 }
@@ -201,10 +200,10 @@ Subsequent requests: JWT read from cookie or Authorization header
 {
   _id: ObjectId,
   seat_id: ObjectId (ref: Seat),
-  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded']),
+  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk']),
   message: String,
   metadata: {
-    window?: String ('5h' | '7d' | '7d_sonnet' | '7d_opus'),
+    session?: String ('5h' | '7d' | '7d_sonnet' | '7d_opus'),
     pct?: Number,
     credits_used?: Number,
     credits_limit?: Number,
@@ -331,10 +330,11 @@ API calls via React Query (TanStack Query)
      - Logs completion stats and errors per seat
      - Mutex guard prevents overlapping runs
    - **checkSnapshotAlerts()** from alert-service.ts (chained after collection):
-     - Evaluates latest UsageSnapshot against admin-configured thresholds
+     - Evaluates latest UsageSnapshot for each seat
+     - For each user watching that seat: checks against user's alert_settings thresholds
      - Creates alerts for: rate_limit (5h, 7d, 7d_sonnet, 7d_opus), extra_credit, token_failure
      - Deduplicates: max 1 unresolved alert per (seat_id, type)
-     - Sends Telegram notification for each new alert
+     - Sends Telegram notification to subscribed user via personal bot
      - Returns count of alerts created
    - **checkBudgetAlerts()** from alert-service.ts (chained after snapshot alerts):
      - Finds active schedules (matching current day/hour)
@@ -346,8 +346,7 @@ API calls via React Query (TanStack Query)
 2. **Every hour (`0 * * * *)** — `checkAndSendScheduledReports()` from telegram-service.ts
    - Finds all users with enabled notification schedule matching current day/hour
    - Generates per-user usage report filtered by seat ownership
-   - `scope='own'`: User's owned + assigned seats only
-   - `scope='all'` (admin): All seats system-wide
+   - Admin users see all seats; regular users see only owned/assigned seats
    - Sends via personal Telegram bot (gracefully skips if unconfigured)
    - Timezone: Asia/Ho_Chi_Minh (server-side)
 
@@ -500,11 +499,10 @@ Frontend: Query /api/usage-snapshots to display latest metrics
 
 ### Development Process
 1. Install dependencies: `pnpm install`
-2. Set environment variables in `.env`
-3. Initialize database: `pnpm run db:reset`
-4. Run dev servers: `pnpm dev` (starts both API and web in parallel)
+2. Set environment variables in package `.env.local` files
+3. Run dev servers: `pnpm dev` (starts both API and web in parallel)
    - Web: http://localhost:5173
-   - API: http://localhost:3001
+   - API: http://localhost:8386
 
 ### Production Process
 1. Build packages: `pnpm build`
@@ -520,7 +518,7 @@ Frontend: Query /api/usage-snapshots to display latest metrics
 - **Frontend**: Built SPA served as static files; scales via CDN
 - **Cron Jobs**: Fire-and-forget; timeouts logged but non-blocking
 
-## Security Architecture
+## Security Architecture & Permission Model
 
 ### Authentication
 - JWT stored in httpOnly, Secure, SameSite=Strict cookie
@@ -528,11 +526,82 @@ Frontend: Query /api/usage-snapshots to display latest metrics
 - Firebase Admin SDK verifies Google tokens server-side
 - All protected endpoints checked via middleware
 
-### Authorization
-- `authenticate()` middleware: Verifies JWT, sets `req.user` in types
-- `requireAdmin()` middleware: Checks `req.user.role === 'admin'`
-- `requireSeatOwnerOrAdmin()` middleware: Allows seat owner or admin; queries seat.owner_id
-- `validateObjectId()` middleware: Validates MongoDB ObjectIds in URLs
+### Authorization Hierarchy
+
+**Middleware Stack**:
+| Middleware | Check | Allows |
+|-----------|-------|--------|
+| `authenticate` | JWT valid | All authenticated users |
+| `requireAdmin` | role === 'admin' | Admin users only |
+| `requireSeatOwner(seatId)` | owner_id === req.user._id | Seat owner only (NO admin bypass) |
+| `requireSeatOwnerOrAdmin(seatId)` | owner_id === req.user._id OR role === 'admin' | Owner or Admin |
+
+**Critical Rule**: Admin users have ALL the same permissions as regular users EXCEPT credential export of seats owned by other users. The `requireSeatOwner()` middleware has NO admin bypass for credential export (`GET /seats/:id/credentials/export`).
+
+### Schedule Permissions (Per-Seat & Role-Based)
+
+A new permission system grants granular access control to schedule management. Defined in `packages/shared/schedule-permissions.ts` via pure resolver function `resolveSchedulePermissions()`:
+
+**Permission Types**:
+```
+canView: bool              — Can see seat schedules
+canCreate: bool            — Can create schedule entries
+canCreateForOthers: bool   — Can create entries for other users
+canSwap: bool              — Can swap or move schedule entries
+canClearAll: bool          — Can clear all entries on seat
+canEditEntry(entry): bool  — Can edit specific entry (user-based)
+canDeleteEntry(entry): bool — Can delete specific entry (user-based)
+```
+
+**Role-Based Matrix**:
+| Action | Admin | Seat Owner | Member | Non-member |
+|--------|-------|------------|--------|------------|
+| View | All | Own seat | Assigned seat | Hidden |
+| Create entry | Any member | Any member | Self only | No |
+| Create for others | Yes | In own seat | No | No |
+| Edit entry | All | In own seat | Own entries | No |
+| Delete entry | All | In own seat | Own entries | No |
+| Swap entries | Yes | In own seat | No | No |
+| Clear all | Yes | No | No | No |
+
+**Implementation**:
+- Resolver exported from `@repo/shared/schedule-permissions` for use in both API and UI
+- API: `getPermissionCtx()` in `routes/schedules.ts` builds context, calls resolver
+- UI: Components receive permission object, disable actions based on flags
+- No database calls in resolver; pure computation for performance
+
+### Permission Model by Route
+
+**Seat Management**:
+```
+POST   /api/seats                        [authenticate] → Any user can create seat (becomes owner)
+GET    /api/seats                        [authenticate] → All users see all seats
+GET    /api/seats/:id/credentials/export [authenticate, requireSeatOwner] → OWNER ONLY (strict)
+PUT    /api/seats/:id                    [authenticate, requireSeatOwnerOrAdmin]
+DELETE /api/seats/:id                    [authenticate, requireSeatOwnerOrAdmin]
+POST   /api/seats/:id/assign            [authenticate, requireSeatOwnerOrAdmin]
+DELETE /api/seats/:id/unassign/:userId   [authenticate, requireSeatOwnerOrAdmin]
+PUT    /api/seats/:id/token              [authenticate, requireSeatOwnerOrAdmin]
+DELETE /api/seats/:id/token              [authenticate, requireSeatOwnerOrAdmin]
+PUT    /api/seats/:id/transfer           [authenticate, requireAdmin] → Admin only
+```
+
+**Admin Routes (ALL require admin role)**:
+```
+GET    /api/admin/users
+POST   /api/admin/users
+PUT    /api/admin/users/:id
+DELETE /api/admin/users/:id
+PATCH  /api/admin/users/bulk-active
+POST   /api/admin/check-alerts
+```
+
+**User Settings**:
+```
+GET    /api/user/settings                [authenticate] → Own settings only
+PUT    /api/user/settings                [authenticate] → Own settings only
+POST   /api/user/settings/test-bot       [authenticate] → Own bot only
+```
 
 ### Data Protection
 - CORS enabled for all origins (configurable)

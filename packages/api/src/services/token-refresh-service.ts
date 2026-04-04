@@ -1,6 +1,6 @@
 import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
-import { decrypt, encrypt } from './crypto-service.js'
+import { decrypt, encrypt } from '../lib/encryption.js'
 import { parallelLimit } from '../utils/parallel-limit.js'
 
 const REFRESH_URL = 'https://api.anthropic.com/v1/oauth/token'

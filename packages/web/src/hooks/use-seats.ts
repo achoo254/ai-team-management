@@ -104,19 +104,3 @@ export async function exportSeatCredential(seatId: string, seatLabel: string) {
   }
 }
 
-/** Export all seats' decrypted credentials as JSON file download */
-export async function exportCredentials() {
-  const data = await api.get("/api/seats/credentials/export") as { credentials: Array<Record<string, unknown>> };
-  try {
-    const blob = new Blob([JSON.stringify(data.credentials, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `credentials-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  } finally {
-    // Clear sensitive data from memory
-    data.credentials.length = 0;
-  }
-}

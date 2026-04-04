@@ -22,6 +22,7 @@ import {
   type ScheduleEntry,
 } from "@/hooks/use-schedules";
 import { useAuth } from "@/hooks/use-auth";
+import { resolveSchedulePermissions } from "@repo/shared/schedule-permissions";
 
 interface EntryForm {
   dayOfWeek: number;
@@ -43,7 +44,6 @@ function LoadingSkeleton() {
 
 export default function SchedulePage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
   const [activeSeatId, setActiveSeatId] = useState<string | null>(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -74,10 +74,30 @@ export default function SchedulePage() {
   const seats = seatsData?.seats ?? [];
   const isLoading = loadingSchedules || loadingSeats;
 
-  if (!activeSeatId && seats.length > 0) setActiveSeatId(seats[0]._id);
+  // Filter seats to only those the user can view
+  const visibleSeats = user?.role === "admin"
+    ? seats
+    : seats.filter(s => s.users.some(u => u._id === user?._id) || s.owner_id === user?._id);
 
-  const activeSeat = seats.find((s) => s._id === activeSeatId);
+  if (!activeSeatId && visibleSeats.length > 0) setActiveSeatId(visibleSeats[0]._id);
+
+  const activeSeat = visibleSeats.find((s) => s._id === activeSeatId);
   const seatUsers = activeSeat?.users ?? [];
+
+  // Compute permissions for active seat
+  const userSeatIds = seats
+    .filter(s => s.users.some(u => u._id === user?._id) || s.owner_id === user?._id)
+    .map(s => s._id);
+
+  const permissions = activeSeatId && user
+    ? resolveSchedulePermissions({
+        userId: user._id,
+        userRole: user.role,
+        seatOwnerId: activeSeat?.owner_id ?? null,
+        userSeatIds,
+        seatId: activeSeatId,
+      })
+    : null;
 
   // DnD sensors
   const sensors = useSensors(
@@ -88,7 +108,12 @@ export default function SchedulePage() {
   // --- Handlers ---
 
   function handleClickSlot(dayOfWeek: number, hour: number) {
-    setCreateForm({ dayOfWeek, startHour: hour, endHour: Math.min(hour + 4, 24), userId: "", usageBudgetPct: "" });
+    if (!permissions?.canCreate) return;
+    setCreateForm({
+      dayOfWeek, startHour: hour, endHour: Math.min(hour + 4, 24),
+      userId: permissions.canCreateForOthers ? "" : user?._id ?? "",
+      usageBudgetPct: "",
+    });
     setCreateOpen(true);
   }
 
@@ -250,29 +275,33 @@ export default function SchedulePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && (
-            <>
-              <Button size="sm" onClick={() => {
-                setCreateForm({ dayOfWeek: 1, startHour: 8, endHour: 12, userId: "", usageBudgetPct: "" });
-                setCreateOpen(true);
-              }}>
-                + Tạo lịch
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => setConfirmClear(true)}
-                className="gap-1.5" disabled={clearMutation.isPending}>
-                <Trash2 size={14} />
-                Xoá tất cả
-              </Button>
-            </>
+          {permissions?.canCreate && (
+            <Button size="sm" onClick={() => {
+              setCreateForm({
+                dayOfWeek: 1, startHour: 8, endHour: 12,
+                userId: permissions.canCreateForOthers ? "" : user?._id ?? "",
+                usageBudgetPct: "",
+              });
+              setCreateOpen(true);
+            }}>
+              + Tạo lịch
+            </Button>
+          )}
+          {permissions?.canClearAll && (
+            <Button variant="destructive" size="sm" onClick={() => setConfirmClear(true)}
+              className="gap-1.5" disabled={clearMutation.isPending}>
+              <Trash2 size={14} />
+              Xoá tất cả
+            </Button>
           )}
         </div>
       </div>
 
       {/* Seat tabs */}
-      {seats.length > 0 && (
-        <Tabs value={activeSeatId ?? seats[0]?._id ?? ""} onValueChange={setActiveSeatId}>
+      {visibleSeats.length > 0 && (
+        <Tabs value={activeSeatId ?? visibleSeats[0]?._id ?? ""} onValueChange={setActiveSeatId}>
           <TabsList className="flex-wrap h-auto">
-            {seats.map((seat) => (
+            {visibleSeats.map((seat) => (
               <TabsTrigger key={seat._id} value={seat._id} className="text-xs">{seat.label}</TabsTrigger>
             ))}
           </TabsList>
@@ -301,9 +330,10 @@ export default function SchedulePage() {
           <div className="flex-1 overflow-auto hidden lg:block">
             <ScheduleGrid
               schedules={schedules}
-              seats={seats}
+              seats={visibleSeats}
               activeSeatId={activeSeatId}
-              isAdmin={isAdmin}
+              canCreate={permissions?.canCreate ?? false}
+              canEditEntry={(entry) => permissions?.canEditEntry({ user_id: entry.user_id }) ?? false}
               onDelete={handleDelete}
               onEdit={handleEdit}
               onResize={handleResize}
@@ -316,8 +346,9 @@ export default function SchedulePage() {
           <div className="flex-1 lg:hidden">
             <DayTabView
               schedules={schedules.filter((s) => s.seat_id === activeSeatId)}
-              seats={seats}
-              isAdmin={isAdmin}
+              seats={visibleSeats}
+              canCreate={permissions?.canCreate ?? false}
+              canDeleteEntry={(entry) => permissions?.canDeleteEntry({ user_id: entry.user_id }) ?? false}
               onDelete={handleDelete}
               onClickSlot={handleClickSlot}
               showWeekend={showWeekend}
@@ -339,7 +370,7 @@ export default function SchedulePage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Tạo lịch phân ca</DialogTitle></DialogHeader>
-          {renderEntryForm(createForm, setCreateForm, true)}
+          {renderEntryForm(createForm, setCreateForm, permissions?.canCreateForOthers ?? false)}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Huỷ</Button>
             <Button onClick={handleCreate} disabled={!createForm.userId || createMutation.isPending}>

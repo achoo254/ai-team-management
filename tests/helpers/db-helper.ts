@@ -43,7 +43,7 @@ export async function seedAlert(seatId: string) {
     seat_id: seatId,
     type: "rate_limit",
     message: "Rate limit exceeded 80%",
-    metadata: { window: "5h", pct: 85 },
+    metadata: { session: "5h", pct: 85 },
   });
 }
 

@@ -6,6 +6,8 @@ export interface IAlert extends Document {
   message: string
   metadata: Record<string, unknown>
   read_by: Types.ObjectId[]
+  /** Set when notification was sent — prevents re-sending for same condition */
+  notified_at: Date | null
   created_at: Date
 }
 
@@ -16,6 +18,7 @@ const alertSchema = new Schema<IAlert>(
     message: { type: String, required: true },
     metadata: { type: Schema.Types.Mixed, default: {} },
     read_by: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    notified_at: { type: Date, default: null },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } },
 )

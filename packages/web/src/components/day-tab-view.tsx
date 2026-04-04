@@ -20,13 +20,14 @@ const WEEKEND_DAYS = [
 interface Props {
   schedules: ScheduleEntry[];
   seats: SeatWithUsers[];
-  isAdmin: boolean;
+  canCreate: boolean;
+  canDeleteEntry: (entry: { user_id: string }) => boolean;
   onDelete: (id: string) => void;
   onClickSlot: (dayOfWeek: number, hour: number) => void;
   showWeekend?: boolean;
 }
 
-export function DayTabView({ schedules, seats, isAdmin, onDelete, onClickSlot, showWeekend }: Props) {
+export function DayTabView({ schedules, seats, canCreate, canDeleteEntry, onDelete, onClickSlot, showWeekend }: Props) {
   const DAYS = showWeekend ? WEEKEND_DAYS : WEEKDAYS;
   const defaultTab = showWeekend ? "6" : "1";
 
@@ -52,7 +53,7 @@ export function DayTabView({ schedules, seats, isAdmin, onDelete, onClickSlot, s
                   <CardContent className="pt-3 pb-3 px-4">
                     <p className="text-sm text-muted-foreground italic text-center">
                       Chưa có lịch
-                      {isAdmin && (
+                      {canCreate && (
                         <button
                           className="ml-2 text-primary underline"
                           onClick={() => onClickSlot(d.day, 8)}
@@ -80,7 +81,7 @@ export function DayTabView({ schedules, seats, isAdmin, onDelete, onClickSlot, s
                             </span>
                           )}
                         </div>
-                        {isAdmin && (
+                        {canDeleteEntry({ user_id: entry.user_id }) && (
                           <button
                             onClick={() => onDelete(entry._id)}
                             className="p-1 rounded hover:bg-red-100 text-red-500 shrink-0"
@@ -95,7 +96,7 @@ export function DayTabView({ schedules, seats, isAdmin, onDelete, onClickSlot, s
               )}
 
               {/* Quick add button at bottom */}
-              {isAdmin && daySchedules.length > 0 && (
+              {canCreate && daySchedules.length > 0 && (
                 <button
                   className="w-full py-2 text-xs text-muted-foreground hover:text-primary border border-dashed border-border rounded-md"
                   onClick={() => onClickSlot(d.day, 8)}

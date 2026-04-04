@@ -73,6 +73,23 @@ export interface EnhancedDashboardData {
 
 export type DashboardRange = "day" | "week" | "month" | "3month" | "6month";
 
+/** Compute the concrete date range string for a DashboardRange relative to today */
+export function formatRangeDate(range: DashboardRange): string {
+  const now = new Date();
+  const fmt = (d: Date) =>
+    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+
+  if (range === "day") return fmt(now);
+
+  const from = new Date(now);
+  if (range === "week") from.setDate(from.getDate() - 7);
+  else if (range === "month") from.setDate(from.getDate() - 30);
+  else if (range === "3month") from.setMonth(from.getMonth() - 3);
+  else if (range === "6month") from.setMonth(from.getMonth() - 6);
+
+  return `${fmt(from)} – ${fmt(now)}`;
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
@@ -128,18 +145,29 @@ export interface EfficiencyData {
   activeSessions: ActiveSessionLive[];
 }
 
-export function useEfficiency(range: DashboardRange = "month") {
+/** Build query string fragment from range + optional seatIds filter */
+function buildDashboardQuery(range: DashboardRange, seatIds?: string[]): string {
+  const parts = [`range=${range}`];
+  if (seatIds && seatIds.length > 0) parts.push(`seatIds=${seatIds.join(",")}`);
+  return parts.join("&");
+}
+
+export function useEfficiency(range: DashboardRange = "month", seatIds?: string[]) {
+  const qs = buildDashboardQuery(range, seatIds);
+  const key = seatIds && seatIds.length > 0 ? seatIds.join(",") : "all";
   return useQuery<EfficiencyData>({
-    queryKey: ["dashboard", "efficiency", range],
-    queryFn: () => fetchJson<EfficiencyData>(`/api/dashboard/efficiency?range=${range}`),
+    queryKey: ["dashboard", "efficiency", range, key],
+    queryFn: () => fetchJson<EfficiencyData>(`/api/dashboard/efficiency?${qs}`),
     refetchInterval: 60_000, // refresh every minute for live data
   });
 }
 
-export function useDashboardEnhanced(range: DashboardRange = "month") {
+export function useDashboardEnhanced(range: DashboardRange = "month", seatIds?: string[]) {
+  const qs = buildDashboardQuery(range, seatIds);
+  const key = seatIds && seatIds.length > 0 ? seatIds.join(",") : "all";
   return useQuery<EnhancedDashboardData>({
-    queryKey: ["dashboard", "enhanced", range],
+    queryKey: ["dashboard", "enhanced", range, key],
     queryFn: () =>
-      fetchJson<EnhancedDashboardData>(`/api/dashboard/enhanced?range=${range}`),
+      fetchJson<EnhancedDashboardData>(`/api/dashboard/enhanced?${qs}`),
   });
 }

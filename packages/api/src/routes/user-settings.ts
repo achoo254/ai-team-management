@@ -97,7 +97,7 @@ router.put('/settings', async (req, res) => {
     if (notification_settings) {
       const ns = notification_settings
       const days = Array.isArray(ns.report_days)
-        ? [...new Set(ns.report_days.filter((d: unknown) => Number.isInteger(d) && d >= 0 && d <= 6))]
+        ? [...new Set((ns.report_days as unknown[]).filter((d): d is number => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6))]
         : []
       if (ns.report_enabled && days.length === 0) {
         res.status(400).json({ error: 'Cần chọn ít nhất 1 ngày gửi báo c��o' })

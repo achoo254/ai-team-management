@@ -32,6 +32,7 @@ export const googleProvider = new GoogleAuthProvider()
 /** Get Firebase Messaging instance (lazy init) */
 export function getFirebaseMessaging(): Messaging | null {
   if (!('serviceWorker' in navigator)) return null
+  if (!firebaseConfig.messagingSenderId || !firebaseConfig.appId) return null
   if (!_messaging) _messaging = getMessaging(getApp())
   return _messaging
 }

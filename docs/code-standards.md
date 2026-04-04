@@ -328,11 +328,10 @@ try {
 }
 ```
 
-### Seed Data & Initialization
-- Run on startup via `initializeDb()` in `src/db.ts` (async function)
-- Creates documents if collections don't exist
-- Seed data defined in `src/seed-data.ts`
-- Called during API startup in `src/index.ts`
+### Database Initialization
+- MongoDB collections created on first access via Mongoose
+- Schema validation enforced at model level
+- No automatic seed data on startup
 
 ## Security
 
@@ -366,9 +365,9 @@ try {
 - Check API terminal for backend logs
 
 ### Database
-- Reset with `pnpm run db:reset` (drops MongoDB + re-seeds via seed-data.ts)
-- Connect to MongoDB via `mongosh` if needed
+- Connect to MongoDB via `mongosh` if needed for manual queries
 - Use Mongoose models for queries (see Database Patterns section)
+- Drop collections manually in mongosh if needed for testing: `db.collection_name.deleteMany({})`
 
 ### API Testing
 - Use curl/Postman to test endpoints

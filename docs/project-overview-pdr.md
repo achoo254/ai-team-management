@@ -18,11 +18,11 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Track seat capacity (max users per seat)
 - View seat status and current users
 
-### 2. Scheduling (Morning/Afternoon)
-- Define morning (8:00-12:00) and afternoon (13:00-17:00) slots
-- Assign users to day-of-week + slot (e.g., Mon-Fri morning, Wed afternoon)
+### 2. Scheduling (Hourly)
+- Define hourly time slots (start_hour to end_hour per day)
+- Assign users to day-of-week + hour range (e.g., Mon 8-12, Wed 14-18)
 - Prevent double-booking on same seat
-- Default round-robin schedules for 3-person seats
+- Budget allocation per schedule (% of seat's usage budget)
 
 ### 3. Alerts (Real-time)
 - **Rate Limit**: Trigger when seat usage exceeds configurable threshold (default 80%) across 5h, 7d, 7d_sonnet, 7d_opus windows
@@ -42,12 +42,21 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 ### 6. Usage Metrics Collection
 - Store Anthropic API access tokens (encrypted with AES-256-GCM)
-- Auto-collect usage every 30 minutes for all active seats
+- Auto-collect usage every 5 minutes for all active seats
 - Track 5-hour, 7-day, and model-specific (Sonnet, Opus) utilization %
 - Monitor extra_usage credits (monthly limit, used, utilization)
 - Query and filter usage snapshots by seat and date range
 - View latest metrics (within 24h) with status indicators
 - Automatic cleanup: snapshots deleted after 90 days
+
+### 7. Seat Ownership & Per-User Settings
+- Each seat has an owner (user who created it)
+- Owner can manage seat details, users, and tokens
+- Admin can also manage any seat (except credential export of others' seats)
+- Each user has alert settings (thresholds for rate_limit, extra_credit)
+- Each user watches specific seats for alerts (watched_seat_ids)
+- Personal Telegram bot token encryption for per-user notifications
+- Hourly notification schedule per user (day + hour to receive reports)
 
 ## Technical Requirements
 
@@ -56,8 +65,8 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Mongoose (MongoDB) with async/await
 - Firebase Admin SDK (Google sign-in verification)
 - JWT auth (24h expiry via httpOnly cookie)
-- node-cron (Friday reminders + 30-min usage collection)
-- AES-256-GCM encryption for sensitive data (access tokens)
+- node-cron (5-min usage collection + hourly reporting + Friday summary)
+- AES-256-GCM encryption for sensitive data (access tokens, bot tokens)
 
 ### Frontend
 - Vanilla JS SPA
@@ -113,18 +122,21 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 ## Product Roadmap (Phase 1 Complete)
 
 ### Current State (Done)
-- Seat CRUD + team assignment
+- Seat CRUD + team assignment + ownership model
 - User management (create, update, delete, active status)
-- Schedule CRUD with conflict prevention
-- Real-time alert system (rate_limit, extra_credit, token_failure)
-- Configurable alert thresholds (admin dashboard)
-- Telegram weekly reports
+- Per-user alert settings and subscriptions (watched_seat_ids)
+- Schedule CRUD with conflict prevention (hourly time slots + budget allocation)
+- Real-time alert system (rate_limit, extra_credit, token_failure, usage_exceeded, session_waste, 7d_risk)
+- Per-user alert thresholds (rate_limit_pct, extra_credit_pct)
+- Telegram weekly reports + per-user hourly reports
 - SPA dashboard with all views
 - Google sign-in + JWT auth
-- Usage metrics collection (30-min cron)
+- Usage metrics collection (5-min cron)
 - Anthropic API token management (encrypted AES-256-GCM)
+- Personal Telegram bot integration (per-user encrypted tokens)
 - Usage snapshots with 90-day TTL
 - Real-time usage metrics dashboard
+- Active session tracking for budget alerts
 
 ### Potential Improvements (Phase 2)
 

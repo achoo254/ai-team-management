@@ -42,8 +42,8 @@ function StatSkeleton() {
   );
 }
 
-export function DashboardStatOverview({ range }: { range: DashboardRange }) {
-  const { data, isLoading } = useDashboardEnhanced(range);
+export function DashboardStatOverview({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
+  const { data, isLoading } = useDashboardEnhanced(range, seatIds);
 
   if (isLoading) {
     return (
@@ -66,33 +66,33 @@ export function DashboardStatOverview({ range }: { range: DashboardRange }) {
       <MiniStat
         label="Seats"
         value={data?.totalSeats ?? 0}
-        sub={`${totalOccupancy}/${totalCapacity} slots used`}
+        sub={`${totalOccupancy}/${totalCapacity} slot đã dùng`}
         icon={Monitor}
         accent="bg-info-surface text-info-text"
       />
       <MiniStat
-        label="Active Users"
+        label="Người dùng"
         value={`${data?.activeUsers ?? 0}/${data?.totalUsers ?? 0}`}
         sub="đang hoạt động"
         icon={Users}
         accent="bg-success-surface text-success-text"
       />
       <MiniStat
-        label="Avg 5h Usage"
+        label="TB sử dụng 5h"
         value={`${avg5h}%`}
-        sub="rolling 5-hour window"
+        sub="phiên cuốn chiếu 5 giờ"
         icon={Zap}
         accent={avg5h >= 80 ? "bg-error-surface text-error-text" : avg5h >= 50 ? "bg-warning-surface text-warning-text" : "bg-success-surface text-success-text"}
       />
       <MiniStat
-        label="Avg 7d Usage"
+        label="TB sử dụng 7 ngày"
         value={`${avg7d}%`}
-        sub="rolling 7-day window"
+        sub="phiên cuốn chiếu 7 ngày"
         icon={TrendingUp}
         accent={avg7d >= 80 ? "bg-error-surface text-error-text" : avg7d >= 50 ? "bg-warning-surface text-warning-text" : "bg-success-surface text-success-text"}
       />
       <MiniStat
-        label="Alerts"
+        label="Cảnh báo"
         value={data?.unresolvedAlerts ?? 0}
         sub="chưa xử lý"
         icon={AlertTriangle}

@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { useUserSettings, useUpdateUserSettings } from "@/hooks/use-user-settings";
-import { useAuth } from "@/hooks/use-auth";
 import type { NotificationSettings } from "@repo/shared/types";
 
 const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -20,14 +19,11 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   report_enabled: false,
   report_days: [5],
   report_hour: 8,
-  report_scope: "own",
 };
 
 export function NotificationScheduleForm() {
   const { data: settings, isLoading } = useUserSettings();
   const updateMutation = useUpdateUserSettings();
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
 
   const [ns, setNs] = useState<NotificationSettings>(DEFAULT_SETTINGS);
   const [dirty, setDirty] = useState(false);
@@ -131,29 +127,6 @@ export function NotificationScheduleForm() {
             </SelectContent>
           </Select>
         </div>
-
-        {/* Scope — admin only */}
-        {isAdmin && (
-          <div>
-            <Label className="text-xs">Phạm vi</Label>
-            <Select
-              value={ns.report_scope}
-              onValueChange={(v) => {
-                setDirty(true);
-                setNs((prev) => ({ ...prev, report_scope: v as "own" | "all" }));
-              }}
-              disabled={disabled}
-            >
-              <SelectTrigger className="w-48 mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="own">Seats của tôi</SelectItem>
-                <SelectItem value="all">Tất cả seats</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending || !dirty}>
           {updateMutation.isPending && <Loader2 size={14} className="animate-spin mr-1" />}

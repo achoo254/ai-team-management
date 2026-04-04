@@ -1,6 +1,6 @@
 import { Seat } from '../models/seat.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
-import { decrypt } from './crypto-service.js'
+import { decrypt } from '../lib/encryption.js'
 import { parallelLimit } from '../utils/parallel-limit.js'
 
 const API_URL = 'https://api.anthropic.com/api/oauth/usage'

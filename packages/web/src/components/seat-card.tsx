@@ -47,13 +47,14 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Badge variant={seat.team === "dev" ? "default" : seat.team === "personal" ? "outline" : "secondary"}>{seat.team.toUpperCase()}</Badge>
+            {/* Export: owner only (not admin of other's seats) */}
+            {isOwner && seat.has_token && (
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExportCredential} title="Export credential">
+                <Download className="h-3.5 w-3.5" />
+              </Button>
+            )}
             {canManage && (
               <>
-                {seat.has_token && (
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExportCredential} title="Export credential">
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
-                )}
                 <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(seat)}><Pencil className="h-3.5 w-3.5" /></Button>
                 <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onDelete(seat)}><Trash2 className="h-3.5 w-3.5" /></Button>
               </>

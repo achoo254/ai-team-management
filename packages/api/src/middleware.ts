@@ -56,6 +56,26 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next()
 }
 
+/** Allows only seat owner to proceed (no admin bypass). Must be used after `authenticate`. */
+export function requireSeatOwner(paramName = 'id') {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required' })
+      return
+    }
+    const seat = await Seat.findById(req.params[paramName])
+    if (!seat) {
+      res.status(404).json({ error: 'Seat not found' })
+      return
+    }
+    if (seat.owner_id?.toString() !== req.user._id) {
+      res.status(403).json({ error: 'Not seat owner' })
+      return
+    }
+    next()
+  }
+}
+
 /** Allows admin or seat owner to proceed. Must be used after `authenticate`. */
 export function requireSeatOwnerOrAdmin(paramName = 'id') {
   return async (req: Request, res: Response, next: NextFunction) => {

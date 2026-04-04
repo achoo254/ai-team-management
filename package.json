@@ -11,8 +11,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "db:reset": "pnpm -F @repo/api db:reset"
+    "test:coverage": "vitest run --coverage"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

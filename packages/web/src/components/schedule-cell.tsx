@@ -10,7 +10,7 @@ export const ROW_H = 32;
 interface Props {
   entry: ScheduleEntry;
   span: number;
-  isAdmin: boolean;
+  canEdit: boolean;
   onDelete: (id: string) => void;
   onEdit: (entry: ScheduleEntry) => void;
   onResize?: (entryId: string, newEndHour: number) => void;
@@ -29,7 +29,7 @@ function userColor(name: string) {
   return COLORS[(name.charCodeAt(0) ?? 0) % COLORS.length];
 }
 
-export function ScheduleCell({ entry, span, isAdmin, onDelete, onEdit, onResize }: Props) {
+export function ScheduleCell({ entry, span, canEdit, onDelete, onEdit, onResize }: Props) {
   const heightPx = span * ROW_H;
   const isCompact = span <= 2;
   const resizeRef = useRef<HTMLDivElement>(null);
@@ -37,7 +37,7 @@ export function ScheduleCell({ entry, span, isAdmin, onDelete, onEdit, onResize 
   // Draggable (admin only)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `entry-${entry._id}`,
-    disabled: !isAdmin,
+    disabled: !canEdit,
     data: { type: "schedule-entry", entry },
   });
 
@@ -49,7 +49,7 @@ export function ScheduleCell({ entry, span, isAdmin, onDelete, onEdit, onResize 
 
   // Resize via mouse drag on bottom handle
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    if (!isAdmin || !onResize) return;
+    if (!canEdit || !onResize) return;
     e.stopPropagation();
     e.preventDefault();
     const startY = e.clientY;
@@ -73,25 +73,25 @@ export function ScheduleCell({ entry, span, isAdmin, onDelete, onEdit, onResize 
     }
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-  }, [entry, isAdmin, onResize]);
+  }, [entry, canEdit, onResize]);
 
   return (
     <div
       ref={setNodeRef}
-      className={`absolute inset-x-0.5 top-0.5 z-10 group rounded border px-1.5 py-0.5 overflow-hidden select-none ${userColor(entry.user_name)} ${isAdmin ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+      className={`absolute inset-x-0.5 top-0.5 z-10 group rounded border px-1.5 py-0.5 overflow-hidden select-none ${userColor(entry.user_name)} ${canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
       style={style}
       title={`${entry.user_name} · ${String(entry.start_hour).padStart(2, "0")}:00–${String(entry.end_hour).padStart(2, "0")}:00${entry.usage_budget_pct != null ? ` · Limit ${entry.usage_budget_pct}%` : ""}`}
-      {...(isAdmin ? { ...listeners, ...attributes } : {})}
+      {...(canEdit ? { ...listeners, ...attributes } : {})}
     >
       {isCompact ? (
         <div className="flex items-center justify-between gap-0.5 h-full">
-          {isAdmin && <GripVertical size={10} className="shrink-0 opacity-30 group-hover:opacity-70" />}
+          {canEdit && <GripVertical size={10} className="shrink-0 opacity-30 group-hover:opacity-70" />}
           <span className="text-[11px] font-semibold truncate flex-1">{entry.user_name}</span>
           <span className="text-[9px] opacity-60 shrink-0">
             {String(entry.start_hour).padStart(2, "0")}–{String(entry.end_hour).padStart(2, "0")}h
             {entry.usage_budget_pct != null && ` · ${entry.usage_budget_pct}%`}
           </span>
-          {isAdmin && (
+          {canEdit && (
             <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
               <button onClick={(e) => { e.stopPropagation(); onEdit(entry); }}
                 className="flex items-center justify-center w-3.5 h-3.5 rounded-full bg-blue-200 hover:bg-blue-300 text-blue-700">
@@ -107,7 +107,7 @@ export function ScheduleCell({ entry, span, isAdmin, onDelete, onEdit, onResize 
       ) : (
         <div className="flex items-start justify-between gap-0.5">
           <div className="min-w-0 flex-1 flex items-start gap-0.5">
-            {isAdmin && <GripVertical size={10} className="shrink-0 opacity-30 group-hover:opacity-70 mt-0.5" />}
+            {canEdit && <GripVertical size={10} className="shrink-0 opacity-30 group-hover:opacity-70 mt-0.5" />}
             <div className="min-w-0">
               <div className="text-xs font-semibold truncate leading-tight">{entry.user_name}</div>
               <div className="text-[10px] opacity-60 mt-0.5">
@@ -116,7 +116,7 @@ export function ScheduleCell({ entry, span, isAdmin, onDelete, onEdit, onResize 
               </div>
             </div>
           </div>
-          {isAdmin && (
+          {canEdit && (
             <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
               <button onClick={(e) => { e.stopPropagation(); onEdit(entry); }}
                 className="flex items-center justify-center w-4 h-4 rounded-full bg-blue-200 hover:bg-blue-300 text-blue-700">
@@ -132,7 +132,7 @@ export function ScheduleCell({ entry, span, isAdmin, onDelete, onEdit, onResize 
       )}
 
       {/* Resize handle at bottom edge */}
-      {isAdmin && onResize && (
+      {canEdit && onResize && (
         <div
           ref={resizeRef}
           className="absolute bottom-0 left-0 right-0 h-1.5 cursor-s-resize opacity-0 group-hover:opacity-100 bg-current/20 rounded-b"

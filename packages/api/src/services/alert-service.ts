@@ -9,7 +9,11 @@ import { sendAlertToUser } from './telegram-service.js'
 import { sendPushToUser } from './fcm-service.js'
 import type { AlertType } from '@repo/shared/types'
 
-/** Atomically insert alert if no recent alert exists for same seat+type (1h cooldown). Notifies subscribed users. */
+/**
+ * Insert alert only if no already-notified alert exists for same seat+type (within 24h).
+ * Once notified, the alert won't trigger again until condition resolves (usage drops below threshold)
+ * or 24h passes (stale alert auto-expires).
+ */
 async function insertIfNew(
   seatId: string,
   type: AlertType,
@@ -19,16 +23,22 @@ async function insertIfNew(
   /** The actual value to compare against per-user thresholds (e.g. usage pct) */
   triggerValue?: number,
 ): Promise<boolean> {
-  // Atomic upsert with 1h cooldown — prevents race condition under concurrent cron runs
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-  const result = await Alert.findOneAndUpdate(
-    { seat_id: seatId, type, created_at: { $gte: oneHourAgo } },
-    { $setOnInsert: { seat_id: seatId, type, message, metadata, read_by: [] } },
-    { upsert: true, new: true, rawResult: true },
-  ) as unknown as { lastErrorObject?: { updatedExisting?: boolean }; value?: { _id: any } }
-  if (result.lastErrorObject?.updatedExisting) return false
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-  const alertId = String(result.value?._id ?? '')
+  // Skip if already notified for this seat+type within 24h
+  const existing = await Alert.findOne({
+    seat_id: seatId,
+    type,
+    notified_at: { $ne: null },
+    created_at: { $gte: oneDayAgo },
+  })
+  if (existing) return false
+
+  // Create new alert and notify
+  const alert = await Alert.create({
+    seat_id: seatId, type, message, metadata, read_by: [], notified_at: new Date(),
+  })
+  const alertId = String(alert._id)
   await notifySubscribedUsers(seatId, type, seatLabel, metadata, triggerValue, alertId)
   return true
 }
@@ -118,7 +128,7 @@ export async function checkSnapshotAlerts() {
     const thresholds = seatThresholds.get(String(seatId))
     if (!thresholds) continue // no users subscribed to this seat
 
-    // Rate limit: check all sessions against lowest user threshold
+    // Rate limit: check all sessions, gom tất cả sessions vượt threshold vào 1 alert
     const resetsAtMap: Record<string, string | null> = {
       '5h': snapshot.five_hour_resets_at ?? null,
       '7d': snapshot.seven_day_resets_at ?? null,
@@ -132,13 +142,20 @@ export async function checkSnapshotAlerts() {
       { key: '7d_opus' as const, pct: snapshot.seven_day_opus_pct },
     ].filter((w) => w.pct != null)
 
-    const sessions = allSessions.filter((w) => w.pct! >= thresholds.rate_limit_pct)
-    if (sessions.length > 0) {
-      const worst = sessions.reduce((a, b) => (a.pct! > b.pct! ? a : b))
-      const resetsAt = resetsAtMap[worst.key] ?? null
-      const msg = `Seat ${label}: ${worst.pct}% usage (${worst.key} session)`
+    const exceededSessions = allSessions.filter((w) => w.pct! >= thresholds.rate_limit_pct)
+    if (exceededSessions.length > 0) {
+      const worst = exceededSessions.reduce((a, b) => (a.pct! > b.pct! ? a : b))
+      // Build combined message with all exceeded sessions
+      const sessionSummary = exceededSessions.map((s) => `${s.key}: ${s.pct}%`).join(', ')
+      const msg = `Seat ${label}: usage cao — ${sessionSummary}`
       if (await insertIfNew(String(seatId), 'rate_limit', msg, {
-        session: worst.key, pct: worst.pct, resets_at: resetsAt,
+        sessions: exceededSessions.map((s) => ({
+          key: s.key,
+          pct: s.pct,
+          resets_at: resetsAtMap[s.key] ?? null,
+        })),
+        // Keep worst session info for backward compat
+        session: worst.key, pct: worst.pct, resets_at: resetsAtMap[worst.key] ?? null,
       }, label, worst.pct)) created++
     }
 

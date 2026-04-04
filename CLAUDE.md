@@ -4,67 +4,92 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Internal dashboard for managing Claude Teams accounts. Features: seat management, usage logging (weekly percentage-based), scheduling (morning/afternoon slots), alerts (high usage, inactivity), and Telegram notifications.
+Internal dashboard for managing Claude Teams accounts. Features: seat management (per-owner credentials, AES-256-GCM encrypted OAuth), hourly schedule slots, usage snapshots (5-min cron collector), per-user alerts with FCM push + in-app feed, and Telegram notifications.
 
 ## Commands
 
 ```bash
-pnpm install          # Install all workspace dependencies
-pnpm dev              # Start both web + api in parallel
-pnpm dev:web          # Start Vite dev server only (port 5173)
-pnpm dev:api          # Start Express API only (port 8386)
-pnpm build            # Build all packages
-pnpm build:staging    # Build for staging (uses .env.staging)
-pnpm db:reset         # Drop and recreate MongoDB database with seed data
-pnpm lint             # Run ESLint
-pnpm test             # Run Vitest tests
-pnpm test:coverage    # Run tests with coverage
+pnpm install              # Install workspace deps
+pnpm dev                  # Start web + api in parallel
+pnpm dev:web              # Vite dev (port 5173)
+pnpm dev:api              # Express API (port 8386)
+pnpm build                # Build all packages
+pnpm build:staging        # Build with .env.staging
+pnpm lint                 # ESLint
+pnpm test                 # Vitest run
+pnpm test:watch           # Vitest watch mode
+pnpm test:coverage        # Tests with coverage
+pnpm -F @repo/api build   # Typecheck a single package (tsc --noEmit)
 ```
+
+Run single test file: `pnpm vitest run tests/api/auth.test.ts`
 
 ## Architecture
 
-**Monorepo** (pnpm workspaces) with 3 packages:
+**Monorepo** (pnpm workspaces, ESM everywhere) with 3 packages:
 
-### `packages/api` — Express 5 + TypeScript (ESM) backend
-- `src/index.ts` — Express app entry, CORS, cookie-parser, cron jobs (Friday 15:00 & 17:00 Asia/Saigon)
-- `src/config.ts` — env config (no dotenv — uses `tsx --env-file .env.local`)
-- `src/db.ts` — Mongoose connect/disconnect
-- `src/middleware.ts` — JWT auth (`authenticate`, `requireAdmin`, `validateObjectId`, `signToken`)
-- `src/firebase-admin.ts` — Firebase Admin SDK init
-- `src/seed-data.ts` — Seed data (runs on first startup)
-- `src/models/` — 6 Mongoose models: seat, user, usage-log, schedule, alert, team
-- `src/routes/` — 8 Express route files: auth, admin, alerts, dashboard, schedules, seats, teams, usage-log
-- `src/services/` — Business logic: alert-service, telegram-service, usage-sync-service, anthropic-service
-- `src/scripts/db-reset.ts` — Drop database + re-seed
-- Dev server: `tsx watch --env-file .env.local` on port **8386**
+### `packages/api` — Express 5 + TypeScript backend
+- `src/index.ts` — App entry, CORS, cookie-parser, node-cron jobs (5-min usage collector + hourly notifications + token refresh)
+- `src/config.ts` — env config (no dotenv; uses `tsx --env-file .env.local`)
+- `src/middleware.ts` — JWT auth (`authenticate`, `requireAdmin`, `requireSeatOwner`, `requireSeatOwnerOrAdmin`, `validateObjectId`, `signToken`)
+- `src/firebase-admin.ts` — Firebase Admin SDK init (Google ID token verification + FCM send)
+- `src/lib/encryption.ts` — AES-256-GCM encrypt/decrypt for OAuth credentials + Telegram bot tokens
+- `src/models/` — 8 Mongoose models: seat, user, usage-snapshot, schedule, alert, team, active-session, session-metric
+- `src/routes/` — 9 route files: auth, admin, alerts, dashboard, schedules, seats, teams, usage-snapshots, user-settings
+- `src/services/` — alert-service, anthropic-service, fcm-service, telegram-service, token-refresh-service, usage-collector-service, vietnam-holidays
+- Dev: `tsx watch --env-file .env.local` on port **8386**
 
 ### `packages/web` — Vite + React 19 + React Router v7 SPA
-- `src/main.tsx` — Entry point
-- `src/app.tsx` — React Router layout (BrowserRouter + QueryClientProvider)
-- `src/pages/` — 8 page components: dashboard, seats, teams, schedule, alerts, log-usage, admin, login
-- `src/components/` — Flat component directory (shadcn/ui in `ui/`, 20+ feature components at root)
-- `src/hooks/` — 9 React Query hooks (use-auth, use-seats, use-teams, use-dashboard, use-alerts, use-schedules, use-usage-log, use-admin, use-mobile)
+- `src/app.tsx` — BrowserRouter + QueryClientProvider + FCM setup
+- `src/pages/` — 9 pages: dashboard, seats, teams, schedule, alerts, usage, admin, login, settings
+- `src/components/` — flat directory (shadcn/ui in `ui/`, 20+ feature components at root)
+- `src/hooks/` — 11 React Query hooks: use-auth, use-seats, use-teams, use-dashboard, use-alerts, use-schedules, use-usage-snapshots, use-user-settings, use-admin, use-fcm, use-mobile
 - `src/lib/` — api-client, firebase-client, theme, utils
-- `vite.config.ts` — Proxy `/api` → `http://localhost:8386` (configurable via `VITE_API_URL`)
-- UI: Tailwind CSS v4 (`@tailwindcss/vite`), Recharts for charts, Lucide icons, dnd-kit for drag-and-drop
+- `vite.config.ts` — proxies `/api` → `http://localhost:8386` (override via `VITE_API_URL`)
+- UI: Tailwind CSS v4 (`@tailwindcss/vite`), Recharts, Lucide, dnd-kit
 
-### `packages/shared` — Shared TypeScript types
-- `types.ts` — API types used by both web and api
+### `packages/shared` — Shared code used by both web + api
+- `types.ts` — API DTOs
+- `schedule-permissions.ts` — **pure permission resolver** (no DB calls, runs in both Node + browser). Single source of truth for schedule edit/delete/swap/clear authorization. Always use this instead of re-implementing permission logic.
 
-**Database collections:** seats, users, usage_logs, schedules, alerts, teams
+**MongoDB collections:** seats, users, usage_snapshots, schedules, alerts, teams, active_sessions, session_metrics
 
 ## Auth Flow
 
-1. Client signs in with Google via Firebase client SDK → gets `idToken`
-2. POST `/api/auth/google` with `idToken` → API verifies via Firebase Admin → issues JWT cookie (24h)
-3. Subsequent requests authenticated via `authenticate` middleware (reads cookie or Bearer token)
-4. Admin actions gated by `requireAdmin` middleware
-5. Vite dev server proxies `/api` requests to Express backend
+1. Client signs in with Google via Firebase client SDK → `idToken`
+2. `POST /api/auth/google` verifies via Firebase Admin → **auto-provisions user** (role=`user`) if email not found → issues JWT httpOnly cookie (24h)
+3. Subsequent requests authenticated via `authenticate` middleware (cookie or Bearer token)
+4. Admin actions gated by `requireAdmin`; seat-scoped actions gated by `requireSeatOwner` / `requireSeatOwnerOrAdmin`
+5. Admin has all permissions EXCEPT exporting OAuth credentials of seats they don't own
+
+Any Google account can log in. Admin role must be granted manually (DB flip).
+
+## Key Domain Rules
+
+- **Alerts are per-user** (each user configures `alert_settings.rate_limit_pct`, `extra_credit_pct`, `watched_seat_ids`). No global alert config.
+- **Seat credentials are encrypted at rest** via `lib/encryption.ts` AES-256-GCM. Same for personal Telegram bot tokens.
+- **User Telegram bots are per-user** (hourly personal reminders on schedule match); system bot is used for Friday 17:00 weekly summary.
+- **Schedule permissions** — always resolve via `@repo/shared/schedule-permissions.resolveSchedulePermissions()`. Rules: admin has all, seat owner can create/swap/edit-for-others, members can self-edit, clearAll is admin-only.
+- **Usage collection runs every 5 min** via cron; snapshots stored in `usage_snapshots`. Session metrics track active budgets.
+
+## Testing
+
+- Vitest workspace with two environments: `tests/setup.ts` (node), `tests/setup-jsdom.ts` (browser/React).
+- `tests/api/` — API route + service tests (use in-memory Mongo via `tests/helpers/db-helper.ts`)
+- `tests/hooks/` + `tests/ui/` — React hooks + components (jsdom)
+- `tests/services/` — service logic
 
 ## Environment Variables
 
-Each package has its own `.env.local`. See `packages/api/.env.example` and `packages/web/.env.example`.
+Each package has its own `.env.local` (see `.env.example`).
 
-**API (`packages/api/.env.local`):** `JWT_SECRET`, `MONGO_URI`, `FIREBASE_SERVICE_ACCOUNT_PATH`, `API_PORT` (default 8386), `WEB_URL`, `TELEGRAM_BOT_TOKEN/CHAT_ID/TOPIC_ID`, `ANTHROPIC_BASE_URL/ADMIN_KEY/VERSION`
+**API (`packages/api/.env.local`):** `JWT_SECRET`, `MONGO_URI`, `FIREBASE_SERVICE_ACCOUNT_PATH`, `API_PORT` (default 8386), `WEB_URL`, `ENCRYPTION_KEY` (32 bytes hex for AES-256-GCM), `TELEGRAM_BOT_TOKEN/CHAT_ID/TOPIC_ID` (system bot), `ANTHROPIC_BASE_URL/ADMIN_KEY/VERSION`
 
-**Web (`packages/web/.env.local`):** `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_API_URL`
+**Web (`packages/web/.env.local`):** `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_VAPID_KEY` (FCM web push), `VITE_API_URL`
+
+## Conventions
+
+- **Module system:** ESM (`"type": "module"`) — import paths need `.js` extension in TS source.
+- **File size:** keep < 200 LOC; split when exceeded.
+- **File naming:** kebab-case, descriptive (LLM-friendly).
+- **Commits:** conventional commits, no AI references, no `chore`/`docs` prefix for `.claude/` changes.

@@ -47,10 +47,6 @@ async function start() {
 
   await connectDb()
 
-  // Seed data on first run
-  const { initializeDb } = await import('./seed-data.js')
-  await initializeDb()
-
   // Cron: every hour — check per-user notification schedules
   cron.schedule('0 * * * *', () => {
     console.log('[Cron] Checking scheduled reports...')

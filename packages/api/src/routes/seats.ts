@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
-import { authenticate, requireAdmin, requireSeatOwnerOrAdmin, validateObjectId } from '../middleware.js'
+import { authenticate, requireAdmin, requireSeatOwner, requireSeatOwnerOrAdmin, validateObjectId } from '../middleware.js'
 import { Seat } from '../models/seat.js'
-import { encrypt, decrypt } from '../services/crypto-service.js'
+import { encrypt, decrypt } from '../lib/encryption.js'
 import { User } from '../models/user.js'
 import { Schedule } from '../models/schedule.js'
 
@@ -73,7 +73,7 @@ router.get('/', authenticate, async (_req, res) => {
           : null,
         has_token: !!seat.token_active,
         users: (usersBySeat[String(seat._id)] || []).map((u) => ({
-          _id: u._id,
+          id: String(u._id),
           name: u.name,
           email: u.email,
           team: u.team ?? seat.team,
@@ -108,39 +108,8 @@ router.get('/available-users', authenticate, async (_req, res) => {
   }
 })
 
-// GET /api/seats/credentials/export — export all seats' decrypted credentials (admin)
-// Must be before /:id routes to avoid param matching
-router.get('/credentials/export', authenticate, requireAdmin, async (req, res) => {
-  try {
-    console.log(`[AUDIT] Credential export by user=${req.user!.email} ip=${req.ip} at ${new Date().toISOString()}`)
-
-    const seats = await Seat.find({ token_active: true }).select('+oauth_credential').lean()
-    const credentials = seats
-      .filter((s) => s.oauth_credential?.access_token)
-      .map((s) => {
-        const cred = s.oauth_credential!
-        return {
-          seat_label: s.label,
-          seat_email: s.email,
-          claudeAiOauth: {
-            accessToken: cred.access_token ? decrypt(cred.access_token) : null,
-            refreshToken: cred.refresh_token ? decrypt(cred.refresh_token) : null,
-            expiresAt: cred.expires_at ? new Date(cred.expires_at).getTime() : null,
-            scopes: cred.scopes ?? [],
-            subscriptionType: cred.subscription_type ?? null,
-            rateLimitTier: cred.rate_limit_tier ?? null,
-          },
-        }
-      })
-    res.json({ credentials })
-  } catch (error) {
-    console.error('[Credential Export] Failed:', error)
-    res.status(500).json({ error: 'Credential export failed' })
-  }
-})
-
-// GET /api/seats/:id/credentials/export — export single seat credential (owner or admin)
-router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
+// GET /api/seats/:id/credentials/export — export single seat credential (owner only)
+router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requireSeatOwner(), async (req, res) => {
   try {
     console.log(`[AUDIT] Single credential export seat=${req.params.id} by user=${req.user!.email} ip=${req.ip} at ${new Date().toISOString()}`)
 

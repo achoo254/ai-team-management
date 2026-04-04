@@ -22,7 +22,8 @@ interface Props {
   schedules: ScheduleEntry[];
   seats: SeatWithUsers[];
   activeSeatId: string | null;
-  isAdmin: boolean;
+  canCreate: boolean;
+  canEditEntry: (entry: ScheduleEntry) => boolean;
   onDelete: (id: string) => void;
   onEdit: (entry: ScheduleEntry) => void;
   onResize: (entryId: string, newEndHour: number) => void;
@@ -33,8 +34,8 @@ interface Props {
 export { WEEKDAYS, WEEKEND };
 
 /** Droppable hour cell wrapper */
-function DroppableHourCell({ dayOfWeek, hour, isAdmin, isEmpty, onClickSlot, children }: {
-  dayOfWeek: number; hour: number; isAdmin: boolean; isEmpty: boolean;
+function DroppableHourCell({ dayOfWeek, hour, canCreate, isEmpty, onClickSlot, children }: {
+  dayOfWeek: number; hour: number; canCreate: boolean; isEmpty: boolean;
   onClickSlot: (d: number, h: number) => void; children: React.ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -47,17 +48,17 @@ function DroppableHourCell({ dayOfWeek, hour, isAdmin, isEmpty, onClickSlot, chi
       ref={setNodeRef}
       className={`border-b border-l border-border relative cursor-pointer transition-colors ${isOver ? "bg-primary/10" : "hover:bg-muted/30"}`}
       style={{ height: `${ROW_H}px` }}
-      onClick={() => { if (isAdmin && isEmpty) onClickSlot(dayOfWeek, hour); }}
+      onClick={() => { if (canCreate && isEmpty) onClickSlot(dayOfWeek, hour); }}
     >
       {children}
-      {isAdmin && isEmpty && !isOver && (
+      {canCreate && isEmpty && !isOver && (
         <span className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground opacity-0 hover:opacity-100 transition-opacity">+</span>
       )}
     </div>
   );
 }
 
-export function ScheduleGrid({ schedules, seats, activeSeatId, isAdmin, onDelete, onEdit, onResize, onClickSlot, showWeekend }: Props) {
+export function ScheduleGrid({ schedules, seats, activeSeatId, canCreate, canEditEntry, onDelete, onEdit, onResize, onClickSlot, showWeekend }: Props) {
   const DAYS = showWeekend ? WEEKEND : WEEKDAYS;
 
   const seatSchedules = activeSeatId
@@ -101,7 +102,7 @@ export function ScheduleGrid({ schedules, seats, activeSeatId, isAdmin, onDelete
                   key={`${d.day}-${hour}`}
                   dayOfWeek={d.day}
                   hour={hour}
-                  isAdmin={isAdmin}
+                  canCreate={canCreate}
                   isEmpty={isEmpty}
                   onClickSlot={onClickSlot}
                 >
@@ -110,7 +111,7 @@ export function ScheduleGrid({ schedules, seats, activeSeatId, isAdmin, onDelete
                       key={entry._id}
                       entry={entry}
                       span={entry.end_hour - entry.start_hour}
-                      isAdmin={isAdmin}
+                      canEdit={canEditEntry(entry)}
                       onDelete={onDelete}
                       onEdit={onEdit}
                       onResize={onResize}

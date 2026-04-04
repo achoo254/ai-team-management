@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import mongoose from 'mongoose'
 import { authenticate } from '../middleware.js'
 import { Seat } from '../models/seat.js'
 import { User } from '../models/user.js'
@@ -34,6 +35,16 @@ router.get('/summary', async (_req, res) => {
   }
 })
 
+/** Parse comma-separated seatIds query param into ObjectId array (ignores invalid ids) */
+function parseSeatIds(raw: unknown): mongoose.Types.ObjectId[] | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  const objectIds = ids
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id))
+  return objectIds.length > 0 ? objectIds : null
+}
+
 // Range → milliseconds lookup for trend chart date filter
 const RANGE_MS: Record<string, number> = {
   day: 1 * 24 * 60 * 60 * 1000,
@@ -50,6 +61,9 @@ router.get('/enhanced', async (req, res) => {
     const range = typeof req.query.range === 'string' && RANGE_MS[req.query.range]
       ? req.query.range
       : 'month'
+    const seatIdFilter = parseSeatIds(req.query.seatIds)
+    const seatMatch = seatIdFilter ? { _id: { $in: seatIdFilter } } : {}
+    const seatIdMatch = seatIdFilter ? { seat_id: { $in: seatIdFilter } } : {}
     const dayOfWeek = new Date().getDay()
 
     // User/seat counts
@@ -77,7 +91,7 @@ router.get('/enhanced', async (req, res) => {
 
     // Seats with unresolved usage_exceeded alerts (for OVER BUDGET badge)
     const budgetAlerts = await Alert.find(
-      { type: 'usage_exceeded', resolved: false },
+      { type: 'usage_exceeded', resolved: false, ...seatIdMatch },
       'seat_id metadata',
     ).lean()
     const overBudgetSeats = budgetAlerts.map((a) => ({
@@ -88,6 +102,7 @@ router.get('/enhanced', async (req, res) => {
 
     // Latest snapshot per seat with model-specific data, reset times, extra_usage
     const latestSnapshots = await UsageSnapshot.aggregate([
+      ...(seatIdFilter ? [{ $match: seatIdMatch }] : []),
       { $sort: { fetched_at: -1 } },
       { $group: {
         _id: '$seat_id',
@@ -103,7 +118,7 @@ router.get('/enhanced', async (req, res) => {
     ])
     const snapshotMap = new Map(latestSnapshots.map(s => [String(s._id), s]))
 
-    const seats = await Seat.find().sort({ _id: 1 }).lean()
+    const seats = await Seat.find(seatMatch).sort({ _id: 1 }).lean()
 
     // Map seat _id → active user names
     const activeUsers_ = await User.find(
@@ -146,7 +161,7 @@ router.get('/enhanced', async (req, res) => {
     // For "day" range, group by hour instead of day for more granular view
     const dateGroupFormat = range === 'day' ? '%Y-%m-%d %H:00' : '%Y-%m-%d'
     const usageTrend = await UsageSnapshot.aggregate([
-      { $match: { fetched_at: { $gte: rangeStart } } },
+      { $match: { fetched_at: { $gte: rangeStart }, ...seatIdMatch } },
       { $group: {
         _id: { $dateToString: { format: dateGroupFormat, date: '$fetched_at', timezone: 'Asia/Ho_Chi_Minh' } },
         avg_7d_pct: { $avg: { $ifNull: ['$seven_day_pct', null] } },
@@ -258,7 +273,12 @@ router.get('/efficiency', async (req, res) => {
   try {
     const rangeMs = RANGE_MS[typeof req.query.range === 'string' ? req.query.range : 'month'] ?? RANGE_MS.month
     const rangeStart = new Date(Date.now() - rangeMs)
-    const seatFilter = req.query.seatId ? { seat_id: req.query.seatId } : {}
+    const seatIdFilter = parseSeatIds(req.query.seatIds)
+    const seatFilter: Record<string, unknown> = seatIdFilter
+      ? { seat_id: { $in: seatIdFilter } }
+      : req.query.seatId
+        ? { seat_id: req.query.seatId }
+        : {}
 
     // 1. Aggregated metrics from SessionMetric
     const metrics = await SessionMetric.aggregate([

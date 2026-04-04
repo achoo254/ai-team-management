@@ -34,9 +34,6 @@ quan-ly-team-claude/
 │   │   │   │   ├── telegram-service.ts
 │   │   │   │   ├── crypto-service.ts  # AES-256-GCM encryption/decryption
 │   │   │   │   └── usage-collector-service.ts # Collect usage from Anthropic API
-│   │   │   ├── scripts/
-│   │   │   │   └── db-reset.ts      # Drop MongoDB + re-seed
-│   │   │   └── seed-data.ts         # Seed data definitions
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── dist/                    # Compiled output (gitignored)
@@ -71,9 +68,10 @@ quan-ly-team-claude/
 │   │   ├── tsconfig.json
 │   │   └── dist/                    # Built output (gitignored)
 │   │
-│   └── shared/                      # Shared TypeScript types
+│   └── shared/                      # Shared TypeScript types & utilities
 │       ├── src/
-│       │   └── types.ts             # Exported types for API/Web
+│       │   ├── types.ts                    # Exported types for API/Web (+ SchedulePermissions interface)
+│       │   └── schedule-permissions.ts    # Pure permission resolver function (resolveSchedulePermissions)
 │       ├── package.json
 │       └── tsconfig.json
 │
@@ -129,7 +127,20 @@ quan-ly-team-claude/
   email: String (required, unique),
   label: String (required),
   team: String (enum: ['dev', 'mkt']),
+  owner_id: ObjectId | null (reference to User, index: true),
   max_users: Number (default: 3),
+  oauth_credential: {
+    access_token: String | null (encrypted AES-256-GCM),
+    refresh_token: String | null (encrypted),
+    expires_at: Date | null,
+    scopes: [String],
+    subscription_type: String | null,
+    rate_limit_tier: String | null
+  } | null,
+  token_active: Boolean,
+  last_fetched_at: Date | null,
+  last_fetch_error: String | null,
+  last_refreshed_at: Date | null,
   created_at: Date (auto)
 }
 ```
@@ -142,15 +153,21 @@ quan-ly-team-claude/
   email: String (unique),
   role: String (enum: ['admin', 'user']),
   team: String (enum: ['dev', 'mkt']),
-  seat_id: ObjectId (reference to Seat),
+  seat_ids: [ObjectId] (reference to Seat),
   active: Boolean (default: true),
   telegram_bot_token: String | null (encrypted AES-256-GCM),
   telegram_chat_id: String | null,
+  telegram_topic_id: String | null,
+  watched_seat_ids: [ObjectId] (seats user subscribed to for alerts),
   notification_settings: {
     report_enabled: Boolean (default: false),
     report_days: [Number] (default: [5] = Friday),
-    report_hour: Number (0-23, default: 8),
-    report_scope: String (enum: ['own', 'all'], default: 'own')
+    report_hour: Number (0-23, default: 8)
+  } | null,
+  alert_settings: {
+    enabled: Boolean (default: false),
+    rate_limit_pct: Number (default: 80),
+    extra_credit_pct: Number (default: 80)
   } | null,
   created_at: Date (auto)
 }
@@ -163,9 +180,24 @@ quan-ly-team-claude/
   seat_id: ObjectId (reference to Seat),
   user_id: ObjectId (reference to User),
   day_of_week: Number (0-6),
-  slot: String (enum: ['morning', 'afternoon']),
+  start_hour: Number (0-23, inclusive),
+  end_hour: Number (0-23, exclusive),
+  usage_budget_pct: Number | null (1-100, null = auto-divide),
   created_at: Date (auto),
-  // Unique compound index: (seat_id, day_of_week, slot)
+  // Compound index: (seat_id, day_of_week)
+}
+```
+
+#### SchedulePermissions (shared/types.ts)
+```typescript
+{
+  canView: boolean,
+  canCreate: boolean,
+  canCreateForOthers: boolean,
+  canSwap: boolean,
+  canClearAll: boolean,
+  canEditEntry: (entry: { user_id: string }) => boolean,
+  canDeleteEntry: (entry: { user_id: string }) => boolean
 }
 ```
 
@@ -174,9 +206,9 @@ quan-ly-team-claude/
 {
   _id: ObjectId (auto),
   seat_id: ObjectId (reference to Seat),
-  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded']),
+  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk']),
   message: String,
-  metadata: Object (optional: window, pct, credits_used, error, delta, budget, user_id, user_name),
+  metadata: Object (optional: session, pct, credits_used, error, delta, budget, user_id, user_name),
   resolved: Boolean (default: false),
   resolved_by: String | null,
   resolved_at: String | null,
@@ -235,13 +267,17 @@ quan-ly-team-claude/
 - `GET /api/dashboard/alerts` — Recent alerts
 
 ### Seats
-- `GET /api/seats` — List all seats
-- `GET /api/seats/:id` — Get seat details + users
-- `POST /api/seats` — Create seat (admin only)
-- `PUT /api/seats/:id` — Update seat (admin only)
-- `DELETE /api/seats/:id` — Delete seat (admin only)
-- `PUT /api/seats/:id/token` — Set/update access token (admin only)
-- `DELETE /api/seats/:id/token` — Remove access token (admin only)
+- `GET /api/seats` — List all seats with owner + assigned users
+- `GET /api/seats/available-users` — List active users for assignment
+- `GET /api/seats/:id/credentials/export` — Export single seat credentials (owner or admin)
+- `POST /api/seats` — Create seat (auto-sets owner to current user)
+- `PUT /api/seats/:id` — Update seat (owner or admin)
+- `DELETE /api/seats/:id` — Delete seat (owner or admin)
+- `POST /api/seats/:id/assign` — Assign user to seat (owner or admin)
+- `DELETE /api/seats/:id/unassign/:userId` — Unassign user (owner or admin)
+- `PUT /api/seats/:id/token` — Set/update access token (owner or admin)
+- `DELETE /api/seats/:id/token` — Remove access token (owner or admin)
+- `PUT /api/seats/:id/transfer` — Transfer seat ownership (admin only)
 
 ### Users
 - `GET /api/admin/users` — List users (admin only)
@@ -249,10 +285,13 @@ quan-ly-team-claude/
 - `PUT /api/admin/users/:id` — Update user (admin only)
 - `DELETE /api/admin/users/:id` — Delete user (admin only)
 
-### Schedules
-- `GET /api/schedules/:seatId` — Get seat schedules
-- `POST /api/schedules` — Create schedule
-- `DELETE /api/schedules/:id` — Delete schedule (admin only)
+### Schedules (Permission-Based Access Control)
+- `GET /api/schedules` — List schedules with optional ?seatId= filter (filtered by membership + ownership)
+- `GET /api/schedules/today` — Today's schedules (filtered by membership + ownership)
+- `POST /api/schedules/entry` — Create schedule entry (uses permission: canCreate + canCreateForOthers for others)
+- `PUT /api/schedules/entry/:id` — Update entry (uses permission: canEditEntry)
+- `PATCH /api/schedules/swap` — Swap or move entries (uses permission: canSwap)
+- `DELETE /api/schedules/entry/:id` — Delete entry (uses permission: canDeleteEntry)
 
 ### Usage Snapshots
 - `GET /api/usage-snapshots` — Query snapshots (filter by seatId, date range, limit, offset)
@@ -269,6 +308,7 @@ quan-ly-team-claude/
 - `GET /api/user/settings` — Get user's alert + notification settings, Telegram bot config, available seats
 - `PUT /api/user/settings` — Set bot token, chat ID, notification schedule, alert settings (per-seat subscriptions + thresholds)
 - `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
+- `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
 
 ### Teams
 - `GET /api/teams` — List teams
@@ -276,11 +316,12 @@ quan-ly-team-claude/
 - `PUT /api/teams/:id` — Update team (admin only)
 
 ### Admin
-- `GET /api/admin/users` — List all users
-- `POST /api/admin/users` — Create user
-- `PUT /api/admin/users/:id` — Update user
-- `DELETE /api/admin/users/:id` — Delete user
-- `POST /api/admin/seed-data` — Reset database (dev only)
+- `GET /api/admin/users` — List all users (admin only)
+- `POST /api/admin/users` — Create user (admin only)
+- `PUT /api/admin/users/:id` — Update user (admin only)
+- `DELETE /api/admin/users/:id` — Delete user (admin only)
+- `PATCH /api/admin/users/bulk-active` — Bulk update active status (admin only)
+- `POST /api/admin/check-alerts` — Manually trigger alert check (admin only)
 
 ## Frontend Architecture (packages/web)
 
@@ -313,16 +354,17 @@ quan-ly-team-claude/
 
 ## Cron Jobs
 
-### Every 30 minutes (Usage Collection & Alert Check)
+### Every 5 minutes (Usage Collection & Alert Check)
 - Collects usage metrics from Anthropic API for all seats with active tokens
 - Called via `collectAllUsage()` in usage-collector-service.ts
 - Stores snapshots in usage_snapshots collection (TTL: 90 days)
-- Chains `checkSnapshotAlerts()` to evaluate alerts immediately after collection
+- Chains `checkSnapshotAlerts()` to evaluate snapshot-based alerts (rate_limit, extra_credit, token_failure)
+- Chains `checkBudgetAlerts()` to evaluate per-user session budgets (usage_exceeded)
 
 ### Every hour (`0 * * * *`) — Per-User Notification Schedule
 - Checks all users with `notification_settings.report_enabled = true`
 - Filters for users matching current day/hour (timezone: Asia/Ho_Chi_Minh)
-- Generates per-user report filtered by seat ownership (`scope='own'` or `'all'`)
+- Generates per-user report filtered by seat ownership (admin sees all, users see own)
 - Sends via personal Telegram bot (gracefully skips if unconfigured)
 - Called via `checkAndSendScheduledReports()` in telegram-service.ts
 

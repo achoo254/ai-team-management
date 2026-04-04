@@ -14,18 +14,22 @@ export function BotSettingsForm() {
 
   const [token, setToken] = useState("");
   const [chatId, setChatId] = useState("");
+  const [topicId, setTopicId] = useState("");
   const [dirty, setDirty] = useState(false);
 
-  // Sync chat ID from server when loaded
+  // Sync from server when loaded
   const serverChatId = settings?.telegram_chat_id ?? "";
-  if (!dirty && chatId !== serverChatId && settings) {
-    setChatId(serverChatId);
+  const serverTopicId = settings?.telegram_topic_id ?? "";
+  if (!dirty && settings) {
+    if (chatId !== serverChatId) setChatId(serverChatId);
+    if (topicId !== serverTopicId) setTopicId(serverTopicId);
   }
 
   function handleSave() {
-    const body: { telegram_bot_token?: string | null; telegram_chat_id?: string | null } = {};
+    const body: { telegram_bot_token?: string | null; telegram_chat_id?: string | null; telegram_topic_id?: string | null } = {};
     if (token) body.telegram_bot_token = token;
     body.telegram_chat_id = chatId || null;
+    body.telegram_topic_id = topicId || null;
     updateMutation.mutate(body, {
       onSuccess: () => { setToken(""); setDirty(false); },
     });
@@ -33,8 +37,8 @@ export function BotSettingsForm() {
 
   function handleClear() {
     updateMutation.mutate(
-      { telegram_bot_token: "", telegram_chat_id: null },
-      { onSuccess: () => { setToken(""); setChatId(""); setDirty(false); } },
+      { telegram_bot_token: "", telegram_chat_id: null, telegram_topic_id: null },
+      { onSuccess: () => { setToken(""); setChatId(""); setTopicId(""); setDirty(false); } },
     );
   }
 
@@ -63,13 +67,23 @@ export function BotSettingsForm() {
             onChange={(e) => { setToken(e.target.value); setDirty(true); }}
           />
         </div>
-        <div>
-          <Label className="text-xs">Chat ID</Label>
-          <Input
-            placeholder="Số chat ID cá nhân"
-            value={chatId}
-            onChange={(e) => { setChatId(e.target.value); setDirty(true); }}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">Chat ID</Label>
+            <Input
+              placeholder="Số chat ID"
+              value={chatId}
+              onChange={(e) => { setChatId(e.target.value); setDirty(true); }}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Topic ID <span className="text-muted-foreground">(tuỳ chọn)</span></Label>
+            <Input
+              placeholder="Message thread ID"
+              value={topicId}
+              onChange={(e) => { setTopicId(e.target.value); setDirty(true); }}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending || (!token && !dirty)}>

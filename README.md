@@ -28,12 +28,7 @@ cp packages/web/.env.example packages/web/.env.local
 
 3. Điền các biến môi trường bắt buộc (xem phần Biến môi trường bên dưới).
 
-4. Reset database với dữ liệu mẫu:
-```bash
-pnpm db:reset
-```
-
-5. Khởi động server phát triển:
+4. Khởi động server phát triển:
 ```bash
 pnpm dev
 ```
@@ -54,7 +49,6 @@ pnpm dev
 | `pnpm lint` | Chạy ESLint |
 | `pnpm test` | Chạy Vitest tests |
 | `pnpm test:coverage` | Chạy tests với coverage |
-| `pnpm db:reset` | Xoá MongoDB + seed lại dữ liệu mẫu |
 
 ## Công nghệ
 
@@ -129,12 +123,13 @@ packages/
 ### Cơ sở dữ liệu (MongoDB)
 ```
 Collections:
-  - seats: Tài khoản Claude Teams
-  - users: Thành viên và phân công
-  - usage_logs: Phần trăm sử dụng hàng tuần
-  - schedules: Phân lịch theo khung giờ (ngày + sáng/chiều)
-  - alerts: Thông báo sử dụng cao & không hoạt động
+  - seats: Tài khoản Claude Teams (owner_id, oauth_credential)
+  - users: Thành viên, alert_settings, notification_settings
+  - usage_snapshots: Chụp mức sử dụng định kỳ
+  - schedules: Phân lịch theo khung giờ (ngày + start_hour/end_hour)
+  - alerts: Thông báo sử dụng cao & lỗi token
   - teams: Định nghĩa đội nhóm
+  - active_sessions: Session đang chạy (tracking budget)
 ```
 
 ## Cấu trúc dự án
@@ -149,11 +144,9 @@ ai-team-management/
 │   │   │   ├── db.ts                  # Mongoose connection
 │   │   │   ├── middleware.ts           # JWT auth, role checks
 │   │   │   ├── firebase-admin.ts      # Firebase Admin SDK
-│   │   │   ├── seed-data.ts           # Database seed data
-│   │   │   ├── models/                # 6 Mongoose models
+│   │   │   ├── models/                # 8 Mongoose models
 │   │   │   ├── routes/                # 8 REST route files
-│   │   │   ├── services/              # Business logic (4 services)
-│   │   │   └── scripts/db-reset.ts    # DB reset utility
+│   │   │   └── services/              # Business logic (5 services)
 │   │   └── .env.example
 │   │
 │   ├── web/                           # Vite + React 19 SPA
@@ -186,25 +179,23 @@ Tạo, cập nhật và xoá seat Claude Teams. Phân công vào nhóm. Theo dõ
 ### Ghi nhận mức sử dụng
 Người dùng ghi nhận phần trăm sử dụng hàng tuần (0-100%) cho tất cả model và chi tiết từng model. Lưu trữ theo người dùng theo tuần.
 
-### Lịch trình
-Phân lịch khung giờ sáng (8:00-12:00) và chiều (13:00-17:00). Gán người dùng theo ngày + khung giờ. Ngăn trùng lịch trên cùng seat.
+### Lịch trình Theo Giờ
+Phân lịch khung giờ linh hoạt (start_hour → end_hour). Gán người dùng theo ngày + giờ. Phân bổ budget sử dụng. Ngăn trùng lịch trên cùng seat.
 
-### Cảnh báo
-Tự động cảnh báo khi sử dụng cao (>80%) hoặc không hoạt động (>1 tuần). Admin có thể tạo, xem và giải quyết cảnh báo.
+### Cảnh báo Thời Gian Thực & Cài Đặt Per-User
+Mỗi người dùng cấu hình ngưỡng cảnh báo riêng (rate_limit_pct, extra_credit_pct). Theo dõi seats cụ thể (watched_seat_ids). Tự động cảnh báo sử dụng cao, lỗi token, vượt budget.
 
-### Thông báo Telegram
-- **Thứ 6 15:00**: Nhắc ghi nhận mức sử dụng tuần qua
-- **Thứ 6 17:00**: Tổng kết tuần với thống kê và cảnh báo
+### Thông báo Telegram Per-User
+- **Mỗi giờ**: Báo cáo cho người dùng nếu trùng lịch (personal bot, được mã hóa)
+- **Thứ 6 17:00**: Tổng kết tuần (system bot)
 
-### Xác thực
-Đăng nhập Google qua Firebase. Server xác minh và cấp JWT cookie (hết hạn 24h). Tất cả endpoint yêu cầu xác thực; thao tác admin yêu cầu quyền admin.
+### Quản lý Seat với Quyền Sở Hữu
+Tạo, cập nhật, xoá seat. Chủ seat quản lý chi tiết, admin quản lý toàn bộ (ngoại trừ xuất credential của seat người khác).
+
+### Xác thực & Phân Quyền
+Đăng nhập Google qua Firebase. JWT cookie (24h). Admin có tất cả quyền người dùng NGOẠI TRỪ xuất credential của seat người khác.
 
 ## Tác vụ thường dùng
-
-### Reset Database
-```bash
-pnpm db:reset
-```
 
 ### Chạy dev server
 ```bash
