@@ -1,6 +1,6 @@
 ---
 title: Per-User Notification Schedule
-status: pending
+status: complete
 created: 2026-04-04
 blockedBy: []
 blocks: []
@@ -21,10 +21,10 @@ Replace fixed Friday 08:00 cron report with per-user configurable notification s
 
 | # | Phase | Status | Priority | Effort |
 |---|-------|--------|----------|--------|
-| 1 | [Schema + API](phase-01-schema-api.md) | pending | critical | small |
-| 2 | [Cron + Report Logic](phase-02-cron-report.md) | pending | critical | medium |
-| 3 | [Frontend Settings UI](phase-03-frontend-settings.md) | pending | high | small |
-| 4 | [Cleanup + Testing](phase-04-cleanup-testing.md) | pending | high | small |
+| 1 | [Schema + API](phase-01-schema-api.md) | complete | critical | small |
+| 2 | [Cron + Report Logic](phase-02-cron-report.md) | complete | critical | medium |
+| 3 | [Frontend Settings UI](phase-03-frontend-settings.md) | complete | high | small |
+| 4 | [Cleanup + Testing](phase-04-cleanup-testing.md) | complete | high | small |
 
 ## Key Files
 

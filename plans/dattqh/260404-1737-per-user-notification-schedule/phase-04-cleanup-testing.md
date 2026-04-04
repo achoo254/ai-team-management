@@ -2,7 +2,7 @@
 
 ## Overview
 - **Priority:** High
-- **Status:** Pending
+- **Status:** Complete
 - **Effort:** Small
 
 Remove dead code, build check, verify integration.
@@ -35,11 +35,11 @@ pnpm test
 - Verify hourly cron runs checkAndSendScheduledReports
 
 ## Todo
-- [ ] Remove dead code/imports
-- [ ] Build passes
-- [ ] Lint passes
-- [ ] Tests pass
-- [ ] Manual API test for notification_settings CRUD
+- [x] Remove dead code/imports
+- [x] Build passes
+- [x] Lint passes
+- [x] Tests pass
+- [x] Manual API test for notification_settings CRUD
 
 ## Success Criteria
 - Clean build

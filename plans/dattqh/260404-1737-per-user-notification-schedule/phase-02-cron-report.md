@@ -2,7 +2,7 @@
 
 ## Overview
 - **Priority:** Critical
-- **Status:** Pending
+- **Status:** Complete
 - **Effort:** Medium
 
 Replace fixed Friday cron with hourly check. Build per-user report filtered by seat ownership.
@@ -110,12 +110,12 @@ function buildReportHtml(seats, snapMap, usersBySeat, teamLabels): string {
 ```
 
 ## Todo
-- [ ] Extract `buildReportHtml()` helper from sendWeeklyReport
-- [ ] Create `sendUserReport(userId, scope)` function
-- [ ] Create `checkAndSendScheduledReports()` function
-- [ ] Replace fixed cron with hourly schedule check
-- [ ] Keep sendWeeklyReport for admin manual trigger
-- [ ] Test with matching schedule
+- [x] Extract `buildReportHtml()` helper from sendWeeklyReport
+- [x] Create `sendUserReport(userId, scope)` function
+- [x] Create `checkAndSendScheduledReports()` function
+- [x] Replace fixed cron with hourly schedule check
+- [x] Keep sendWeeklyReport for admin manual trigger
+- [x] Test with matching schedule
 
 ## Success Criteria
 - User with enabled schedule receives report at configured day/hour

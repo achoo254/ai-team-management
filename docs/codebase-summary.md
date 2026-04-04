@@ -105,8 +105,8 @@ quan-ly-team-claude/
 | **Auth** | Firebase Admin SDK + JWT (jsonwebtoken) |
 | **Data Fetching** | React Query (TanStack Query) |
 | **Styling** | Tailwind CSS 4 + Base UI |
-| **Async Jobs** | node-cron (Friday reminders) |
-| **Notifications** | Telegram Bot API |
+| **Async Jobs** | node-cron (hourly scheduler + weekly report) |
+| **Notifications** | Telegram Bot API (system + personal bot) |
 | **Testing** | Vitest |
 
 ## Module System
@@ -143,6 +143,14 @@ quan-ly-team-claude/
   team: String (enum: ['dev', 'mkt']),
   seat_id: ObjectId (reference to Seat),
   active: Boolean (default: true),
+  telegram_bot_token: String | null (encrypted AES-256-GCM),
+  telegram_chat_id: String | null,
+  notification_settings: {
+    report_enabled: Boolean (default: false),
+    report_days: [Number] (default: [5] = Friday),
+    report_hour: Number (0-23, default: 8),
+    report_scope: String (enum: ['own', 'all'], default: 'own')
+  } | null,
   created_at: Date (auto)
 }
 ```
@@ -260,6 +268,11 @@ quan-ly-team-claude/
 - `GET /api/settings` — Get alert thresholds (authenticated)
 - `PUT /api/settings` — Update alert thresholds (admin only)
 
+### User Settings
+- `GET /api/user/settings` — Get user's Telegram bot config + notification settings
+- `PUT /api/user/settings` — Set bot token, chat ID, notification schedule
+- `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
+
 ### Teams
 - `GET /api/teams` — List teams
 - `POST /api/teams` — Create team (admin only)
@@ -309,10 +322,17 @@ quan-ly-team-claude/
 - Stores snapshots in usage_snapshots collection (TTL: 90 days)
 - Chains `checkSnapshotAlerts()` to evaluate alerts immediately after collection
 
+### Every hour (`0 * * * *`) — Per-User Notification Schedule
+- Checks all users with `notification_settings.report_enabled = true`
+- Filters for users matching current day/hour (timezone: Asia/Ho_Chi_Minh)
+- Generates per-user report filtered by seat ownership (`scope='own'` or `'all'`)
+- Sends via personal Telegram bot (gracefully skips if unconfigured)
+- Called via `checkAndSendScheduledReports()` in telegram-service.ts
+
 ### Friday 17:00 Asia/Saigon (Weekly Report)
 - Compiles usage summary using latest UsageSnapshot data
 - Lists alerts triggered
-- Sends formatted report to Telegram
+- Sends formatted report to Telegram (system bot)
 - Called via `sendWeeklyReport()` in telegram-service.ts
 
 ## Environment Configuration

@@ -2,7 +2,7 @@
 
 ## Overview
 - **Priority:** High
-- **Status:** Pending
+- **Status:** Complete
 - **Effort:** Small
 
 Add notification schedule config to user settings page.
@@ -55,13 +55,13 @@ Components needed:
   when user has no telegram bot configured
 
 ## Todo
-- [ ] Add notification schedule section to settings page
-- [ ] Day selection UI (7-button toggle group)
-- [ ] Hour dropdown (0-23)
-- [ ] Scope selector (admin only for 'all')
-- [ ] Conditional disable when toggle off
-- [ ] Wire up save/load API
-- [ ] Warning when no Telegram bot configured
+- [x] Add notification schedule section to settings page
+- [x] Day selection UI (7-button toggle group)
+- [x] Hour dropdown (0-23)
+- [x] Scope selector (admin only for 'all')
+- [x] Conditional disable when toggle off
+- [x] Wire up save/load API
+- [x] Warning when no Telegram bot configured
 
 ## Success Criteria
 - User can toggle notifications on/off

@@ -10,12 +10,13 @@ router.use(authenticate)
 // GET /api/user/settings — current user's bot settings (masked)
 router.get('/settings', async (req, res) => {
   try {
-    const user = await User.findById(req.user!._id, 'telegram_chat_id telegram_bot_token')
+    const user = await User.findById(req.user!._id, 'telegram_chat_id telegram_bot_token notification_settings')
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
 
     res.json({
       telegram_chat_id: user.telegram_chat_id ?? null,
       has_telegram_bot: !!user.telegram_bot_token && !!user.telegram_chat_id,
+      notification_settings: user.notification_settings ?? null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -26,12 +27,12 @@ router.get('/settings', async (req, res) => {
 // PUT /api/user/settings — update bot config
 router.put('/settings', async (req, res) => {
   try {
-    if (!isEncryptionConfigured()) {
+    const { telegram_bot_token, telegram_chat_id, notification_settings } = req.body
+
+    if (telegram_bot_token !== undefined && !isEncryptionConfigured()) {
       res.status(503).json({ error: 'Encryption not configured. Set ENCRYPTION_KEY env var.' })
       return
     }
-
-    const { telegram_bot_token, telegram_chat_id } = req.body
     const user = await User.findById(req.user!._id)
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
 
@@ -48,10 +49,29 @@ router.put('/settings', async (req, res) => {
       }
     }
 
+    // Update notification settings
+    if (notification_settings) {
+      const ns = notification_settings
+      const days = Array.isArray(ns.report_days)
+        ? [...new Set(ns.report_days.filter((d: unknown) => Number.isInteger(d) && d >= 0 && d <= 6))]
+        : []
+      if (ns.report_enabled && days.length === 0) {
+        res.status(400).json({ error: 'Cần chọn ít nhất 1 ngày gửi báo c��o' })
+        return
+      }
+      user.notification_settings = {
+        report_enabled: !!ns.report_enabled,
+        report_days: days,
+        report_hour: Math.max(0, Math.min(23, Math.floor(Number(ns.report_hour) || 0))),
+        report_scope: req.user!.role === 'admin' && ns.report_scope === 'all' ? 'all' : 'own',
+      }
+    }
+
     await user.save()
     res.json({
       telegram_chat_id: user.telegram_chat_id,
       has_telegram_bot: !!user.telegram_bot_token && !!user.telegram_chat_id,
+      notification_settings: user.notification_settings ?? null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

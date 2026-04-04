@@ -6,6 +6,126 @@ All notable changes to the Claude Teams Management Dashboard project are documen
 
 ---
 
+## [2026-04-04] Per-User Notification Schedule
+
+### Major Features
+
+**Per-User Configurable Notification Schedules**
+- Replace fixed Friday 08:00 cron report with per-user configurable daily/hourly delivery
+- Each user can select which days (Sun-Sat) and hour (0-23) to receive usage reports
+- Toggle notifications on/off from settings page
+- Personal Telegram bot required for delivery (warns if unconfigured)
+
+**Admin Scope Override (admin-only)**
+- Admins can set `report_scope` to 'all' (view full report)
+- Non-admin users locked to `report_scope='own'` (own seats only)
+- UI scope selector hidden for non-admin users
+
+**Hourly Cron Check**
+- Replaced fixed Friday cron with hourly check: `0 * * * *` (every hour at :00)
+- Finds all users with `notification_settings.report_enabled = true` matching current day/hour
+- Timezone: Asia/Ho_Chi_Minh (server-side, no per-user TZ)
+- Graceful handling: skips if user has no Telegram bot configured
+
+**Report Filtering by Seat Ownership**
+- Reports filtered by user's seat ownership based on scope:
+  - `scope='own'`: Shows user's owned seats + assigned seats
+  - `scope='all'` (admin): Shows all seats system-wide
+- Merged seat list with deduplication
+- Maintains existing report HTML format + metadata
+
+### Data Model Changes
+
+**User schema** (additive):
+- Added: `notification_settings` nested object (optional)
+  - `report_enabled` (boolean, default false)
+  - `report_days` (number[], default [5] = Friday)
+  - `report_hour` (0-23, default 8)
+  - `report_scope` ('own' | 'all', default 'own')
+
+**Type updates** (`packages/shared/types.ts`):
+- New `NotificationSettings` interface exported
+- User.notification_settings field added (optional)
+
+### Route Changes
+
+**User Settings Routes**:
+- `GET /api/user/settings` — Now returns notification_settings
+- `PUT /api/user/settings` — Accepts notification_settings; enforces report_scope='own' for non-admin
+
+### Service Changes
+
+**telegram-service.ts**:
+- New `sendUserReport(userId, scope)` — Per-user filtered report generation
+- New `checkAndSendScheduledReports()` — Hourly scheduler check
+- Extracted `buildReportHtml()` helper — Shared report-building logic
+- Updated `sendWeeklyReport()` — Retained for admin manual trigger (Friday 17:00)
+
+**index.ts**:
+- Removed: Old Friday 08:00 fixed cron
+- Added: Hourly cron `0 * * * *` calling `checkAndSendScheduledReports()`
+- Removed: `isVietnamHoliday` import (no longer needed)
+
+### Frontend Changes
+
+**Settings page** (new section):
+- New `notification-schedule-form.tsx` component
+- Toggle: Enable/disable notifications
+- Day selection: 7 buttons (Sun-Sat) with checkboxes
+- Hour dropdown: 0-23 formatted as "08:00", "09:00", etc.
+- Scope selector: (admin only, hidden for non-admin users)
+- Warning message: "Cần cấu hình Telegram bot trước khi bật thông báo" when no bot
+- Conditional disable: Hour/day selectors disabled when toggle is off
+- Save button: Calls PUT /api/user/settings
+
+**Hooks**:
+- Updated `use-user-settings.ts` — Loads/saves notification_settings
+
+### Configuration
+
+No new environment variables required. Uses existing `ENCRYPTION_KEY` and Telegram credentials.
+
+### Breaking Changes
+
+None. Feature is additive; existing cron and manual send unaffected.
+
+### Backward Compatibility
+
+- Existing Friday 17:00 manual report sending untouched
+- Users default to report_enabled=false (opt-in required)
+- Default schedule Friday 08:00 if enabled (matching old cron)
+- Non-breaking API: new field optional in User responses
+
+### Testing
+
+- Build: ✓ TypeScript compilation passes
+- Tests: ✓ 3 pre-existing test failures unrelated (prior hook removal)
+- Linting: ✓ Clean
+- Manual: Hourly cron executes, per-user reports generate + send to Telegram
+
+### Files Modified
+
+Backend:
+- `packages/api/src/models/user.ts` — Add notification_settings field
+- `packages/api/src/routes/user-settings.ts` — Add notification_settings to GET/PUT
+- `packages/api/src/services/telegram-service.ts` — sendUserReport, checkAndSendScheduledReports, buildReportHtml
+- `packages/api/src/index.ts` — Replace cron, remove unused import
+
+Frontend:
+- `packages/web/src/pages/settings.tsx` — Include notification-schedule-form
+- `packages/web/src/components/notification-schedule-form.tsx` — NEW component
+- `packages/web/src/hooks/use-user-settings.ts` — Add notification_settings field
+
+Shared:
+- `packages/shared/types.ts` — Add NotificationSettings interface
+
+### Related Plans
+
+- Plan: `plans/dattqh/260404-1737-per-user-notification-schedule/`
+- Phases: 4 (all complete)
+
+---
+
 ## [2026-04-04] User Self-Service Seat Management
 
 ### Major Features

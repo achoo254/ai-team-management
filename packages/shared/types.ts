@@ -34,6 +34,7 @@ export interface User {
   active: boolean
   telegram_chat_id?: string | null
   has_telegram_bot?: boolean
+  notification_settings?: NotificationSettings
   created_at: string
 }
 
@@ -124,6 +125,14 @@ export interface ApiResponse<T> {
   data?: T
   error?: string
   message?: string
+}
+
+// Notification settings
+export interface NotificationSettings {
+  report_enabled: boolean
+  report_days: number[]      // 0=Sun, 1=Mon, ..., 6=Sat
+  report_hour: number        // 0-23
+  report_scope: 'own' | 'all'
 }
 
 // Auth

@@ -2,7 +2,7 @@
 
 ## Overview
 - **Priority:** Critical
-- **Status:** Pending
+- **Status:** Complete
 - **Effort:** Small
 
 Add `notification_settings` to User model and update user-settings API.
@@ -74,12 +74,12 @@ if (notification_settings) {
 ```
 
 ## Todo
-- [ ] Add notification_settings to IUser interface
-- [ ] Add notification_settings to Mongoose schema
-- [ ] Add NotificationSettings to shared types
-- [ ] Update GET /api/user/settings
-- [ ] Update PUT /api/user/settings with validation
-- [ ] Enforce report_scope='own' for non-admin
+- [x] Add notification_settings to IUser interface
+- [x] Add notification_settings to Mongoose schema
+- [x] Add NotificationSettings to shared types
+- [x] Update GET /api/user/settings
+- [x] Update PUT /api/user/settings with validation
+- [x] Enforce report_scope='own' for non-admin
 
 ## Success Criteria
 - User can save notification_settings via API

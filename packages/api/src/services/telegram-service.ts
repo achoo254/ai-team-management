@@ -48,65 +48,30 @@ function buildProgressBar(pct: number): string {
   return '▓'.repeat(filled) + '░'.repeat(empty)
 }
 
-/** Send weekly usage report to Telegram using latest UsageSnapshot data. */
-export async function sendWeeklyReport() {
-  const tg = await getTelegramConfig()
-  if (!tg.botToken || !tg.chatId) {
-    throw new Error('Telegram chưa được cấu hình (thiếu Bot Token hoặc Chat ID)')
-  }
+/** Shared data types for report building */
+interface SeatRow {
+  seat_id: unknown
+  email: string
+  label: string
+  team: string
+  five_hour_pct: number | null
+  seven_day_pct: number | null
+  extra_usage: { is_enabled: boolean; used_credits: number | null; monthly_limit: number | null; utilization: number | null } | null
+}
 
-  const seats = await Seat.find().sort({ team: 1 }).lean()
-  const users = await User.find({ active: true }, 'name seat_ids').lean()
-  const teamRows = await Team.find({}, 'name label').sort({ name: 1 }).lean()
-
-  // Latest snapshot per seat (no time window — TTL index handles cleanup)
-  const snapshots = await UsageSnapshot.aggregate([
-    { $sort: { fetched_at: -1 } },
-    { $group: {
-      _id: '$seat_id',
-      five_hour_pct: { $first: '$five_hour_pct' },
-      seven_day_pct: { $first: '$seven_day_pct' },
-      extra_usage: { $first: '$extra_usage' },
-    }},
-  ])
-  const snapMap = new Map(snapshots.map(s => [String(s._id), s]))
-
-  // Group users by seat
-  const usersBySeat: Record<string, string[]> = {}
-  for (const u of users) {
-    for (const seatId of u.seat_ids ?? []) {
-      const key = String(seatId)
-      if (!usersBySeat[key]) usersBySeat[key] = []
-      usersBySeat[key].push(u.name)
-    }
-  }
-
-  // Dynamic team labels
-  const teamLabels: Record<string, string> = {}
-  for (const t of teamRows) teamLabels[t.name] = t.label
-
-  // Build rows with snapshot data
-  const rows = seats.map((s) => {
-    const snap = snapMap.get(String(s._id))
-    return {
-      seat_id: s._id,
-      email: s.email,
-      label: s.label,
-      team: s.team,
-      five_hour_pct: snap?.five_hour_pct ?? null,
-      seven_day_pct: snap?.seven_day_pct ?? null,
-      extra_usage: snap?.extra_usage ?? null,
-    }
-  })
-
+/** Build HTML report from seat rows */
+function buildReportHtml(
+  rows: SeatRow[],
+  usersBySeat: Record<string, string[]>,
+  teamLabels: Record<string, string>,
+): string {
   // Group seats by team
-  const teams: Record<string, typeof rows> = {}
+  const teams: Record<string, SeatRow[]> = {}
   for (const r of rows) {
     if (!teams[r.team]) teams[r.team] = []
     teams[r.team].push(r)
   }
 
-  // Build HTML message
   let msg = `📊 <b>Báo cáo Usage — ${new Date().toLocaleDateString('vi-VN')}</b>\n\n`
 
   for (const [team, teamSeats] of Object.entries(teams)) {
@@ -129,7 +94,6 @@ export async function sendWeeklyReport() {
         msg += `   <i>Chưa có dữ liệu</i>\n`
       }
 
-      // Extra credits line (only if enabled)
       if (s.extra_usage?.is_enabled && s.extra_usage.used_credits != null && s.extra_usage.monthly_limit != null) {
         const pct = s.extra_usage.utilization ?? 0
         msg += `   💳 $${s.extra_usage.used_credits}/$${s.extra_usage.monthly_limit} (${pct}%)\n`
@@ -159,7 +123,130 @@ export async function sendWeeklyReport() {
     msg += `\n⚠️ <b>${high.length} seat(s) &gt; 80%</b> — cần giảm tải!`
   }
 
+  return msg
+}
+
+/** Fetch common report data: snapshots map, users by seat, team labels */
+async function fetchReportData() {
+  const users = await User.find({ active: true }, 'name seat_ids').lean()
+  const teamRows = await Team.find({}, 'name label').sort({ name: 1 }).lean()
+
+  const snapshots = await UsageSnapshot.aggregate([
+    { $sort: { fetched_at: -1 } },
+    { $group: {
+      _id: '$seat_id',
+      five_hour_pct: { $first: '$five_hour_pct' },
+      seven_day_pct: { $first: '$seven_day_pct' },
+      extra_usage: { $first: '$extra_usage' },
+    }},
+  ])
+  const snapMap = new Map(snapshots.map(s => [String(s._id), s]))
+
+  const usersBySeat: Record<string, string[]> = {}
+  for (const u of users) {
+    for (const seatId of u.seat_ids ?? []) {
+      const key = String(seatId)
+      if (!usersBySeat[key]) usersBySeat[key] = []
+      usersBySeat[key].push(u.name)
+    }
+  }
+
+  const teamLabels: Record<string, string> = {}
+  for (const t of teamRows) teamLabels[t.name] = t.label
+
+  return { snapMap, usersBySeat, teamLabels }
+}
+
+/** Build seat rows from seats + snapshot map */
+function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
+  return seats.map((s) => {
+    const snap = snapMap.get(String(s._id))
+    return {
+      seat_id: s._id,
+      email: s.email,
+      label: s.label,
+      team: s.team,
+      five_hour_pct: snap?.five_hour_pct ?? null,
+      seven_day_pct: snap?.seven_day_pct ?? null,
+      extra_usage: snap?.extra_usage ?? null,
+    }
+  })
+}
+
+/** Send weekly usage report to Telegram using latest UsageSnapshot data (admin manual trigger). */
+export async function sendWeeklyReport() {
+  const tg = await getTelegramConfig()
+  if (!tg.botToken || !tg.chatId) {
+    throw new Error('Telegram chưa được cấu hình (thiếu Bot Token hoặc Chat ID)')
+  }
+
+  const seats = await Seat.find().sort({ team: 1 }).lean()
+  const { snapMap, usersBySeat, teamLabels } = await fetchReportData()
+  const rows = buildSeatRows(seats, snapMap)
+  const msg = buildReportHtml(rows, usersBySeat, teamLabels)
+
   await sendMessage(tg, msg)
+}
+
+/** Send usage report for a specific user, filtered by their seats */
+export async function sendUserReport(userId: string, scope: 'own' | 'all') {
+  if (!isEncryptionConfigured()) return
+
+  const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id name seat_ids')
+  if (!user?.telegram_bot_token || !user?.telegram_chat_id) return
+
+  let seats
+  if (scope === 'all') {
+    seats = await Seat.find().sort({ team: 1 }).lean()
+  } else {
+    const ownedSeats = await Seat.find({ owner_id: userId }).lean()
+    const assignedSeats = user.seat_ids?.length
+      ? await Seat.find({ _id: { $in: user.seat_ids } }).lean()
+      : []
+    const seatMap = new Map<string, any>()
+    for (const s of [...ownedSeats, ...assignedSeats]) seatMap.set(String(s._id), s)
+    seats = Array.from(seatMap.values()).sort((a: any, b: any) => a.team.localeCompare(b.team))
+  }
+
+  if (seats.length === 0) return
+
+  const { snapMap, usersBySeat, teamLabels } = await fetchReportData()
+  const rows = buildSeatRows(seats, snapMap)
+  const msg = buildReportHtml(rows, usersBySeat, teamLabels)
+
+  const token = decrypt(user.telegram_bot_token)
+  await sendMessageWithBot(token, user.telegram_chat_id, msg)
+}
+
+/** Check all users with enabled schedules and send if matching current day/hour */
+export async function checkAndSendScheduledReports() {
+  const now = new Date()
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: 'numeric', hour12: false,
+    weekday: 'short',
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(now).map(p => [p.type, p.value]))
+  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  const currentDay = dayMap[parts.weekday] ?? now.getDay()
+  const currentHour = Number(parts.hour)
+
+  const users = await User.find({
+    'notification_settings.report_enabled': true,
+    'notification_settings.report_days': currentDay,
+    'notification_settings.report_hour': currentHour,
+    telegram_bot_token: { $ne: null },
+    telegram_chat_id: { $ne: null },
+  })
+
+  for (const user of users) {
+    try {
+      await sendUserReport(String(user._id), user.notification_settings?.report_scope ?? 'own')
+      console.log(`[Scheduler] Sent report to ${user.name}`)
+    } catch (err) {
+      console.error(`[Scheduler] Failed for ${user.name}:`, err)
+    }
+  }
 }
 
 /** Send alert when token refresh fails for a seat */

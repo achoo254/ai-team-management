@@ -15,12 +15,10 @@ import teamRoutes from './routes/teams.js'
 import usageSnapshotRoutes from './routes/usage-snapshots.js'
 import settingsRoutes from './routes/settings.js'
 import userSettingsRoutes from './routes/user-settings.js'
-import { sendWeeklyReport } from './services/telegram-service.js'
+import { checkAndSendScheduledReports } from './services/telegram-service.js'
 import { collectAllUsage } from './services/usage-collector-service.js'
 import { checkSnapshotAlerts, checkBudgetAlerts } from './services/alert-service.js'
 import { checkAndRefreshExpiring } from './services/token-refresh-service.js'
-import { isVietnamHoliday } from './services/vietnam-holidays.js'
-
 const app = express()
 
 // Middleware
@@ -55,14 +53,10 @@ async function start() {
   const { initializeDb } = await import('./seed-data.js')
   await initializeDb()
 
-  // Cron: Friday 08:00 — weekly report (skip VN holidays)
-  cron.schedule('0 8 * * 5', () => {
-    if (isVietnamHoliday()) {
-      console.log('[Cron] Skipping weekly report — Vietnam holiday')
-      return
-    }
-    console.log('[Cron] Triggering weekly report...')
-    sendWeeklyReport().catch(console.error)
+  // Cron: every hour — check per-user notification schedules
+  cron.schedule('0 * * * *', () => {
+    console.log('[Cron] Checking scheduled reports...')
+    checkAndSendScheduledReports().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
   // Cron: Every 5 min — check and refresh expiring OAuth tokens

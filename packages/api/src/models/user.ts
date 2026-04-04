@@ -1,5 +1,12 @@
 import mongoose, { Schema, type Document, type Types } from 'mongoose'
 
+export interface INotificationSettings {
+  report_enabled: boolean
+  report_days: number[]
+  report_hour: number
+  report_scope: 'own' | 'all'
+}
+
 export interface IUser extends Document {
   name: string
   email?: string
@@ -9,6 +16,7 @@ export interface IUser extends Document {
   active: boolean
   telegram_bot_token?: string | null  // encrypted via AES-256-GCM
   telegram_chat_id?: string | null
+  notification_settings?: INotificationSettings
   created_at: Date
 }
 
@@ -22,6 +30,12 @@ const userSchema = new Schema<IUser>(
     active: { type: Boolean, default: true },
     telegram_bot_token: { type: String, default: null },
     telegram_chat_id: { type: String, default: null },
+    notification_settings: {
+      report_enabled: { type: Boolean, default: false },
+      report_days: { type: [Number], default: [5] },
+      report_hour: { type: Number, default: 8 },
+      report_scope: { type: String, enum: ['own', 'all'], default: 'own' },
+    },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } },
 )

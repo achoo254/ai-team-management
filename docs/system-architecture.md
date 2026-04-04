@@ -165,6 +165,12 @@ Subsequent requests: JWT read from cookie or Authorization header
   active: Boolean,
   telegram_bot_token: String | null (encrypted AES-256-GCM),
   telegram_chat_id: String | null,
+  notification_settings: {
+    report_enabled: Boolean (default: false),
+    report_days: [Number] (default: [5], 0=Sun, 6=Sat),
+    report_hour: Number (0-23, default: 8),
+    report_scope: String (enum: ['own', 'all'], default: 'own', enforced 'own' for non-admin)
+  } | null,
   created_at: Date
 }
 ```
@@ -346,7 +352,15 @@ API calls via React Query (TanStack Query)
      - Auto-resolves usage_exceeded when session ends or next user starts
      - Manages ActiveSession lifecycle (create, update, delete)
 
-2. **Friday 17:00 Asia/Saigon** — `sendWeeklyReport()` from telegram-service.ts
+2. **Every hour (`0 * * * *)** — `checkAndSendScheduledReports()` from telegram-service.ts
+   - Finds all users with enabled notification schedule matching current day/hour
+   - Generates per-user usage report filtered by seat ownership
+   - `scope='own'`: User's owned + assigned seats only
+   - `scope='all'` (admin): All seats system-wide
+   - Sends via personal Telegram bot (gracefully skips if unconfigured)
+   - Timezone: Asia/Ho_Chi_Minh (server-side)
+
+3. **Friday 17:00 Asia/Saigon** — `sendWeeklyReport()` from telegram-service.ts
    - Compiles usage summary using UsageSnapshot data
    - Lists alerts triggered
    - Sends formatted report to Telegram (system bot)
