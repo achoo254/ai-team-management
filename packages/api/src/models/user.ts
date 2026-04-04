@@ -28,8 +28,7 @@ const userSchema = new Schema<IUser>(
 
 // Strip token from JSON output, expose has_telegram_bot boolean
 userSchema.set('toJSON', {
-  transform: (_doc, ret) => {
-    // has_telegram_bot computed from ret (which has all fields if selected) or chat_id as proxy
+  transform: (_doc: any, ret: any) => {
     const hasToken = !!ret.telegram_bot_token
     delete ret.telegram_bot_token
     ret.has_telegram_bot = hasToken && !!ret.telegram_chat_id

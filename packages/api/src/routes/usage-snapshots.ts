@@ -20,7 +20,7 @@ router.post('/collect', authenticate, requireAdmin, async (_req, res) => {
 // POST /api/usage-snapshots/collect/:seatId — trigger single seat (admin)
 router.post('/collect/:seatId', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { seatId } = req.params
+    const seatId = req.params.seatId as string
     if (!mongoose.Types.ObjectId.isValid(seatId)) {
       res.status(400).json({ error: 'Invalid seat ID' })
       return

@@ -20,7 +20,7 @@ function parseBucket(bucket: unknown): { pct: number | null; resetsAt: Date | nu
 
 /** Fetch usage for a single seat using oauth_credential */
 async function fetchSeatUsage(seat: {
-  _id: unknown
+  _id: import('mongoose').Types.ObjectId
   oauth_credential: { access_token: string }
   label: string
 }) {

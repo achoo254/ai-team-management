@@ -127,7 +127,7 @@ router.post('/entry', authenticate, async (req, res) => {
 // PUT /api/schedules/entry/:id — update existing entry (auth, admin or owner)
 router.put('/entry/:id', authenticate, async (req, res) => {
   try {
-    const { id } = req.params
+    const id = req.params.id as string
     if (!mongoose.Types.ObjectId.isValid(id)) {
       res.status(400).json({ error: 'Invalid entry ID' })
       return
@@ -211,7 +211,7 @@ router.patch('/swap', authenticate, requireAdmin, async (req, res) => {
 // DELETE /api/schedules/entry/:id — delete by ID (auth, admin or owner)
 router.delete('/entry/:id', authenticate, async (req, res) => {
   try {
-    const { id } = req.params
+    const id = req.params.id as string
     if (!mongoose.Types.ObjectId.isValid(id)) {
       res.status(400).json({ error: 'Invalid entry ID' })
       return

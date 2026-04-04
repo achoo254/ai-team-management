@@ -28,7 +28,7 @@ async function insertIfNew(
     { seat_id: seatId, type, resolved: false },
     { $setOnInsert: { seat_id: seatId, type, message, metadata, resolved: false } },
     { upsert: true, new: true, rawResult: true },
-  )
+  ) as unknown as { lastErrorObject?: { updatedExisting?: boolean } }
   if (!result.lastErrorObject?.updatedExisting) {
     try {
       await sendAlertNotification(type, seatLabel, metadata, threshold)
@@ -192,7 +192,7 @@ export async function checkBudgetAlerts() {
       if (await insertIfNew(seatId, 'usage_exceeded',
         `${userName} vượt budget: ${worst.delta.toFixed(1)}% / ${schedule.usage_budget_pct}% (${worst.key})`,
         { delta: worst.delta, budget: schedule.usage_budget_pct, window: worst.key, user_id: userId, user_name: userName },
-        label, schedule.usage_budget_pct,
+        label, schedule.usage_budget_pct ?? undefined,
       )) created++
 
       // Notify next scheduled user
