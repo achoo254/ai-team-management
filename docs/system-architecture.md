@@ -89,13 +89,14 @@ Subsequent requests: JWT read from cookie or Authorization header
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (9 files):
+**Route Structure** (10 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
 - `routes/seats.ts` — Seat CRUD, team assignment, token management
-- `routes/admin.ts` — User management
+- `routes/admin.ts` — User management, manual alert check trigger
 - `routes/schedules.ts` — Schedule CRUD with conflict prevention
 - `routes/alerts.ts` — Alert creation, resolution, listing
+- `routes/settings.ts` — Get/update alert thresholds (admin only)
 - `routes/teams.ts` — Team CRUD
 - `routes/usage-log.ts` — Usage logging, retrieval
 - `routes/usage-snapshots.ts` — Query snapshots, trigger collection
@@ -112,7 +113,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 
 **Location**: `packages/api/src/models`
 
-**6 Collections**:
+**8 Collections**:
 
 #### Seats
 ```typescript
