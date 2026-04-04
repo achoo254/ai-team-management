@@ -1,11 +1,14 @@
 import { Alert } from '../models/alert.js'
 import { Seat } from '../models/seat.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
+import { Schedule } from '../models/schedule.js'
+import { ActiveSession } from '../models/active-session.js'
+import { SessionMetric } from '../models/session-metric.js'
 import { getOrCreateSettings } from '../models/setting.js'
 import { sendAlertNotification } from './telegram-service.js'
 import type { AlertType } from '@repo/shared/types'
 
-/** Atomically insert alert if no unresolved alert exists for same seat+type. Sends Telegram on success. */
+/** Atomically insert alert if no recent alert exists for same seat+type (1h cooldown). Sends Telegram on success. */
 async function insertIfNew(
   seatId: string,
   type: AlertType,
@@ -14,7 +17,13 @@ async function insertIfNew(
   seatLabel: string,
   threshold?: number,
 ): Promise<boolean> {
-  // Atomic upsert: only creates if no unresolved alert exists for this seat+type
+  // Cooldown: skip if any alert (resolved or not) exists for same seat+type in last 1 hour
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+  const recentAlert = await Alert.findOne({
+    seat_id: seatId, type, created_at: { $gte: oneHourAgo },
+  })
+  if (recentAlert) return false
+
   const result = await Alert.findOneAndUpdate(
     { seat_id: seatId, type, resolved: false },
     { $setOnInsert: { seat_id: seatId, type, message, metadata, resolved: false } },
@@ -60,6 +69,12 @@ export async function checkSnapshotAlerts() {
     const label = seat.label || seat.email
 
     // Rate limit: check all windows, alert on highest
+    const resetsAtMap: Record<string, string | null> = {
+      '5h': snapshot.five_hour_resets_at ?? null,
+      '7d': snapshot.seven_day_resets_at ?? null,
+      '7d_sonnet': snapshot.seven_day_sonnet_resets_at ?? null,
+      '7d_opus': snapshot.seven_day_opus_resets_at ?? null,
+    }
     const windows = [
       { key: '5h' as const, pct: snapshot.five_hour_pct },
       { key: '7d' as const, pct: snapshot.seven_day_pct },
@@ -69,9 +84,10 @@ export async function checkSnapshotAlerts() {
 
     if (windows.length > 0) {
       const worst = windows.reduce((a, b) => (a.pct! > b.pct! ? a : b))
+      const resetsAt = resetsAtMap[worst.key] ?? null
       const msg = `Seat ${label}: ${worst.pct}% usage (${worst.key} window, ngưỡng: ${rate_limit_pct}%)`
       if (await insertIfNew(String(seatId), 'rate_limit', msg, {
-        window: worst.key, pct: worst.pct,
+        window: worst.key, pct: worst.pct, resets_at: resetsAt,
       }, label, rate_limit_pct)) created++
     }
 
@@ -102,4 +118,218 @@ export async function checkSnapshotAlerts() {
   }
 
   return { alertsCreated: created }
+}
+
+/** Check usage budget alerts for active scheduled sessions */
+export async function checkBudgetAlerts() {
+  const now = new Date()
+  const currentHour = now.getHours()
+  const dayOfWeek = now.getDay()
+
+  // 1. Find schedules active right now (with budget set)
+  const activeSchedules = await Schedule.find({
+    day_of_week: dayOfWeek,
+    start_hour: { $lte: currentHour },
+    end_hour: { $gt: currentHour },
+    usage_budget_pct: { $ne: null },
+  }).populate('user_id', 'name')
+
+  let created = 0
+
+  for (const schedule of activeSchedules) {
+    const seatId = String(schedule.seat_id)
+    const userId = String(schedule.user_id)
+
+    // 2. Get or create active session with baseline
+    let session = await ActiveSession.findOne({ schedule_id: schedule._id })
+    if (!session) {
+      const latestSnap = await UsageSnapshot.findOne({ seat_id: seatId }).sort({ fetched_at: -1 })
+      if (!latestSnap) continue
+      session = await ActiveSession.create({
+        seat_id: seatId,
+        user_id: userId,
+        schedule_id: schedule._id,
+        started_at: now,
+        snapshot_at_start: {
+          five_hour_pct: latestSnap.five_hour_pct,
+          seven_day_pct: latestSnap.seven_day_pct,
+          seven_day_sonnet_pct: latestSnap.seven_day_sonnet_pct,
+          seven_day_opus_pct: latestSnap.seven_day_opus_pct,
+        },
+      })
+    }
+
+    // 3. Detect 5h resets (resets_at changed since last check)
+    const currentSnap = await UsageSnapshot.findOne({ seat_id: seatId }).sort({ fetched_at: -1 })
+    if (!currentSnap) continue
+
+    if (currentSnap.five_hour_resets_at) {
+      const currentResetsAt = currentSnap.five_hour_resets_at.getTime()
+      const lastResetsAt = session.last_resets_at?.getTime() ?? 0
+      if (lastResetsAt > 0 && currentResetsAt !== lastResetsAt) {
+        session.reset_count_5h = (session.reset_count_5h ?? 0) + 1
+      }
+      session.last_resets_at = currentSnap.five_hour_resets_at
+      await session.save()
+    }
+
+    // 4. Calculate delta
+    const deltas = [
+      { key: '5h', delta: Math.max(0, (currentSnap.five_hour_pct ?? 0) - (session.snapshot_at_start.five_hour_pct ?? 0)) },
+      { key: '7d', delta: Math.max(0, (currentSnap.seven_day_pct ?? 0) - (session.snapshot_at_start.seven_day_pct ?? 0)) },
+      { key: '7d_sonnet', delta: Math.max(0, (currentSnap.seven_day_sonnet_pct ?? 0) - (session.snapshot_at_start.seven_day_sonnet_pct ?? 0)) },
+      { key: '7d_opus', delta: Math.max(0, (currentSnap.seven_day_opus_pct ?? 0) - (session.snapshot_at_start.seven_day_opus_pct ?? 0)) },
+    ]
+
+    const worst = deltas.reduce((a, b) => (a.delta > b.delta ? a : b))
+
+    // 4. Alert if over budget
+    if (worst.delta >= schedule.usage_budget_pct!) {
+      const seat = await Seat.findById(seatId, 'label email')
+      const label = seat?.label || seat?.email || seatId
+      const userName = (schedule.user_id as any).name || ''
+
+      if (await insertIfNew(seatId, 'usage_exceeded',
+        `${userName} vượt budget: ${worst.delta.toFixed(1)}% / ${schedule.usage_budget_pct}% (${worst.key})`,
+        { delta: worst.delta, budget: schedule.usage_budget_pct, window: worst.key, user_id: userId, user_name: userName },
+        label, schedule.usage_budget_pct,
+      )) created++
+
+      // Notify next scheduled user
+      await notifyNextUser(seatId, dayOfWeek, currentHour, label).catch(console.error)
+    }
+  }
+
+  // 5. Session cleanup — resolve expired sessions
+  await cleanupExpiredSessions(dayOfWeek, currentHour)
+
+  if (created > 0) console.log(`[BudgetAlert] Created ${created} usage_exceeded alerts`)
+}
+
+/** Notify the next scheduled user that the current user exceeded budget */
+async function notifyNextUser(seatId: string, dayOfWeek: number, currentHour: number, seatLabel: string) {
+  const nextSchedule = await Schedule.findOne({
+    seat_id: seatId,
+    day_of_week: dayOfWeek,
+    start_hour: { $gt: currentHour },
+  }).sort({ start_hour: 1 }).populate('user_id', 'name')
+
+  if (nextSchedule) {
+    const userName = (nextSchedule.user_id as any).name
+    await sendAlertNotification('usage_exceeded', seatLabel, {
+      user_name: userName,
+      next_user: true,
+    }).catch(console.error)
+  }
+}
+
+/** Clean up expired sessions: persist metrics, check waste/7d_risk alerts, auto-resolve */
+async function cleanupExpiredSessions(dayOfWeek: number, currentHour: number) {
+  const sessions = await ActiveSession.find({}).populate('schedule_id')
+
+  for (const session of sessions) {
+    const sched = session.schedule_id as any
+    if (!sched || sched.day_of_week !== dayOfWeek || sched.end_hour <= currentHour) {
+      // Persist SessionMetric before deleting
+      await persistSessionMetric(session, sched)
+
+      // Auto-resolve usage_exceeded alerts
+      await Alert.updateMany(
+        { seat_id: session.seat_id, type: 'usage_exceeded', resolved: false },
+        { $set: { resolved: true, resolved_at: new Date() } },
+      )
+      await session.deleteOne()
+    }
+  }
+}
+
+/** Persist session metrics and check waste/7d_risk alerts */
+async function persistSessionMetric(session: any, sched: any) {
+  const seatId = String(session.seat_id)
+  const userId = String(session.user_id)
+
+  // Get end snapshot
+  const endSnap = await UsageSnapshot.findOne({ seat_id: seatId }).sort({ fetched_at: -1 })
+  if (!endSnap) return
+
+  const startSnap = session.snapshot_at_start
+  const delta5h = Math.max(0, (endSnap.five_hour_pct ?? 0) - (startSnap.five_hour_pct ?? 0))
+  const delta7d = Math.max(0, (endSnap.seven_day_pct ?? 0) - (startSnap.seven_day_pct ?? 0))
+  const delta7dSonnet = Math.max(0, (endSnap.seven_day_sonnet_pct ?? 0) - (startSnap.seven_day_sonnet_pct ?? 0))
+  const delta7dOpus = Math.max(0, (endSnap.seven_day_opus_pct ?? 0) - (startSnap.seven_day_opus_pct ?? 0))
+
+  const durationHours = sched ? (sched.end_hour - sched.start_hour) : 0
+  const impactRatio = delta5h > 0 ? delta7d / delta5h : null
+  // Utilization: how much of the 5h window was used, normalized by session duration
+  const utilization = durationHours > 0 ? Math.min(100, (delta5h / (durationHours / 5 * 100)) * 100) : 0
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  try {
+    await SessionMetric.create({
+      seat_id: seatId,
+      user_id: userId,
+      schedule_id: session.schedule_id,
+      date: today,
+      start_hour: sched?.start_hour ?? 0,
+      end_hour: sched?.end_hour ?? 0,
+      duration_hours: durationHours,
+      delta_5h_pct: delta5h,
+      delta_7d_pct: delta7d,
+      delta_7d_sonnet_pct: delta7dSonnet,
+      delta_7d_opus_pct: delta7dOpus,
+      impact_ratio: impactRatio,
+      utilization_pct: Math.round(utilization),
+      reset_count_5h: session.reset_count_5h ?? 0,
+      snapshot_start: startSnap,
+      snapshot_end: {
+        five_hour_pct: endSnap.five_hour_pct,
+        seven_day_pct: endSnap.seven_day_pct,
+        seven_day_sonnet_pct: endSnap.seven_day_sonnet_pct,
+        seven_day_opus_pct: endSnap.seven_day_opus_pct,
+      },
+    })
+  } catch (err) {
+    console.error('[SessionMetric] Failed to persist:', err)
+  }
+
+  // Check waste alert: session > 2h but Δ5h < 5%
+  if (durationHours >= 2 && delta5h < 5) {
+    const seat = await Seat.findById(seatId, 'label email')
+    const label = seat?.label || seat?.email || seatId
+    const userName = sched?.user_id?.name || ''
+    await insertIfNew(seatId, 'session_waste',
+      `${userName} dùng ${durationHours}h nhưng chỉ dùng ${delta5h.toFixed(1)}% 5h window`,
+      { delta: delta5h, duration: durationHours, user_id: userId, user_name: userName },
+      label,
+    )
+  }
+
+  // Check 7d risk: 7d > 70% and projected remaining sessions would push > 90%
+  const current7d = endSnap.seven_day_pct ?? 0
+  if (current7d > 70) {
+    const remainingToday = await Schedule.countDocuments({
+      seat_id: seatId,
+      day_of_week: new Date().getDay(),
+      start_hour: { $gt: sched?.end_hour ?? 0 },
+    })
+    // Estimate: each remaining session uses avg delta7d
+    const avgMetrics = await SessionMetric.aggregate([
+      { $match: { seat_id: session.seat_id } },
+      { $group: { _id: null, avg_delta_7d: { $avg: '$delta_7d_pct' } } },
+    ])
+    const avgDelta7d = avgMetrics[0]?.avg_delta_7d ?? delta7d
+    const projected = current7d + remainingToday * avgDelta7d
+
+    if (projected > 90) {
+      const seat = await Seat.findById(seatId, 'label email')
+      const label = seat?.label || seat?.email || seatId
+      await insertIfNew(seatId, '7d_risk',
+        `Seat ${label}: 7d hiện ${current7d.toFixed(0)}%, dự kiến ${projected.toFixed(0)}% sau ${remainingToday} sessions`,
+        { current_7d: current7d, projected, remaining_sessions: remainingToday },
+        label,
+      )
+    }
+  }
 }

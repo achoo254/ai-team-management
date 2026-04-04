@@ -43,9 +43,16 @@ const usageSnapshotSchema = new Schema<IUsageSnapshot>({
 // Compound index for querying snapshots by seat + time
 usageSnapshotSchema.index({ seat_id: 1, fetched_at: -1 })
 
-// TTL: auto-delete snapshots older than 90 days
-usageSnapshotSchema.index({ fetched_at: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 })
+// Standalone index for dashboard aggregations that sort by fetched_at only
+usageSnapshotSchema.index({ fetched_at: -1 })
+
+// No TTL — usage data is stored long-term for historical analysis
 
 export const UsageSnapshot = mongoose.model<IUsageSnapshot>(
   'UsageSnapshot', usageSnapshotSchema,
 )
+
+// Drop stale TTL index from previous schema (Mongoose doesn't auto-drop existing indexes)
+UsageSnapshot.collection.dropIndex('fetched_at_1').catch(() => {
+  // Index may not exist — safe to ignore
+})

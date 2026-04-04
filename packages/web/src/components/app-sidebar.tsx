@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Settings,
   Activity,
+  Bot,
 } from "lucide-react";
 import {
   Sidebar,
@@ -29,6 +30,7 @@ const navItems = [
   { label: "Usage", href: "/usage", icon: Activity },
   { label: "Teams", href: "/teams", icon: Users },
   { label: "Cảnh báo", href: "/alerts", icon: AlertTriangle },
+  { label: "Cài đặt", href: "/settings", icon: Bot },
   { label: "Admin", href: "/admin", icon: Settings, adminOnly: true },
 ];
 

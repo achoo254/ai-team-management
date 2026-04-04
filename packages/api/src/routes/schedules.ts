@@ -10,7 +10,6 @@ const router = Router()
 router.get('/', authenticate, async (req, res) => {
   try {
     const seatId = req.query.seatId as string | undefined
-
     const filter: Record<string, unknown> = {}
     if (seatId) filter.seat_id = seatId
 
@@ -19,7 +18,6 @@ router.get('/', authenticate, async (req, res) => {
       .populate('seat_id', 'label')
       .lean()
 
-    // Flatten populated refs to match frontend ScheduleEntry interface
     const schedules = raw.map((s) => {
       const user = s.user_id as unknown as { _id: string; name: string } | null
       const seat = s.seat_id as unknown as { _id: string; label: string } | null
@@ -30,7 +28,9 @@ router.get('/', authenticate, async (req, res) => {
         user_name: user?.name ?? '',
         seat_label: seat?.label ?? '',
         day_of_week: s.day_of_week,
-        slot: s.slot,
+        start_hour: s.start_hour,
+        end_hour: s.end_hour,
+        usage_budget_pct: s.usage_budget_pct,
       }
     })
 
@@ -45,7 +45,6 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/today', authenticate, async (_req, res) => {
   try {
     const day_of_week = new Date().getDay()
-
     const schedules = await Schedule.find({ day_of_week })
       .populate('user_id', 'name email')
       .populate('seat_id', 'label email')
@@ -58,153 +57,179 @@ router.get('/today', authenticate, async (_req, res) => {
   }
 })
 
-// PUT /api/schedules/:seatId — bulk replace schedules for a seat (admin)
-router.put('/:seatId', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const seatId = req.params.seatId as string
-
-    if (!mongoose.Types.ObjectId.isValid(seatId)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
-
-    const entries: { userId: string; dayOfWeek: number; slot: string }[] = req.body
-
-    if (!Array.isArray(entries)) {
-      res.status(400).json({ error: 'Body must be an array' })
-      return
-    }
-
-    const ops = entries.map((entry) => ({
-      updateOne: {
-        filter: {
-          seat_id: seatId,
-          day_of_week: entry.dayOfWeek,
-          slot: entry.slot,
-        },
-        update: {
-          $set: {
-            seat_id: seatId,
-            user_id: entry.userId,
-            day_of_week: entry.dayOfWeek,
-            slot: entry.slot,
-          },
-        },
-        upsert: true,
-      },
-    }))
-
-    await Schedule.bulkWrite(ops)
-
-    const schedules = await Schedule.find({ seat_id: seatId })
-      .populate('user_id', 'name')
-      .lean()
-
-    res.json(schedules)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    res.status(500).json({ error: message })
+/** Check time overlap between two ranges on same seat+day */
+async function findOverlaps(seatId: string, dayOfWeek: number, startHour: number, endHour: number, excludeId?: string) {
+  const filter: Record<string, unknown> = {
+    seat_id: seatId,
+    day_of_week: dayOfWeek,
+    start_hour: { $lt: endHour },
+    end_hour: { $gt: startHour },
   }
-})
+  if (excludeId) filter._id = { $ne: excludeId }
+  return Schedule.find(filter).populate('user_id', 'name').lean()
+}
 
-// POST /api/schedules/assign — assign user to specific cell (admin)
-router.post('/assign', authenticate, requireAdmin, async (req, res) => {
+// POST /api/schedules/entry — create new schedule entry (auth, admin or self only)
+router.post('/entry', authenticate, async (req, res) => {
   try {
-    const { seatId, userId, dayOfWeek, slot } = req.body
+    const { seatId, userId, dayOfWeek, startHour, endHour, usageBudgetPct } = req.body
 
-    if (!seatId || !userId || dayOfWeek === undefined || !slot) {
-      res.status(400).json({ error: 'seatId, userId, dayOfWeek, slot are required' })
+    if (!seatId || !userId || dayOfWeek === undefined || startHour === undefined || endHour === undefined) {
+      res.status(400).json({ error: 'seatId, userId, dayOfWeek, startHour, endHour are required' })
       return
     }
-    if (!mongoose.Types.ObjectId.isValid(seatId)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
+    if (!mongoose.Types.ObjectId.isValid(seatId) || !mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400).json({ error: 'Invalid ID format' })
       return
     }
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      res.status(400).json({ error: 'Invalid user ID' })
+    if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23 || startHour >= endHour) {
+      res.status(400).json({ error: 'Invalid hour range (0-23, start < end)' })
+      return
+    }
+
+    // Only admin can create entries for other users
+    const isAdmin = req.user!.role === 'admin'
+    if (!isAdmin && String(userId) !== String(req.user!._id)) {
+      res.status(403).json({ error: 'Can only create schedule entries for yourself' })
       return
     }
 
     // Validate user belongs to seat
     const user = await User.findById(userId)
-    if (!user) {
-      res.status(404).json({ error: 'User not found' })
-      return
-    }
+    if (!user) { res.status(404).json({ error: 'User not found' }); return }
     if (!user.seat_ids?.some((sid) => String(sid) === String(seatId))) {
       res.status(400).json({ error: 'User does not belong to this seat' })
       return
     }
 
-    const schedule = await Schedule.findOneAndUpdate(
-      { seat_id: seatId, day_of_week: dayOfWeek, slot },
-      { $set: { seat_id: seatId, user_id: userId, day_of_week: dayOfWeek, slot } },
-      { upsert: true, new: true },
-    )
+    // Overlap detection
+    const overlapping = await findOverlaps(seatId, dayOfWeek, startHour, endHour)
+    const warnings = overlapping.length > 0
+      ? [{ type: 'overlap', conflicting: overlapping }]
+      : undefined
 
-    res.status(201).json(schedule)
+    const entry = await Schedule.create({
+      seat_id: seatId,
+      user_id: userId,
+      day_of_week: dayOfWeek,
+      start_hour: startHour,
+      end_hour: endHour,
+      usage_budget_pct: usageBudgetPct ?? null,
+    })
+
+    res.status(201).json({ entry, warnings })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
   }
 })
 
-// PATCH /api/schedules/swap — swap/move between two cells (admin)
+// PUT /api/schedules/entry/:id — update existing entry (auth, admin or owner)
+router.put('/entry/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: 'Invalid entry ID' })
+      return
+    }
+
+    const existing = await Schedule.findById(id)
+    if (!existing) { res.status(404).json({ error: 'Entry not found' }); return }
+
+    // Only admin or entry owner can update
+    const isAdmin = req.user!.role === 'admin'
+    if (!isAdmin && String(existing.user_id) !== String(req.user!._id)) {
+      res.status(403).json({ error: 'Can only edit your own schedule entries' })
+      return
+    }
+
+    const { startHour, endHour, usageBudgetPct, userId, dayOfWeek } = req.body
+    const newStart = startHour ?? existing.start_hour
+    const newEnd = endHour ?? existing.end_hour
+    const newDay = dayOfWeek ?? existing.day_of_week
+    if (newStart >= newEnd) {
+      res.status(400).json({ error: 'start_hour must be less than end_hour' })
+      return
+    }
+
+    // Overlap detection (exclude self)
+    const overlapping = await findOverlaps(
+      String(existing.seat_id), newDay, newStart, newEnd, id,
+    )
+    const warnings = overlapping.length > 0
+      ? [{ type: 'overlap', conflicting: overlapping }]
+      : undefined
+
+    if (dayOfWeek !== undefined) existing.day_of_week = dayOfWeek
+    if (startHour !== undefined) existing.start_hour = startHour
+    if (endHour !== undefined) existing.end_hour = endHour
+    if (usageBudgetPct !== undefined) existing.usage_budget_pct = usageBudgetPct
+    if (userId !== undefined) existing.user_id = userId
+
+    await existing.save()
+    res.json({ entry: existing, warnings })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// PATCH /api/schedules/swap — swap/move by entry ID (admin)
 router.patch('/swap', authenticate, requireAdmin, async (req, res) => {
   try {
-    interface CellRef { seatId: string; dayOfWeek: number; slot: string }
-    const { from, to }: { from: CellRef; to: CellRef } = req.body
+    const { fromId, toId } = req.body
+    if (!fromId) { res.status(400).json({ error: 'fromId is required' }); return }
 
-    if (!from || !to) {
-      res.status(400).json({ error: 'from and to cells are required' })
-      return
-    }
+    const fromEntry = await Schedule.findById(fromId)
+    if (!fromEntry) { res.status(404).json({ error: 'Source entry not found' }); return }
 
-    const fromEntry = await Schedule.findOne({
-      seat_id: from.seatId,
-      day_of_week: from.dayOfWeek,
-      slot: from.slot,
-    })
-    if (!fromEntry) {
-      res.status(404).json({ error: 'Source schedule entry not found' })
-      return
-    }
-
-    // Validate that user being moved belongs to the target seat
-    const user = await User.findById(fromEntry.user_id)
-    if (!user) {
-      res.status(404).json({ error: 'User not found' })
-      return
-    }
-    if (!user.seat_ids?.some((sid) => String(sid) === String(to.seatId))) {
-      res.status(400).json({ error: 'User does not belong to the target seat' })
-      return
-    }
-
-    const toEntry = await Schedule.findOne({
-      seat_id: to.seatId,
-      day_of_week: to.dayOfWeek,
-      slot: to.slot,
-    })
-
-    if (toEntry) {
-      // Swap: exchange user_ids between from and to
+    if (toId) {
+      // Swap user_ids between two entries
+      const toEntry = await Schedule.findById(toId)
+      if (!toEntry) { res.status(404).json({ error: 'Target entry not found' }); return }
       const fromUserId = fromEntry.user_id
       fromEntry.user_id = toEntry.user_id
       toEntry.user_id = fromUserId
       await Promise.all([fromEntry.save(), toEntry.save()])
     } else {
-      // Move: create target entry, delete source
-      await Schedule.create({
-        seat_id: to.seatId,
-        user_id: fromEntry.user_id,
-        day_of_week: to.dayOfWeek,
-        slot: to.slot,
-      })
-      await fromEntry.deleteOne()
+      // Move: update day/hours from body
+      const { dayOfWeek, startHour, endHour, seatId } = req.body
+      if (dayOfWeek !== undefined) fromEntry.day_of_week = dayOfWeek
+      if (startHour !== undefined) fromEntry.start_hour = startHour
+      if (endHour !== undefined) fromEntry.end_hour = endHour
+      if (seatId !== undefined) fromEntry.seat_id = seatId
+      await fromEntry.save()
     }
 
     res.json({ message: 'Schedule updated' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// DELETE /api/schedules/entry/:id — delete by ID (auth, admin or owner)
+router.delete('/entry/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ error: 'Invalid entry ID' })
+      return
+    }
+
+    const existing = await Schedule.findById(id)
+    if (!existing) { res.status(404).json({ error: 'Entry not found' }); return }
+
+    // Only admin or entry owner can delete
+    const isAdmin = req.user!.role === 'admin'
+    if (!isAdmin && String(existing.user_id) !== String(req.user!._id)) {
+      res.status(403).json({ error: 'Can only delete your own schedule entries' })
+      return
+    }
+
+    await existing.deleteOne()
+
+    res.json({ message: 'Schedule entry removed' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
@@ -216,35 +241,6 @@ router.delete('/all', authenticate, requireAdmin, async (_req, res) => {
   try {
     const result = await Schedule.deleteMany({})
     res.json({ message: 'All schedules cleared', deleted: result.deletedCount })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    res.status(500).json({ error: message })
-  }
-})
-
-// DELETE /api/schedules/entry — remove single schedule cell (admin)
-// Body: { seatId, dayOfWeek, slot }
-router.delete('/entry', authenticate, requireAdmin, async (req, res) => {
-  try {
-    const { seatId, dayOfWeek, slot } = req.body
-
-    if (!seatId || dayOfWeek === undefined || !slot) {
-      res.status(400).json({ error: 'seatId, dayOfWeek, slot are required' })
-      return
-    }
-
-    const result = await Schedule.findOneAndDelete({
-      seat_id: seatId,
-      day_of_week: dayOfWeek,
-      slot,
-    })
-
-    if (!result) {
-      res.status(404).json({ error: 'Schedule entry not found' })
-      return
-    }
-
-    res.json({ message: 'Schedule entry removed' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

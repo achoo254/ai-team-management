@@ -34,7 +34,7 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
 - **Connection**: Mongoose 9.3.1 ODM
-- **Collections**: 7 (seats, users, schedules, alerts, settings, teams, usage_snapshots)
+- **Collections**: 8 (seats, users, schedules, alerts, settings, teams, usage_snapshots, active_sessions)
 - **Indexing**: Compound indexes on (seat_id, day_of_week, slot), (seat_id, type, resolved), and (seat_id, fetched_at)
 - **TTL**: usage_snapshots collection auto-expires after 90 days
 
@@ -89,23 +89,27 @@ Subsequent requests: JWT read from cookie or Authorization header
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (9 files):
+**Route Structure** (10 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
 - `routes/seats.ts` — Seat CRUD, team assignment, token management
 - `routes/admin.ts` — User management, manual alert check trigger
-- `routes/schedules.ts` — Schedule CRUD with conflict prevention
+- `routes/schedules.ts` — Schedule CRUD with conflict prevention, hourly time slots, budget allocation
 - `routes/alerts.ts` — Alert creation, resolution, listing
 - `routes/settings.ts` — Get/update alert thresholds (admin only)
 - `routes/teams.ts` — Team CRUD
 - `routes/usage-snapshots.ts` — Query snapshots, trigger collection
+- `routes/user-settings.ts` — Per-user Telegram bot config, test notifications
 
 **Service Layer** (5 files):
-- `services/alert-service.ts` — Alert generation and checking
-- `services/telegram-service.ts` — Telegram message formatting and sending
+- `services/alert-service.ts` — Alert generation, budget violation checking, session tracking
+- `services/telegram-service.ts` — Telegram message formatting, personal + system bot notifications
 - `services/crypto-service.ts` — AES-256-GCM encryption/decryption for access tokens
 - `services/usage-collector-service.ts` — Fetch usage data from Anthropic API, concurrent collection
 - `services/anthropic-service.ts` — Future Anthropic API integration
+
+**Utility Libraries**:
+- `lib/encryption.ts` — AES-256-GCM encrypt/decrypt for Telegram bot tokens
 
 ### 3. Database Layer (Mongoose + TypeScript)
 
@@ -140,6 +144,8 @@ Subsequent requests: JWT read from cookie or Authorization header
   team: String (enum: ['dev', 'mkt']),
   seat_id: ObjectId (ref: Seat),
   active: Boolean,
+  telegram_bot_token: String | null (encrypted AES-256-GCM),
+  telegram_chat_id: String | null,
   created_at: Date
 }
 ```
@@ -151,9 +157,12 @@ Subsequent requests: JWT read from cookie or Authorization header
   seat_id: ObjectId (ref: Seat),
   user_id: ObjectId (ref: User),
   day_of_week: Number (0=Sunday, 6=Saturday),
-  slot: String (enum: ['morning', 'afternoon']),
+  start_hour: Number (0-23, inclusive),
+  end_hour: Number (0-23, exclusive),
+  usage_budget_pct: Number | null (1-100, auto-divided if null),
   created_at: Date,
-  // Index: (seat_id, day_of_week, slot) compound unique
+  // Index: (seat_id, day_of_week) compound for efficient queries
+  // Note: Overlaps allowed, detected in application logic
 }
 ```
 
@@ -162,14 +171,18 @@ Subsequent requests: JWT read from cookie or Authorization header
 {
   _id: ObjectId,
   seat_id: ObjectId (ref: Seat),
-  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure']),
+  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded']),
   message: String,
   metadata: {
     window?: String ('5h' | '7d' | '7d_sonnet' | '7d_opus'),
     pct?: Number,
     credits_used?: Number,
     credits_limit?: Number,
-    error?: String
+    error?: String,
+    delta?: Number (usage increase during session),
+    budget?: Number (allocated budget %),
+    user_id?: String (user who exceeded budget),
+    user_name?: String (for display)
   },
   resolved: Boolean,
   resolved_by: String | null,
@@ -230,6 +243,25 @@ Subsequent requests: JWT read from cookie or Authorization header
 }
 ```
 
+#### ActiveSession
+```typescript
+{
+  _id: ObjectId,
+  seat_id: ObjectId (ref: Seat),
+  user_id: ObjectId (ref: User),
+  schedule_id: ObjectId (ref: Schedule),
+  started_at: Date,
+  snapshot_at_start: {
+    five_hour_pct: Number | null,
+    seven_day_pct: Number | null,
+    seven_day_sonnet_pct: Number | null,
+    seven_day_opus_pct: Number | null
+  },
+  // Index: (seat_id) for one-per-seat tracking
+  // Transient: deleted when session ends (no TTL)
+}
+```
+
 ### 4. Frontend SPA (React 19 + Vite)
 
 **Location**: `packages/web/src`
@@ -275,7 +307,7 @@ API calls via React Query (TanStack Query)
 
 **Jobs** (via node-cron in `packages/api/src/index.ts`):
 
-1. **Every 30 minutes** — `collectAllUsage()` → `checkSnapshotAlerts()`
+1. **Every 5 minutes** — `collectAllUsage()` → `checkSnapshotAlerts()` → `checkBudgetAlerts()`
    - **collectAllUsage()** from usage-collector-service.ts:
      - Fetches usage metrics from Anthropic API for all seats with active tokens
      - Decrypts stored access tokens (AES-256-GCM)
@@ -288,17 +320,23 @@ API calls via React Query (TanStack Query)
      - Deduplicates: max 1 unresolved alert per (seat_id, type)
      - Sends Telegram notification for each new alert
      - Returns count of alerts created
+   - **checkBudgetAlerts()** from alert-service.ts (chained after snapshot alerts):
+     - Finds active schedules (matching current day/hour)
+     - Tracks per-user usage delta during session via ActiveSession baseline snapshot
+     - When delta >= user's usage_budget_pct: creates usage_exceeded alert + sends Telegram
+     - Auto-resolves usage_exceeded when session ends or next user starts
+     - Manages ActiveSession lifecycle (create, update, delete)
 
 2. **Friday 17:00 Asia/Saigon** — `sendWeeklyReport()` from telegram-service.ts
    - Compiles usage summary using UsageSnapshot data
    - Lists alerts triggered
-   - Sends formatted report to Telegram
+   - Sends formatted report to Telegram (system bot)
 
 **Configuration**:
 - `packages/api/src/index.ts` — Cron schedule setup
-- `packages/api/src/services/telegram-service.ts` — Message formatting and sending
-- Requires `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-- Requires `ENCRYPTION_KEY` (32-byte hex) for token decryption
+- `packages/api/src/services/telegram-service.ts` — Message formatting, dual-bot support (system + per-user)
+- Requires `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (system bot)
+- Requires `ENCRYPTION_KEY` (64-char hex string = 32 bytes) for token encryption/decryption
 
 ### 6. Configuration & Environment
 
@@ -313,15 +351,17 @@ Required:
   JWT_SECRET              — JWT signing key (min 32 chars)
   MONGO_URI              — MongoDB connection URL
   FIREBASE_SERVICE_ACCOUNT_PATH — Firebase admin JSON path
-  ENCRYPTION_KEY         — 64-char hex string (32 bytes) for AES-256-GCM token encryption
+  ENCRYPTION_KEY         — 64-char hex string (32 bytes) for AES-256-GCM encryption (access tokens + bot tokens)
 
 Optional:
-  PORT                   — Server port (default: 3000)
-  TELEGRAM_BOT_TOKEN     — For notifications
-  TELEGRAM_CHAT_ID       — Telegram chat ID
+  PORT                   — Server port (default: 8386)
+  TELEGRAM_BOT_TOKEN     — System bot token for group notifications
+  TELEGRAM_CHAT_ID       — Telegram chat ID for system bot
   TELEGRAM_TOPIC_ID      — Telegram topic (optional)
   APP_URL                — Public app URL (default: http://localhost:3000)
 ```
+
+**Note**: Users can configure personal Telegram bot tokens via `/api/user/settings` (encrypted with ENCRYPTION_KEY)
 
 ## Data Flow
 
@@ -344,9 +384,11 @@ Subsequent API calls include JWT in cookie
 
 ### Alert Generation Flow
 ```
-Every 30 min Cron / Admin manual trigger → checkSnapshotAlerts()
+Every 5 min Cron / Admin manual trigger → checkSnapshotAlerts() → checkBudgetAlerts()
+
+SNAPSHOT ALERTS (existing):
     ↓
-Get latest UsageSnapshot per seat (last 1 hour)
+Get latest UsageSnapshot per seat (last snapshot)
     ↓
 Load Settings: admin-configured rate_limit_pct, extra_credit_pct
     ↓
@@ -359,9 +401,24 @@ Dedup check: If unresolved alert exists for (seat_id, type), skip creation
     ↓
 Create Alert with metadata (window, pct, error, etc.)
     ↓
-Telegram: Send alert-specific notification (rate_limit/extra_credit/token_failure)
+Telegram: Send via system bot to group chat
+
+BUDGET ALERTS (new, per-user session tracking):
     ↓
-Frontend: Display in Alerts view, grouped by type
+Find active schedules: day_of_week=today, start_hour <= now < end_hour
+    ↓
+For each active session:
+  1. Get/create ActiveSession (stores baseline snapshot at session start)
+  2. Get latest UsageSnapshot
+  3. Calculate delta across all 4 windows
+  4. If worst_delta >= user's usage_budget_pct → create usage_exceeded alert
+  5. Telegram: Send to current user (stop) + next user (coming up) via personal bot, fallback to system bot
+    ↓
+Session cleanup:
+  - On session end: Auto-resolve usage_exceeded alerts for that seat
+  - Delete old ActiveSession record
+    ↓
+Frontend: Display all alerts (snapshot + budget) in Alerts view
     ↓
 User: Resolve alert via PUT /api/alerts/:id/resolve
     ↓

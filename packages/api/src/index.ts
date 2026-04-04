@@ -14,9 +14,10 @@ import seatRoutes from './routes/seats.js'
 import teamRoutes from './routes/teams.js'
 import usageSnapshotRoutes from './routes/usage-snapshots.js'
 import settingsRoutes from './routes/settings.js'
+import userSettingsRoutes from './routes/user-settings.js'
 import { sendWeeklyReport } from './services/telegram-service.js'
 import { collectAllUsage } from './services/usage-collector-service.js'
-import { checkSnapshotAlerts } from './services/alert-service.js'
+import { checkSnapshotAlerts, checkBudgetAlerts } from './services/alert-service.js'
 import { checkAndRefreshExpiring } from './services/token-refresh-service.js'
 import { isVietnamHoliday } from './services/vietnam-holidays.js'
 
@@ -37,6 +38,7 @@ app.use('/api/seats', seatRoutes)
 app.use('/api/teams', teamRoutes)
 app.use('/api/usage-snapshots', usageSnapshotRoutes)
 app.use('/api/settings', settingsRoutes)
+app.use('/api/user', userSettingsRoutes)
 
 // Global error handler — must be last
 app.use(errorHandler)
@@ -70,6 +72,8 @@ async function start() {
     await collectAllUsage().catch(console.error)
     console.log('[Cron] Checking snapshot alerts...')
     await checkSnapshotAlerts().catch(console.error)
+    console.log('[Cron] Checking budget alerts...')
+    await checkBudgetAlerts().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
   app.listen(config.apiPort, () => {

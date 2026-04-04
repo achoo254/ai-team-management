@@ -9,6 +9,7 @@ import {
   Users,
   AlertTriangle,
   Settings,
+  Bot,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/use-auth";
@@ -23,6 +24,7 @@ const sheetItems = [
   { label: "Seats", href: "/seats", icon: Monitor },
   { label: "Teams", href: "/teams", icon: Users },
   { label: "Cảnh báo", href: "/alerts", icon: AlertTriangle },
+  { label: "Cài đặt", href: "/settings", icon: Bot },
   { label: "Admin", href: "/admin", icon: Settings, adminOnly: true },
 ];
 

@@ -3,6 +3,7 @@ import { Seat } from '../models/seat.js'
 import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Team } from '../models/team.js'
+import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
 
 /** Escape HTML special chars for Telegram */
 function esc(str: string | number): string {
@@ -160,7 +161,7 @@ export async function sendTokenRefreshAlert(seatLabel: string, error: string) {
 
 /** Send Telegram notification for a new alert. Silently skips if Telegram not configured. */
 export async function sendAlertNotification(
-  type: 'rate_limit' | 'extra_credit' | 'token_failure',
+  type: 'rate_limit' | 'extra_credit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk',
   seatLabel: string,
   metadata: Record<string, unknown>,
   threshold?: number,
@@ -169,12 +170,15 @@ export async function sendAlertNotification(
 
   let msg = ''
   switch (type) {
-    case 'rate_limit':
+    case 'rate_limit': {
+      const resetsAt = metadata.resets_at ? new Date(metadata.resets_at as string).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
       msg = `🔴 <b>Rate Limit Warning</b>\n`
         + `Seat: <b>${esc(seatLabel)}</b>\n`
         + `Window: ${esc(String(metadata.window ?? ''))} | Usage: ${esc(String(metadata.pct ?? ''))}%\n`
         + `Ngưỡng: ${threshold ?? ''}%`
+        + (resetsAt ? `\nReset: ${esc(resetsAt)}` : '')
       break
+    }
     case 'extra_credit':
       msg = `💳 <b>Extra Credit Warning</b>\n`
         + `Seat: <b>${esc(seatLabel)}</b>\n`
@@ -187,15 +191,41 @@ export async function sendAlertNotification(
         + `Error: <code>${esc(String(metadata.error ?? 'unknown'))}</code>\n`
         + `→ Cần re-import credential`
       break
+    case 'usage_exceeded':
+      if (metadata.next_user) {
+        msg = `📢 <b>Sắp đến lượt bạn</b>\n`
+          + `Seat: <b>${esc(seatLabel)}</b>\n`
+          + `User trước đã vượt budget — seat sắp sẵn sàng cho bạn`
+      } else {
+        msg = `🚫 <b>Usage Budget Exceeded</b>\n`
+          + `Seat: <b>${esc(seatLabel)}</b>\n`
+          + `User: ${esc(String(metadata.user_name ?? ''))}\n`
+          + `Usage: ${esc(String(metadata.delta ?? ''))}% / Budget: ${esc(String(metadata.budget ?? ''))}%\n`
+          + `Window: ${esc(String(metadata.window ?? ''))}\n`
+          + `→ Vui lòng dừng sử dụng ngay`
+      }
+      break
+    case 'session_waste':
+      msg = `⚠️ <b>Session lãng phí</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `User: ${esc(String(metadata.user_name ?? ''))}\n`
+        + `Thời gian: ${esc(String(metadata.duration ?? ''))}h nhưng chỉ dùng ${esc(String(metadata.delta ?? ''))}%\n`
+        + `→ Cân nhắc rút ngắn session hoặc nhường seat`
+      break
+    case '7d_risk':
+      msg = `🔴 <b>7d Usage Risk</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Hiện tại: ${esc(String(metadata.current_7d ?? ''))}%\n`
+        + `Dự kiến: ${esc(String(metadata.projected ?? ''))}% (còn ${esc(String(metadata.remaining_sessions ?? ''))} sessions)\n`
+        + `→ Cần giảm tải hoặc chuyển sang seat khác`
+      break
   }
 
   await sendMessage(msg)
 }
 
-/** Send a message to Telegram with HTML + inline buttons. Throws on failure. */
-async function sendMessage(text: string) {
-  const { botToken, chatId, topicId } = config.telegram
-
+/** Send via arbitrary bot token + chat ID */
+async function sendMessageWithBot(botToken: string, chatId: string, text: string, topicId?: string) {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`
   const keyboard = buildInlineKeyboard()
   const body: Record<string, unknown> = {
@@ -216,5 +246,29 @@ async function sendMessage(text: string) {
     const errText = await res.text()
     console.error('[Telegram] Send failed:', res.status, errText)
     throw new Error(`Gửi Telegram thất bại (${res.status}): ${errText}`)
+  }
+}
+
+/** Send a message via system bot to group chat. Throws on failure. */
+async function sendMessage(text: string) {
+  const { botToken, chatId, topicId } = config.telegram
+  await sendMessageWithBot(botToken, chatId, text, topicId)
+}
+
+/** Send notification to a specific user via their personal bot (if configured) + system bot */
+export async function sendToUser(userId: string, message: string) {
+  // Always send to system bot (group chat)
+  await sendMessage(message).catch(console.error)
+
+  // Try user's personal bot
+  if (!isEncryptionConfigured()) return
+  try {
+    const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id')
+    if (user?.telegram_bot_token && user?.telegram_chat_id) {
+      const token = decrypt(user.telegram_bot_token)
+      await sendMessageWithBot(token, user.telegram_chat_id, message)
+    }
+  } catch (err) {
+    console.error(`[Telegram] Personal bot failed for user ${userId}:`, err)
   }
 }

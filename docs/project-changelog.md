@@ -6,6 +6,189 @@ All notable changes to the Claude Teams Management Dashboard project are documen
 
 ---
 
+## [2026-04-04] Hourly Schedule + Per-User Budget Alerts + Personal Bot Config
+
+### Major Features
+
+**Phase 1: Hourly Schedule Redesign**
+- Replaced fixed morning/afternoon slots with flexible hourly scheduling (0-23 hours)
+- Users now allocate `usage_budget_pct` per scheduled session (1-100%)
+- Hourly time grid UI with seat-based tabs
+- Auto-divide budget: when unset, divides equally among users on same seat/day
+- Overlap detection: warns when time ranges overlap but allows creation
+- Migration: existing morning/afternoon slots → 8-12 / 13-17 with 50% default budgets
+- Drag-and-drop support for moving time blocks between hours/days
+
+**Phase 2: Per-User Budget Alert + Block System**
+- New `ActiveSession` model tracks baseline usage snapshot at session start
+- Real-time delta calculation: compares current snapshot vs baseline per user
+- Auto-triggered `usage_exceeded` alert when delta >= user's allocated budget
+- Telegram notifications to:
+  - Current user: "Stop using, budget exceeded"
+  - Next scheduled user: "Your slot is coming up, previous user exceeded budget"
+- Personal Telegram bot support with fallback to system bot (see Phase 3)
+- Auto-unblock: usage_exceeded alert resolves when session ends or next user starts
+- 5-minute cron cycle: collectUsage → checkSnapshotAlerts → checkBudgetAlerts
+
+**Phase 3: Per-User Telegram Bot Configuration**
+- New `/api/user/settings` route: GET/PUT bot token + chat ID, POST test-bot
+- Encryption library: AES-256-GCM for bot tokens at rest (using shared ENCRYPTION_KEY)
+- User model extended: `telegram_bot_token` (encrypted), `telegram_chat_id`, `has_telegram_bot` (boolean)
+- Telegram service dual-mode: system bot sends to group chat, personal bot sends individual notifications
+- Test endpoint validates bot config before saving
+- Token never exposed in API responses (masked/computed `has_telegram_bot` flag)
+- Graceful fallback: if personal bot fails, system bot still delivers
+
+### Data Model Changes
+
+**Schedule schema** (breaking):
+- Removed: `slot` field (morning/afternoon enum)
+- Added: `start_hour` (0-23), `end_hour` (0-23 exclusive), `usage_budget_pct` (nullable 1-100)
+- Index change: dropped `(seat_id, day_of_week, slot)` unique, added `(seat_id, day_of_week)` regular
+
+**Alert type enum** (breaking):
+- Added: `'usage_exceeded'` to AlertType
+- `metadata` field extended: new fields `delta`, `budget`, `user_id`, `user_name` for session context
+
+**User model**:
+- Added: `telegram_bot_token` (string, encrypted), `telegram_chat_id` (string, nullable)
+
+**New ActiveSession model**:
+- Tracks in-progress session baseline snapshot: `seat_id`, `user_id`, `schedule_id`, `started_at`, `snapshot_at_start` (pct values)
+
+**New collection**: `active_sessions` (transient, managed by application)
+
+### Route Changes
+
+**Schedule routes** (modified):
+- GET /api/schedules — returns entries with start_hour/end_hour/budget instead of slot
+- POST /api/schedules/entry — create with hourly range + budget (replaces assign)
+- PUT /api/schedules/entry/:id — update hours/budget
+- DELETE /api/schedules/entry/:id — by ID (simpler than body-based)
+- PATCH /api/schedules/swap — adapted for hourly model (entry IDs instead of seat/day/slot tuples)
+
+**New route** (user-settings):
+- GET /api/user/settings — Get current user's bot config status
+- PUT /api/user/settings — Set bot token + chat ID
+- POST /api/user/settings/test-bot — Test personal bot, returns { success: true/false, error?: string }
+
+### Service Changes
+
+**alert-service.ts**:
+- New `checkBudgetAlerts()` function
+- New `notifyNextUser()` helper
+- New `cleanupExpiredSessions()` helper
+- Session tracking via ActiveSession queries
+
+**telegram-service.ts**:
+- New `sendToUser(userId, message)` — sends via personal bot + system bot (fallback)
+- New `sendMessageWithBot(botToken, chatId, text)` — abstracted bot sender
+- New message template: `usage_exceeded` case with Vietnamese fallback message
+
+**New lib**: `encryption.ts`
+- `encrypt(text: string)` → "iv:authTag:ciphertext" (hex-encoded)
+- `decrypt(stored: string)` → plaintext
+
+### UI Changes
+
+**Schedule page** (complete redesign):
+- Hourly time grid: rows = hours (7-20 default), columns = days (Mon-Fri)
+- Seat-based tabs (instead of all seats in one grid)
+- Create dialog: pick day, start/end hour (dropdowns), budget % (slider)
+- Time block cards: draggable, show user name + time range + budget %
+- Overlap blocks highlighted in orange
+- Budget total indicator per day header
+
+**Dashboard components**:
+- New "OVER BUDGET" badge on seats with unresolved usage_exceeded alerts
+- Badge shows user name + delta %
+- Visual indicator of blocked users during their session
+
+**User settings page** (new):
+- Bot token input (password type, masked if configured)
+- Chat ID input
+- Test button (calls test-bot endpoint, shows success/error toast)
+- Save button
+- Clear config button
+
+### Configuration
+
+**New env var** (ENCRYPTION_KEY):
+- Required for bot token encryption
+- Format: 64-character hexadecimal string (32 bytes)
+- Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+- Shared with access token encryption
+
+**Cron schedule** (modified):
+- Changed from 30-minute to 5-minute cycle for faster budget detection
+- Order: collectAllUsage → checkSnapshotAlerts → checkBudgetAlerts (sequential)
+
+### Breaking Changes
+
+1. **Schedule type enum removed** (`slot: 'morning'|'afternoon'` → hourly model)
+   - API clients must update to use `start_hour`, `end_hour`
+   - Migration runs automatically on first startup
+
+2. **Alert type union expanded** (new `usage_exceeded` value)
+   - Frontend alert type guards must accept new value
+   - Old alert documents can coexist (alerts don't migrate)
+
+3. **Cron frequency increased** (30min → 5min)
+   - More API calls; monitor Anthropic rate limits
+   - Faster budget violation detection (best-case 5 min)
+
+### Backward Compatibility
+
+- Existing morning/afternoon schedules auto-migrate to 8-12 / 13-17 with 50% budgets
+- UsageLog collection unchanged (superseded but preserved for audit)
+- Old alert documents remain queryable; new system generates new types only
+- Gradual migration: users can co-configure personal bot without immediate requirement
+
+### Performance Impact
+
+- **Positive**: 5-minute cron cycle (vs 30-min) catches budget violations faster
+- **Positive**: ActiveSession tracking per-user, not global (better granularity)
+- **Risk**: Telegram API calls 3x more frequent (old 30min → new 5min); monitor quota
+- **Mitigation**: Non-blocking Telegram sends; errors swallowed, logged only
+
+### Files Modified
+
+Backend:
+- `packages/api/src/models/schedule.ts` — Schema redesign
+- `packages/api/src/models/user.ts` — Add telegram fields
+- `packages/api/src/models/active-session.ts` — NEW
+- `packages/api/src/services/alert-service.ts` — New budget check functions
+- `packages/api/src/services/telegram-service.ts` — Dual-bot support
+- `packages/api/src/routes/schedules.ts` — Complete rewrite
+- `packages/api/src/routes/user-settings.ts` — NEW
+- `packages/api/src/lib/encryption.ts` — NEW
+- `packages/api/src/index.ts` — Cron integration
+- `packages/shared/types.ts` — Schedule, Alert, User types
+
+Frontend:
+- `packages/web/src/components/schedule-grid.tsx` — Hourly time grid
+- `packages/web/src/components/schedule-cell.tsx` → time block rendering
+- `packages/web/src/pages/schedule.tsx` — UI redesign, seat tabs, create dialog
+- `packages/web/src/pages/dashboard.tsx` — Over-budget badge
+- `packages/web/src/hooks/use-schedules.ts` — Updated mutations
+- `packages/web/src/hooks/use-user-settings.ts` — NEW
+- `packages/web/src/components/bot-settings-form.tsx` — NEW settings UI
+
+### Testing & Validation
+
+- Build: ✓ TypeScript compilation passes
+- Tests: ✓ All passing
+- Linting: ✓ Clean
+- Manual: Schedule creation with hourly blocks, budget overflow detection, personal bot configuration
+
+### Related Plans
+
+- Plan: `plans/dattqh/260404-1250-schedule-usage-bot-redesign/`
+- Phases: 3 (all complete)
+- Brainstorm: `plans/dattqh/reports/brainstorm-260404-1237-schedule-usage-bot-redesign.md`
+
+---
+
 ## [2026-04-04] UsageLog Module Removal & System Consolidation
 
 ### Major Changes

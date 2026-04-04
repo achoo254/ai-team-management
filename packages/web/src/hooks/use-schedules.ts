@@ -7,7 +7,9 @@ export interface ScheduleEntry {
   seat_id: string;
   user_id: string;
   day_of_week: number;
-  slot: "morning" | "afternoon";
+  start_hour: number;
+  end_hour: number;
+  usage_budget_pct: number | null;
   user_name: string;
   seat_label: string;
 }
@@ -35,23 +37,38 @@ export function useSeatsWithUsers() {
   });
 }
 
-export function useAssignSchedule() {
+export function useCreateScheduleEntry() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { seatId: string; userId: string; dayOfWeek: number; slot: string }) =>
-      api.post("/api/schedules/assign", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
+    mutationFn: (body: {
+      seatId: string;
+      userId: string;
+      dayOfWeek: number;
+      startHour: number;
+      endHour: number;
+      usageBudgetPct?: number | null;
+    }) => api.post("/api/schedules/entry", body),
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: ["schedules"] });
+      if (data?.warnings?.length) {
+        toast.warning("Có trùng lịch với entry khác");
+      }
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 }
 
-export function useSwapSchedule() {
+export function useUpdateScheduleEntry() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: {
-      from: { seatId: string; dayOfWeek: number; slot: string };
-      to: { seatId: string; dayOfWeek: number; slot: string };
-    }) => api.patch("/api/schedules/swap", body),
+    mutationFn: ({ id, ...body }: {
+      id: string;
+      dayOfWeek?: number;
+      startHour?: number;
+      endHour?: number;
+      usageBudgetPct?: number | null;
+      userId?: string;
+    }) => api.put(`/api/schedules/entry/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
     onError: (e: Error) => toast.error(e.message),
   });
@@ -60,8 +77,17 @@ export function useSwapSchedule() {
 export function useDeleteEntry() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { seatId: string; dayOfWeek: number; slot: string }) =>
-      api.delete("/api/schedules/entry", body),
+    mutationFn: (id: string) => api.delete(`/api/schedules/entry/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useSwapSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { fromId: string; toId?: string; dayOfWeek?: number; startHour?: number; endHour?: number; seatId?: string }) =>
+      api.patch("/api/schedules/swap", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
     onError: (e: Error) => toast.error(e.message),
   });

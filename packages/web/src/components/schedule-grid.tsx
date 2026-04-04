@@ -1,64 +1,122 @@
-
 import { Fragment } from "react";
-import { ScheduleCell } from "./schedule-cell";
+import { useDroppable } from "@dnd-kit/core";
+import { ScheduleCell, ROW_H } from "./schedule-cell";
 import type { ScheduleEntry, SeatWithUsers } from "@/hooks/use-schedules";
 
-const DAYS = [
-  { label: "T2 Sáng", day: 1, slot: "morning" },
-  { label: "T2 Chiều", day: 1, slot: "afternoon" },
-  { label: "T3 Sáng", day: 2, slot: "morning" },
-  { label: "T3 Chiều", day: 2, slot: "afternoon" },
-  { label: "T4 Sáng", day: 3, slot: "morning" },
-  { label: "T4 Chiều", day: 3, slot: "afternoon" },
-  { label: "T5 Sáng", day: 4, slot: "morning" },
-  { label: "T5 Chiều", day: 4, slot: "afternoon" },
-  { label: "T6 Sáng", day: 5, slot: "morning" },
-  { label: "T6 Chiều", day: 5, slot: "afternoon" },
-] as const;
+const WEEKDAYS = [
+  { label: "T2", day: 1 },
+  { label: "T3", day: 2 },
+  { label: "T4", day: 3 },
+  { label: "T5", day: 4 },
+  { label: "T6", day: 5 },
+];
+
+const WEEKEND = [
+  { label: "T7", day: 6 },
+  { label: "CN", day: 0 },
+];
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 interface Props {
   schedules: ScheduleEntry[];
   seats: SeatWithUsers[];
+  activeSeatId: string | null;
   isAdmin: boolean;
-  onDelete: (seatId: string, dayOfWeek: number, slot: string) => void;
+  onDelete: (id: string) => void;
+  onEdit: (entry: ScheduleEntry) => void;
+  onResize: (entryId: string, newEndHour: number) => void;
+  onClickSlot: (dayOfWeek: number, hour: number) => void;
+  showWeekend?: boolean;
 }
 
-export function ScheduleGrid({ schedules, seats, isAdmin, onDelete }: Props) {
-  // Build lookup map
-  const lookup = new Map<string, ScheduleEntry>();
-  for (const s of schedules) {
-    lookup.set(`${s.seat_id}-${s.day_of_week}-${s.slot}`, s);
+export { WEEKDAYS, WEEKEND };
+
+/** Droppable hour cell wrapper */
+function DroppableHourCell({ dayOfWeek, hour, isAdmin, isEmpty, onClickSlot, children }: {
+  dayOfWeek: number; hour: number; isAdmin: boolean; isEmpty: boolean;
+  onClickSlot: (d: number, h: number) => void; children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `slot-${dayOfWeek}-${hour}`,
+    data: { type: "hour-slot", dayOfWeek, hour },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`border-b border-l border-border relative cursor-pointer transition-colors ${isOver ? "bg-primary/10" : "hover:bg-muted/30"}`}
+      style={{ height: `${ROW_H}px` }}
+      onClick={() => { if (isAdmin && isEmpty) onClickSlot(dayOfWeek, hour); }}
+    >
+      {children}
+      {isAdmin && isEmpty && !isOver && (
+        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground opacity-0 hover:opacity-100 transition-opacity">+</span>
+      )}
+    </div>
+  );
+}
+
+export function ScheduleGrid({ schedules, seats, activeSeatId, isAdmin, onDelete, onEdit, onResize, onClickSlot, showWeekend }: Props) {
+  const DAYS = showWeekend ? WEEKEND : WEEKDAYS;
+
+  const seatSchedules = activeSeatId
+    ? schedules.filter((s) => s.seat_id === activeSeatId)
+    : schedules;
+
+  const dayEntries = new Map<number, ScheduleEntry[]>();
+  for (const s of seatSchedules) {
+    const list = dayEntries.get(s.day_of_week) ?? [];
+    list.push(s);
+    dayEntries.set(s.day_of_week, list);
   }
 
   return (
-    <div>
-      <div className="grid" style={{ gridTemplateColumns: `120px repeat(${DAYS.length}, 1fr)` }}>
-        {/* Header row */}
-        <div className="px-2 py-2 text-xs font-semibold text-muted-foreground">Seat</div>
+    <div className="overflow-auto">
+      <div className="grid gap-0" style={{ gridTemplateColumns: `48px repeat(${DAYS.length}, 1fr)` }}>
+        {/* Header */}
+        <div className="sticky top-0 z-20 bg-background px-1 py-1.5 text-[10px] font-semibold text-muted-foreground border-b" />
         {DAYS.map((d) => (
-          <div key={`${d.day}-${d.slot}`} className="px-1 py-2 text-xs font-semibold text-center text-muted-foreground border-l border-border">
-            {d.label}
+          <div key={d.day} className="sticky top-0 z-20 bg-background px-1 py-1.5 text-center border-b border-l border-border">
+            <span className="text-xs font-semibold text-muted-foreground">{d.label}</span>
           </div>
         ))}
-        {/* Seat rows */}
-        {seats.map((seat) => (
-          <Fragment key={seat._id}>
-            <div className="flex items-center px-2 py-1 text-sm font-medium border-t border-border truncate">
-              {seat.label}
+
+        {/* Hour rows */}
+        {HOURS.map((hour) => (
+          <Fragment key={hour}>
+            <div className="px-1 text-[10px] text-muted-foreground text-right pr-1.5 border-b border-border flex items-start pt-0.5"
+              style={{ height: `${ROW_H}px` }}>
+              {String(hour).padStart(2, "0")}:00
             </div>
             {DAYS.map((d) => {
-              const entry = lookup.get(`${seat._id}-${d.day}-${d.slot}`);
+              const entries = (dayEntries.get(d.day) ?? []).filter(
+                (e) => e.start_hour <= hour && e.end_hour > hour,
+              );
+              const startingEntries = entries.filter((e) => e.start_hour === hour);
+              const isEmpty = entries.length === 0;
+
               return (
-                <div key={`${seat._id}-${d.day}-${d.slot}`} className="p-1 border-t border-l border-border">
-                  <ScheduleCell
-                    seatId={seat._id}
-                    dayOfWeek={d.day}
-                    slot={d.slot}
-                    entry={entry ? { userId: entry.user_id, userName: entry.user_name, seatId: entry.seat_id } : undefined}
-                    isAdmin={isAdmin}
-                    onDelete={onDelete}
-                  />
-                </div>
+                <DroppableHourCell
+                  key={`${d.day}-${hour}`}
+                  dayOfWeek={d.day}
+                  hour={hour}
+                  isAdmin={isAdmin}
+                  isEmpty={isEmpty}
+                  onClickSlot={onClickSlot}
+                >
+                  {startingEntries.map((entry) => (
+                    <ScheduleCell
+                      key={entry._id}
+                      entry={entry}
+                      span={entry.end_hour - entry.start_hour}
+                      isAdmin={isAdmin}
+                      onDelete={onDelete}
+                      onEdit={onEdit}
+                      onResize={onResize}
+                    />
+                  ))}
+                </DroppableHourCell>
               );
             })}
           </Fragment>

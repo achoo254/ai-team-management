@@ -1,114 +1,112 @@
-
-import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X } from "lucide-react";
 import type { ScheduleEntry, SeatWithUsers } from "@/hooks/use-schedules";
 
-const DAYS = [
-  { label: "Thứ 2", day: 1 }, { label: "Thứ 3", day: 2 }, { label: "Thứ 4", day: 3 },
-  { label: "Thứ 5", day: 4 }, { label: "Thứ 6", day: 5 },
+const WEEKDAYS = [
+  { label: "Thứ 2", day: 1 },
+  { label: "Thứ 3", day: 2 },
+  { label: "Thứ 4", day: 3 },
+  { label: "Thứ 5", day: 4 },
+  { label: "Thứ 6", day: 5 },
 ];
-const SLOTS = [
-  { key: "morning", label: "Buổi sáng" },
-  { key: "afternoon", label: "Buổi chiều" },
-] as const;
 
-interface AssignTarget { seatId: string; dayOfWeek: number; slot: string }
+const WEEKEND_DAYS = [
+  { label: "Thứ 7", day: 6 },
+  { label: "CN", day: 0 },
+];
 
 interface Props {
   schedules: ScheduleEntry[];
   seats: SeatWithUsers[];
   isAdmin: boolean;
-  onAssign: (seatId: string, userId: string, dayOfWeek: number, slot: string) => void;
-  onDelete: (seatId: string, dayOfWeek: number, slot: string) => void;
+  onDelete: (id: string) => void;
+  onClickSlot: (dayOfWeek: number, hour: number) => void;
+  showWeekend?: boolean;
 }
 
-export function DayTabView({ schedules, seats, isAdmin, onAssign, onDelete }: Props) {
-  const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
-  const [selectedUser, setSelectedUser] = useState("");
-
-  const lookup = new Map<string, ScheduleEntry>();
-  for (const s of schedules) lookup.set(`${s.seat_id}-${s.day_of_week}-${s.slot}`, s);
-
-  function handleAssign() {
-    if (!assignTarget || !selectedUser) return;
-    onAssign(assignTarget.seatId, selectedUser, assignTarget.dayOfWeek, assignTarget.slot);
-    setAssignTarget(null);
-    setSelectedUser("");
-  }
-
-  // Collect all users from all seats for assign dialog
-  const allUsers = seats.flatMap((s) => (s.users ?? []).map((u) => ({ ...u, seatLabel: s.label })));
+export function DayTabView({ schedules, seats, isAdmin, onDelete, onClickSlot, showWeekend }: Props) {
+  const DAYS = showWeekend ? WEEKEND_DAYS : WEEKDAYS;
+  const defaultTab = showWeekend ? "6" : "1";
 
   return (
     <div className="lg:hidden">
-      <Tabs defaultValue="1">
-        <TabsList className="w-full grid grid-cols-5 mb-4">
+      <Tabs defaultValue={defaultTab}>
+        <TabsList className={`w-full grid mb-4 ${showWeekend ? "grid-cols-2" : "grid-cols-5"}`}>
           {DAYS.map((d) => (
-            <TabsTrigger key={d.day} value={String(d.day)} className="text-xs">{d.label}</TabsTrigger>
+            <TabsTrigger key={d.day} value={String(d.day)} className="text-xs">
+              {d.label}
+            </TabsTrigger>
           ))}
         </TabsList>
-        {DAYS.map((d) => (
-          <TabsContent key={d.day} value={String(d.day)} className="space-y-3">
-            {seats.map((seat) => (
-              <Card key={seat._id}>
-                <CardContent className="pt-3 pb-3 px-4 space-y-2">
-                  <p className="text-sm font-semibold">{seat.label}</p>
-                  {SLOTS.map(({ key, label }) => {
-                    const entry = lookup.get(`${seat._id}-${d.day}-${key}`);
-                    return (
-                      <div key={key} className="flex items-center justify-between gap-2 py-1 border-t border-border">
-                        <span className="text-xs text-muted-foreground w-24 shrink-0">{label}</span>
-                        {entry ? (
-                          <div className="flex items-center gap-2 flex-1">
-                            <Badge variant="outline" className="text-xs">{entry.user_name}</Badge>
-                            {isAdmin && (
-                              <button onClick={() => onDelete(seat._id, d.day, key)}
-                                className="ml-auto p-1 rounded hover:bg-red-100 text-red-500">
-                                <X size={12} />
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex-1 flex items-center">
-                            <span className="text-xs text-muted-foreground italic">Trống</span>
-                            {isAdmin && (
-                              <Button variant="ghost" size="sm" className="ml-auto h-6 text-xs"
-                                onClick={() => { setAssignTarget({ seatId: seat._id, dayOfWeek: d.day, slot: key }); setSelectedUser(""); }}>
-                                + Phân ca
-                              </Button>
-                            )}
-                          </div>
+        {DAYS.map((d) => {
+          const daySchedules = schedules
+            .filter((s) => s.day_of_week === d.day)
+            .sort((a, b) => a.start_hour - b.start_hour);
+
+          return (
+            <TabsContent key={d.day} value={String(d.day)} className="space-y-3">
+              {daySchedules.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-3 pb-3 px-4">
+                    <p className="text-sm text-muted-foreground italic text-center">
+                      Chưa có lịch
+                      {isAdmin && (
+                        <button
+                          className="ml-2 text-primary underline"
+                          onClick={() => onClickSlot(d.day, 8)}
+                        >
+                          + Tạo mới
+                        </button>
+                      )}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                daySchedules.map((entry) => (
+                  <Card key={entry._id}>
+                    <CardContent className="pt-3 pb-3 px-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {String(entry.start_hour).padStart(2, "0")}:00–
+                            {String(entry.end_hour).padStart(2, "0")}:00
+                          </Badge>
+                          <span className="text-sm font-medium truncate">{entry.user_name}</span>
+                          {entry.usage_budget_pct != null && (
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              Limit: {entry.usage_budget_pct}%
+                            </span>
+                          )}
+                        </div>
+                        {isAdmin && (
+                          <button
+                            onClick={() => onDelete(entry._id)}
+                            className="p-1 rounded hover:bg-red-100 text-red-500 shrink-0"
+                          >
+                            <X size={14} />
+                          </button>
                         )}
                       </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            ))}
-          </TabsContent>
-        ))}
-      </Tabs>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
 
-      <Dialog open={!!assignTarget} onOpenChange={(o) => !o && setAssignTarget(null)}>
-        <DialogContent className="max-w-xs">
-          <DialogHeader><DialogTitle>Phân ca thành viên</DialogTitle></DialogHeader>
-          <Select value={selectedUser} onValueChange={(v) => setSelectedUser(v ?? "")}>
-            <SelectTrigger><SelectValue placeholder="Chọn thành viên" /></SelectTrigger>
-            <SelectContent>
-              {allUsers.map((u) => (
-                <SelectItem key={u._id} value={u._id}>{u.name} ({u.seatLabel})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={handleAssign} disabled={!selectedUser} className="w-full">Xác nhận</Button>
-        </DialogContent>
-      </Dialog>
+              {/* Quick add button at bottom */}
+              {isAdmin && daySchedules.length > 0 && (
+                <button
+                  className="w-full py-2 text-xs text-muted-foreground hover:text-primary border border-dashed border-border rounded-md"
+                  onClick={() => onClickSlot(d.day, 8)}
+                >
+                  + Thêm lịch
+                </button>
+              )}
+            </TabsContent>
+          );
+        })}
+      </Tabs>
     </div>
   );
 }

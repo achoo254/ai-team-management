@@ -2,7 +2,7 @@ import mongoose, { Schema, type Document, type Types } from 'mongoose'
 
 export interface IAlert extends Document {
   seat_id: Types.ObjectId
-  type: 'rate_limit' | 'extra_credit' | 'token_failure'
+  type: 'rate_limit' | 'extra_credit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
   message: string
   metadata: Record<string, unknown>
   resolved: boolean
@@ -14,7 +14,7 @@ export interface IAlert extends Document {
 const alertSchema = new Schema<IAlert>(
   {
     seat_id: { type: Schema.Types.ObjectId, ref: 'Seat', required: true },
-    type: { type: String, required: true, enum: ['rate_limit', 'extra_credit', 'token_failure'] },
+    type: { type: String, required: true, enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk'] },
     message: { type: String, required: true },
     metadata: { type: Schema.Types.Mixed, default: {} },
     resolved: { type: Boolean, default: false },

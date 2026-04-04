@@ -30,6 +30,8 @@ export interface User {
   team?: 'dev' | 'mkt'
   seat_id?: string | null
   active: boolean
+  telegram_chat_id?: string | null
+  has_telegram_bot?: boolean
   created_at: string
 }
 
@@ -38,11 +40,13 @@ export interface Schedule {
   seat_id: string
   user_id: string
   day_of_week: number
-  slot: 'morning' | 'afternoon'
+  start_hour: number         // 0-23
+  end_hour: number           // 0-23 (exclusive)
+  usage_budget_pct?: number | null  // 1-100, null = auto-divide
   created_at: string
 }
 
-export type AlertType = 'rate_limit' | 'extra_credit' | 'token_failure'
+export type AlertType = 'rate_limit' | 'extra_credit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
 
 export interface AlertMetadata {
   window?: '5h' | '7d' | '7d_sonnet' | '7d_opus'
@@ -50,6 +54,10 @@ export interface AlertMetadata {
   credits_used?: number
   credits_limit?: number
   error?: string
+  delta?: number
+  budget?: number
+  user_id?: string
+  user_name?: string
 }
 
 export interface Alert {
