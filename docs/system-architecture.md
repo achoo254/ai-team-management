@@ -34,8 +34,8 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
 - **Connection**: Mongoose 9.3.1 ODM
-- **Collections**: 7 (seats, users, usage_logs, schedules, alerts, teams, usage_snapshots)
-- **Indexing**: Compound indexes on (user_id, week_start), (seat_id, day_of_week, slot), and (seat_id, fetched_at)
+- **Collections**: 8 (seats, users, usage_logs, schedules, alerts, settings, teams, usage_snapshots)
+- **Indexing**: Compound indexes on (user_id, week_start), (seat_id, day_of_week, slot), (seat_id, type, resolved), and (seat_id, fetched_at)
 - **TTL**: usage_snapshots collection auto-expires after 90 days
 
 ### Monorepo & Shared (`packages/shared`)
@@ -176,10 +176,34 @@ Subsequent requests: JWT read from cookie or Authorization header
 {
   _id: ObjectId,
   seat_id: ObjectId (ref: Seat),
-  type: String (enum: ['high_usage', 'no_activity']),
+  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure']),
   message: String,
+  metadata: {
+    window?: String ('5h' | '7d' | '7d_sonnet' | '7d_opus'),
+    pct?: Number,
+    credits_used?: Number,
+    credits_limit?: Number,
+    error?: String
+  },
   resolved: Boolean,
-  created_at: Date
+  resolved_by: String | null,
+  resolved_at: String | null,
+  created_at: Date,
+  // Index: (seat_id, type, resolved) compound for dedup
+}
+```
+
+#### Settings
+```typescript
+{
+  _id: ObjectId,
+  alerts: {
+    rate_limit_pct: Number (default: 80),
+    extra_credit_pct: Number (default: 80)
+  },
+  created_at: Date,
+  updated_at: Date
+  // Single-document pattern: at most 1 document in collection
 }
 ```
 
