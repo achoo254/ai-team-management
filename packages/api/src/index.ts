@@ -16,6 +16,7 @@ import usageLogRoutes from './routes/usage-log.js'
 import usageSnapshotRoutes from './routes/usage-snapshots.js'
 import { sendLogReminder, sendWeeklyReport } from './services/telegram-service.js'
 import { collectAllUsage } from './services/usage-collector-service.js'
+import { checkAndRefreshExpiring } from './services/token-refresh-service.js'
 import { isVietnamHoliday } from './services/vietnam-holidays.js'
 
 const app = express()
@@ -64,6 +65,12 @@ async function start() {
     }
     console.log('[Cron] Triggering weekly report...')
     sendWeeklyReport().catch(console.error)
+  }, { timezone: 'Asia/Ho_Chi_Minh' })
+
+  // Cron: Every 5 min — check and refresh expiring OAuth tokens
+  cron.schedule('*/5 * * * *', () => {
+    console.log('[Cron] Checking token expiry...')
+    checkAndRefreshExpiring().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
   // Cron: Every 30 min — collect usage snapshots from Anthropic OAuth API

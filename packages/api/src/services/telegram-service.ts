@@ -176,6 +176,16 @@ export async function sendLogReminder() {
   await sendMessage(msg)
 }
 
+/** Send alert when token refresh fails for a seat */
+export async function sendTokenRefreshAlert(seatLabel: string, error: string) {
+  if (!config.telegram.botToken || !config.telegram.chatId) return
+  const msg = `⚠️ <b>Token refresh failed</b>\n\n`
+    + `Seat: <b>${esc(seatLabel)}</b>\n`
+    + `Error: <code>${esc(error.slice(0, 200))}</code>\n\n`
+    + `Token đã bị deactivate. Vui lòng re-import credential.`
+  await sendMessage(msg)
+}
+
 /** Send a message to Telegram with HTML + inline buttons. Throws on failure. */
 async function sendMessage(text: string) {
   const { botToken, chatId, topicId } = config.telegram

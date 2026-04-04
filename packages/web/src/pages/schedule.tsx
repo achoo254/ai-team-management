@@ -109,7 +109,7 @@ export default function SchedulePage() {
       ) : (
         <DndContext
           sensors={sensors}
-          onDragStart={(e) => setActiveData(e.active.data.current as { userName: string })}
+          onDragStart={(e: any) => setActiveData(e.active.data.current as { userName: string })}
           onDragEnd={handleDragEnd}
         >
           <div className="flex gap-4 flex-1 min-h-0">

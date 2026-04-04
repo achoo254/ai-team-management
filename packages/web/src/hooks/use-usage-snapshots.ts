@@ -62,11 +62,11 @@ export function useCollectSeatUsage() {
 export function useSetSeatToken() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ seatId, access_token }: { seatId: string; access_token: string }) =>
-      api.put(`/api/seats/${seatId}/token`, { access_token }),
+    mutationFn: ({ seatId, credential_json }: { seatId: string; credential_json: string }) =>
+      api.put(`/api/seats/${seatId}/token`, { credential_json }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['seats'] })
-      toast.success('Đã cập nhật token')
+      toast.success('Đã cập nhật credential')
     },
     onError: (e: Error) => toast.error(e.message),
   })

@@ -8,10 +8,37 @@ import { Schedule } from '../models/schedule.js'
 
 const router = Router()
 
+/** Parse credential from request body — supports raw JSON and structured fields */
+function parseCredential(body: Record<string, unknown>) {
+  // Format A: raw JSON string (from browser cookie/file export)
+  if (body.credential_json && typeof body.credential_json === 'string') {
+    const parsed = JSON.parse(body.credential_json)
+    const cred = parsed.claudeAiOauth || parsed
+    return {
+      access_token: cred.accessToken || cred.access_token,
+      refresh_token: cred.refreshToken || cred.refresh_token || null,
+      expires_at: cred.expiresAt || cred.expires_at || null,
+      scopes: cred.scopes || [],
+      subscription_type: cred.subscriptionType || cred.subscription_type || null,
+      rate_limit_tier: cred.rateLimitTier || cred.rate_limit_tier || null,
+    }
+  }
+  // Format B: structured fields
+  return {
+    access_token: body.access_token as string,
+    refresh_token: (body.refresh_token as string) || null,
+    expires_at: (body.expires_at as number) || null,
+    scopes: (body.scopes as string[]) || [],
+    subscription_type: (body.subscription_type as string) || null,
+    rate_limit_tier: (body.rate_limit_tier as string) || null,
+  }
+}
+
 // GET /api/seats — list seats with assigned users (auth)
 router.get('/', authenticate, async (_req, res) => {
   try {
-    const seats = await Seat.find().sort({ _id: 1 }).lean()
+    // Use select('+oauth_credential') so toJSON strips tokens but keeps metadata
+    const seats = await Seat.find().select('+oauth_credential').sort({ _id: 1 }).lean()
     const users = await User.find(
       { active: true, seat_ids: { $exists: true, $ne: [] } },
       'name email seat_ids team',
@@ -27,16 +54,24 @@ router.get('/', authenticate, async (_req, res) => {
       }
     }
 
-    const enriched = seats.map((seat) => ({
-      ...seat,
-      has_token: !!seat.token_active,
-      users: (usersBySeat[String(seat._id)] || []).map((u) => ({
-        _id: u._id,
-        name: u.name,
-        email: u.email,
-        team: u.team ?? seat.team,
-      })),
-    }))
+    const enriched = seats.map((seat) => {
+      const seatObj = { ...seat }
+      // Strip tokens from oauth_credential, keep metadata
+      if (seatObj.oauth_credential) {
+        delete (seatObj.oauth_credential as any).access_token
+        delete (seatObj.oauth_credential as any).refresh_token
+      }
+      return {
+        ...seatObj,
+        has_token: !!seat.token_active,
+        users: (usersBySeat[String(seat._id)] || []).map((u) => ({
+          _id: u._id,
+          name: u.name,
+          email: u.email,
+          team: u.team ?? seat.team,
+        })),
+      }
+    })
 
     res.json({ seats: enriched })
   } catch (error) {
@@ -207,7 +242,7 @@ router.delete('/:id/unassign/:userId', authenticate, requireAdmin, async (req, r
   }
 })
 
-// PUT /api/seats/:id/token — set/update access token (admin)
+// PUT /api/seats/:id/token — set/update OAuth credential (admin)
 router.put('/:id/token', authenticate, requireAdmin, async (req, res) => {
   try {
     const id = req.params.id as string
@@ -216,16 +251,24 @@ router.put('/:id/token', authenticate, requireAdmin, async (req, res) => {
       return
     }
 
-    const { access_token } = req.body
-    if (!access_token || typeof access_token !== 'string') {
+    const cred = parseCredential(req.body)
+    if (!cred.access_token || typeof cred.access_token !== 'string') {
       res.status(400).json({ error: 'access_token is required' })
       return
     }
 
-    const encrypted = encrypt(access_token)
+    const oauth_credential = {
+      access_token: encrypt(cred.access_token),
+      refresh_token: cred.refresh_token ? encrypt(cred.refresh_token) : null,
+      expires_at: cred.expires_at ? new Date(cred.expires_at) : null,
+      scopes: cred.scopes,
+      subscription_type: cred.subscription_type,
+      rate_limit_tier: cred.rate_limit_tier,
+    }
+
     const seat = await Seat.findByIdAndUpdate(
       id,
-      { access_token: encrypted, token_active: true },
+      { oauth_credential, token_active: true, last_fetch_error: null },
       { new: true },
     )
     if (!seat) {
@@ -233,14 +276,18 @@ router.put('/:id/token', authenticate, requireAdmin, async (req, res) => {
       return
     }
 
-    res.json({ message: 'Token updated', seat })
+    res.json({ message: 'Credential updated', seat })
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      res.status(400).json({ error: 'Invalid JSON format' })
+      return
+    }
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
   }
 })
 
-// DELETE /api/seats/:id/token — remove token (admin)
+// DELETE /api/seats/:id/token — remove credential (admin)
 router.delete('/:id/token', authenticate, requireAdmin, async (req, res) => {
   try {
     const id = req.params.id as string
@@ -251,7 +298,7 @@ router.delete('/:id/token', authenticate, requireAdmin, async (req, res) => {
 
     const seat = await Seat.findByIdAndUpdate(
       id,
-      { access_token: null, token_active: false, last_fetch_error: null },
+      { oauth_credential: null, token_active: false, last_fetch_error: null, last_refreshed_at: null },
       { new: true },
     )
     if (!seat) {

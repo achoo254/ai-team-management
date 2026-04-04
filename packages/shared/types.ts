@@ -1,5 +1,12 @@
 // Shared API types used by both @repo/web and @repo/api
 
+export interface OAuthCredentialMeta {
+  expires_at: string | null
+  scopes: string[]
+  subscription_type: string | null
+  rate_limit_tier: string | null
+}
+
 export interface Seat {
   _id: string
   email: string
@@ -8,8 +15,10 @@ export interface Seat {
   max_users: number
   has_token?: boolean
   token_active?: boolean
+  oauth_credential?: OAuthCredentialMeta | null
   last_fetched_at?: string | null
   last_fetch_error?: string | null
+  last_refreshed_at?: string | null
   created_at: string
 }
 

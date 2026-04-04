@@ -1,6 +1,7 @@
 import { Seat } from '../models/seat.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { decrypt } from './crypto-service.js'
+import { parallelLimit } from '../utils/parallel-limit.js'
 
 const API_URL = 'https://api.anthropic.com/api/oauth/usage'
 const CONCURRENCY = 3
@@ -17,9 +18,13 @@ function parseBucket(bucket: unknown): { pct: number | null; resetsAt: Date | nu
   }
 }
 
-/** Fetch usage for a single seat */
-async function fetchSeatUsage(seat: { _id: unknown; access_token: string; label: string }) {
-  const token = decrypt(seat.access_token)
+/** Fetch usage for a single seat using oauth_credential */
+async function fetchSeatUsage(seat: {
+  _id: unknown
+  oauth_credential: { access_token: string }
+  label: string
+}) {
+  const token = decrypt(seat.oauth_credential.access_token)
 
   const res = await fetch(API_URL, {
     method: 'GET',
@@ -69,21 +74,6 @@ async function fetchSeatUsage(seat: { _id: unknown; access_token: string; label:
   console.log(`[Collector] ✓ ${seat.label}`)
 }
 
-/** Run tasks with concurrency limit */
-async function parallelLimit<T>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<void>,
-): Promise<void> {
-  const executing: Promise<void>[] = []
-  for (const item of items) {
-    const p = fn(item).then(() => { executing.splice(executing.indexOf(p), 1) })
-    executing.push(p)
-    if (executing.length >= limit) await Promise.race(executing)
-  }
-  await Promise.all(executing)
-}
-
 // Mutex guard: prevent overlapping cron runs
 let isCollecting = false
 
@@ -102,8 +92,8 @@ export async function collectAllUsage(): Promise<{
   try {
     const seats = await Seat.find({
       token_active: true,
-      access_token: { $ne: null },
-    }).select('+access_token').lean()
+      'oauth_credential.access_token': { $ne: null },
+    }).select('+oauth_credential').lean()
 
     if (seats.length === 0) {
       console.log('[Collector] No active seats with tokens')
@@ -138,9 +128,9 @@ export async function collectAllUsage(): Promise<{
 
 /** Collect usage for a single seat by ID (skips if no active token) */
 export async function collectSeatUsage(seatId: string): Promise<{ skipped?: boolean }> {
-  const seat = await Seat.findById(seatId).select('+access_token').lean()
+  const seat = await Seat.findById(seatId).select('+oauth_credential').lean()
   if (!seat) throw new Error('Seat not found')
-  if (!seat.token_active || !seat.access_token) {
+  if (!seat.token_active || !seat.oauth_credential?.access_token) {
     console.log(`[Collector] Skipped ${seat.label}: no active token`)
     return { skipped: true }
   }
