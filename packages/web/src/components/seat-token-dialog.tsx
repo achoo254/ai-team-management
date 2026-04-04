@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useSetSeatToken, useRemoveSeatToken } from '@/hooks/use-usage-snapshots'
+import { CredentialPathGuide } from '@/components/credential-path-guide'
 import type { Seat } from '@repo/shared'
 
 interface Props {
@@ -156,6 +157,9 @@ export function SeatTokenDialog({ seat, open, onOpenChange }: Props) {
           {seat.last_fetch_error && (
             <p className="text-sm text-destructive">Lỗi: {seat.last_fetch_error}</p>
           )}
+
+          {/* Credential path guide */}
+          <CredentialPathGuide />
 
           {/* Input tabs */}
           <Tabs defaultValue="paste">
