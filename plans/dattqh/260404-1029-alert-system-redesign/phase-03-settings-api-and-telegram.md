@@ -1,6 +1,6 @@
 # Phase 3: Settings API & Telegram Notifications
 
-## Priority: Medium | Status: pending
+## Priority: Medium | Status: completed
 
 ## Overview
 Create settings CRUD route for admin UI. Add Telegram notification function for individual alerts.
@@ -77,11 +77,11 @@ Silently skip if Telegram not configured (don't throw).
 After each successful `insertIfNew()`, call `sendAlertNotification()`. Wrap in try-catch — Telegram failure should not block alert creation.
 
 ## Todo
-- [ ] Create routes/settings.ts with GET/PUT
-- [ ] Mount settings route in index.ts
-- [ ] Add sendAlertNotification to telegram-service.ts
-- [ ] Integrate Telegram call in alert-service.ts
-- [ ] Run `pnpm build` to verify
+- [x] Create routes/settings.ts with GET/PUT
+- [x] Mount settings route in index.ts
+- [x] Add sendAlertNotification to telegram-service.ts
+- [x] Integrate Telegram call in alert-service.ts
+- [x] Run `pnpm build` to verify
 
 ## Success Criteria
 - GET /api/settings returns defaults on first call

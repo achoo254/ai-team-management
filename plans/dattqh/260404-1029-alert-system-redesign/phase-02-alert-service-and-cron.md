@@ -1,6 +1,6 @@
 # Phase 2: Alert Service & Cron Integration
 
-## Priority: High | Status: pending
+## Priority: High | Status: completed
 
 ## Overview
 Rewrite alert-service.ts to use UsageSnapshot data. Change dedup to unresolved-based. Chain alert check after usage collection cron.
@@ -123,11 +123,11 @@ Import `checkSnapshotAlerts` instead of old `checkAlerts`.
 Change `POST /api/admin/check-alerts` to call `checkSnapshotAlerts()` instead of `checkAlerts()`.
 
 ## Todo
-- [ ] Rewrite alert-service.ts with new insertIfNew + checkSnapshotAlerts
-- [ ] Remove all UsageLog imports from alert-service
-- [ ] Update index.ts cron to chain alert check
-- [ ] Update admin.ts route import
-- [ ] Run `pnpm build` to verify
+- [x] Rewrite alert-service.ts with new insertIfNew + checkSnapshotAlerts
+- [x] Remove all UsageLog imports from alert-service
+- [x] Update index.ts cron to chain alert check
+- [x] Update admin.ts route import
+- [x] Run `pnpm build` to verify
 
 ## Success Criteria
 - Alert service creates alerts from UsageSnapshot data

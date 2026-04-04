@@ -1,6 +1,6 @@
 # Phase 1: Types & Models
 
-## Priority: High | Status: pending
+## Priority: High | Status: completed
 
 ## Overview
 Update shared types, Alert model enum, add metadata field, create Settings model for admin-configurable thresholds.
@@ -82,12 +82,12 @@ alerts: {
 Remove `highUsagePct` and `inactivityWeeks` (no longer used).
 
 ## Todo
-- [ ] Update Alert interface in shared/types.ts
-- [ ] Add AlertMetadata, AlertSettings, AppSettings types
-- [ ] Update alert.ts model — new enum, metadata, compound index
-- [ ] Create setting.ts model with getOrCreate static
-- [ ] Update config.ts — new defaults, remove old
-- [ ] Run `pnpm build` to verify no type errors
+- [x] Update Alert interface in shared/types.ts
+- [x] Add AlertMetadata, AlertSettings, AppSettings types
+- [x] Update alert.ts model — new enum, metadata, compound index
+- [x] Create setting.ts model with getOrCreate static
+- [x] Update config.ts — new defaults, remove old
+- [x] Run `pnpm build` to verify no type errors
 
 ## Success Criteria
 - `pnpm build` passes with 0 errors

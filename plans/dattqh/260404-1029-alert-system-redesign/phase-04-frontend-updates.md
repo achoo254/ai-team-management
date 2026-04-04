@@ -1,6 +1,6 @@
 # Phase 4: Frontend Updates
 
-## Priority: Medium | Status: pending
+## Priority: Medium | Status: completed
 
 ## Overview
 Update alert card for 3 new types, add metadata display. Add settings section in admin page. Clean up old type references.
@@ -97,13 +97,13 @@ Add one-time migration note: run `db.alerts.deleteMany({})` in MongoDB to clear 
 - Or manual mongo shell command
 
 ## Todo
-- [ ] Update Alert interface in use-alerts.ts
-- [ ] Add useSettings + useUpdateSettings in use-admin.ts
-- [ ] Update alert-card.tsx — new types, icons, metadata
-- [ ] Add settings section in admin.tsx
-- [ ] Clean up any remaining old type references
-- [ ] Run `pnpm build` to verify frontend compiles
-- [ ] Manual test: verify alert cards render correctly
+- [x] Update Alert interface in use-alerts.ts
+- [x] Add useSettings + useUpdateSettings in use-admin.ts
+- [x] Update alert-card.tsx — new types, icons, metadata
+- [x] Add settings section in admin.tsx
+- [x] Clean up any remaining old type references
+- [x] Run `pnpm build` to verify frontend compiles
+- [x] Manual test: verify alert cards render correctly
 
 ## Success Criteria
 - Alert cards show correct badge/icon for each new type
