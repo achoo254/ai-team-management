@@ -41,7 +41,7 @@ router.get('/users', async (req, res) => {
 router.post('/users', async (req, res) => {
   try {
     const { name, email, role = 'user', team, seatId } = req.body
-    const user = await User.create({ name, email, role, team, seat_ids: seatId ? [seatId] : [] })
+    const user = await User.create({ name, email, role, team: team || null, seat_ids: seatId ? [seatId] : [] })
     res.status(201).json(user)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -78,7 +78,7 @@ router.put('/users/:id', async (req, res) => {
     if (name !== undefined) update.name = name
     if (email !== undefined) update.email = email
     if (role !== undefined) update.role = role
-    if (team !== undefined) update.team = team
+    if (team !== undefined) update.team = team || null
     if (seatId !== undefined) update.seat_ids = seatId ? [seatId] : []
     if (active !== undefined) update.active = active
 

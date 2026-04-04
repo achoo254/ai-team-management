@@ -2,7 +2,7 @@ import { Router } from 'express'
 import mongoose from 'mongoose'
 import { authenticate, requireAdmin } from '../middleware.js'
 import { Seat } from '../models/seat.js'
-import { encrypt } from '../services/crypto-service.js'
+import { encrypt, decrypt } from '../services/crypto-service.js'
 import { User } from '../models/user.js'
 import { Schedule } from '../models/schedule.js'
 
@@ -77,6 +77,37 @@ router.get('/', authenticate, async (_req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
+  }
+})
+
+// GET /api/seats/credentials/export — export all seats' decrypted credentials (admin)
+// Must be before /:id routes to avoid param matching
+router.get('/credentials/export', authenticate, requireAdmin, async (req, res) => {
+  try {
+    console.log(`[AUDIT] Credential export by user=${req.user!.email} ip=${req.ip} at ${new Date().toISOString()}`)
+
+    const seats = await Seat.find({ token_active: true }).select('+oauth_credential').lean()
+    const credentials = seats
+      .filter((s) => s.oauth_credential?.access_token)
+      .map((s) => {
+        const cred = s.oauth_credential!
+        return {
+          seat_label: s.label,
+          seat_email: s.email,
+          claudeAiOauth: {
+            accessToken: cred.access_token ? decrypt(cred.access_token) : null,
+            refreshToken: cred.refresh_token ? decrypt(cred.refresh_token) : null,
+            expiresAt: cred.expires_at ? new Date(cred.expires_at).getTime() : null,
+            scopes: cred.scopes ?? [],
+            subscriptionType: cred.subscription_type ?? null,
+            rateLimitTier: cred.rate_limit_tier ?? null,
+          },
+        }
+      })
+    res.json({ credentials })
+  } catch (error) {
+    console.error('[Credential Export] Failed:', error)
+    res.status(500).json({ error: 'Credential export failed' })
   }
 })
 

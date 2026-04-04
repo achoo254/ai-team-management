@@ -8,7 +8,7 @@ export interface JwtPayload {
   name: string
   email: string
   role: 'admin' | 'user'
-  team?: 'dev' | 'mkt'
+  team?: string | null
 }
 
 // Extend Express Request with typed user property
@@ -44,7 +44,11 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.user?.role !== 'admin') {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' })
+    return
+  }
+  if (req.user.role !== 'admin') {
     res.status(403).json({ error: 'Admin access required' })
     return
   }
@@ -74,5 +78,6 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     res.status(409).json({ error: 'Đã tồn tại' })
     return
   }
-  res.status(500).json({ error: err.message || 'Internal server error' })
+  const isDev = process.env.NODE_ENV !== 'production'
+  res.status(500).json({ error: isDev ? err.message : 'Internal server error' })
 }

@@ -8,11 +8,6 @@ export const config = {
     defaultRateLimitPct: 80,
     defaultExtraCreditPct: 80,
   },
-  telegram: {
-    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
-    chatId: process.env.TELEGRAM_CHAT_ID || '',
-    topicId: process.env.TELEGRAM_TOPIC_ID || '',
-  },
   encryptionKey: process.env.ENCRYPTION_KEY || '',
   anthropic: {
     baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',

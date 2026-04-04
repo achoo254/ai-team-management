@@ -1,11 +1,14 @@
 
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type AdminUser } from "@/hooks/use-admin";
+import { useTeams } from "@/hooks/use-teams";
+import { useSeats } from "@/hooks/use-seats";
 
 interface Props {
   open: boolean;
@@ -16,18 +19,23 @@ interface Props {
 }
 
 type FormState = { name: string; email: string; role: "admin" | "user"; team: string; seatId: string };
-const empty: FormState = { name: "", email: "", role: "user", team: "dev", seatId: "" };
+const empty: FormState = { name: "", email: "", role: "user", team: "", seatId: "" };
 
 export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Props) {
   const [form, setForm] = useState<FormState>(empty);
+  const { data: teamsData } = useTeams();
+  const { data: seatsData } = useSeats();
 
   useEffect(() => {
     setForm(initial
-      ? { name: initial.name, email: initial.email, role: initial.role, team: initial.team, seatId: initial.seat_ids?.[0] ?? "" }
+      ? { name: initial.name, email: initial.email, role: initial.role, team: initial.team ?? "", seatId: initial.seat_ids?.[0] ?? "" }
       : empty);
   }, [initial, open]);
 
   const set = (k: string, v: string | null) => { if (v !== null) setForm((f) => ({ ...f, [k]: v })); };
+
+  const teams = teamsData?.teams ?? [];
+  const seats = seatsData?.seats ?? [];
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -55,18 +63,42 @@ export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
             </div>
             <div className="grid gap-1.5">
               <Label>Team</Label>
-              <Select value={form.team} onValueChange={(v) => set("team", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dev">Dev</SelectItem>
-                  <SelectItem value="mkt">MKT</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Select key={form.team || "__empty__"} value={form.team || undefined} onValueChange={(v) => set("team", v)}>
+                  <SelectTrigger><SelectValue placeholder="Chọn team" /></SelectTrigger>
+                  <SelectContent>
+                    {teams.map((t) => (
+                      <SelectItem key={t._id} value={t.name}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.team && (
+                  <button type="button" onClick={() => set("team", "")}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 rounded-sm p-0.5 hover:bg-muted">
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label>Seat ID (tuỳ chọn)</Label>
-            <Input value={form.seatId} onChange={(e) => set("seatId", e.target.value)} placeholder="ObjectId của seat" />
+            <Label>Seat (tuỳ chọn)</Label>
+            <div className="relative">
+              <Select key={form.seatId || "__empty__"} value={form.seatId || undefined} onValueChange={(v) => set("seatId", v)}>
+                <SelectTrigger><SelectValue placeholder="Chọn seat" /></SelectTrigger>
+                <SelectContent>
+                  {seats.map((s) => (
+                    <SelectItem key={s._id} value={s._id}>{s.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.seatId && (
+                <button type="button" onClick={() => set("seatId", "")}
+                  className="absolute right-8 top-1/2 -translate-y-1/2 rounded-sm p-0.5 hover:bg-muted">
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <DialogFooter>

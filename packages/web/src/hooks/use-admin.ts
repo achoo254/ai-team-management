@@ -80,8 +80,14 @@ export interface AlertSettings {
   extra_credit_pct: number;
 }
 
+export interface TelegramSettings {
+  bot_token: string;
+  chat_id: string;
+  topic_id: string;
+}
+
 export function useSettings() {
-  return useQuery<{ alerts: AlertSettings }>({
+  return useQuery<{ alerts: AlertSettings; telegram: TelegramSettings }>({
     queryKey: ["settings"],
     queryFn: () => api.get("/api/settings"),
   });
@@ -90,7 +96,7 @@ export function useSettings() {
 export function useUpdateSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { alerts: Partial<AlertSettings> }) =>
+    mutationFn: (body: { alerts?: Partial<AlertSettings>; telegram?: Partial<TelegramSettings> }) =>
       api.put("/api/settings", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["settings"] });

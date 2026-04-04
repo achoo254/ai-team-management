@@ -6,12 +6,22 @@ export interface ISetting extends Document {
     rate_limit_pct: number
     extra_credit_pct: number
   }
+  telegram: {
+    bot_token: string
+    chat_id: string
+    topic_id: string
+  }
 }
 
 const settingSchema = new Schema<ISetting>({
   alerts: {
     rate_limit_pct: { type: Number, default: config.alerts.defaultRateLimitPct },
     extra_credit_pct: { type: Number, default: config.alerts.defaultExtraCreditPct },
+  },
+  telegram: {
+    bot_token: { type: String, default: '' },
+    chat_id: { type: String, default: '' },
+    topic_id: { type: String, default: '' },
   },
 })
 

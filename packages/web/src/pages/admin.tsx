@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { Plus, Users, RefreshCw, Send, ToggleLeft, ToggleRight, Settings } from "lucide-react";
+import { Plus, Users, RefreshCw, Send, ToggleLeft, ToggleRight, Settings, Bot, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserTable } from "@/components/user-table";
@@ -29,6 +29,10 @@ export default function AdminPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [rateLimitPct, setRateLimitPct] = useState(80);
   const [extraCreditPct, setExtraCreditPct] = useState(80);
+  const [tgBotToken, setTgBotToken] = useState("");
+  const [tgChatId, setTgChatId] = useState("");
+  const [tgTopicId, setTgTopicId] = useState("");
+  const [showToken, setShowToken] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
   const [reportCooldown, setReportCooldown] = useState(false);
@@ -38,10 +42,22 @@ export default function AdminPage() {
       setRateLimitPct(settingsData.alerts.rate_limit_pct);
       setExtraCreditPct(settingsData.alerts.extra_credit_pct);
     }
+    if (settingsData?.telegram) {
+      setTgBotToken(settingsData.telegram.bot_token ?? "");
+      setTgChatId(settingsData.telegram.chat_id ?? "");
+      setTgTopicId(settingsData.telegram.topic_id ?? "");
+    }
   }, [settingsData]);
 
-  const handleSaveSettings = () => {
+  const handleSaveAlerts = () => {
     updateSettings.mutate({ alerts: { rate_limit_pct: rateLimitPct, extra_credit_pct: extraCreditPct } });
+  };
+
+  const handleSaveTelegram = () => {
+    const telegram: Record<string, string> = { chat_id: tgChatId, topic_id: tgTopicId };
+    // Only send bot_token if user typed a new value (not the masked one)
+    if (tgBotToken && !tgBotToken.startsWith("••••")) telegram.bot_token = tgBotToken;
+    updateSettings.mutate({ telegram });
   };
 
   const handleSubmit = useCallback((body: Partial<AdminUser> & { seatId?: string }) => {
@@ -115,8 +131,50 @@ export default function AdminPage() {
               className="w-full rounded-md border bg-background px-3 py-1.5 text-sm" />
           </label>
         </div>
-        <Button size="sm" onClick={handleSaveSettings} disabled={updateSettings.isPending}>
+        <Button size="sm" onClick={handleSaveAlerts} disabled={updateSettings.isPending}>
           {updateSettings.isPending ? "Đang lưu..." : "Lưu cài đặt"}
+        </Button>
+      </div>
+
+      {/* Telegram Bot Config */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Bot className="h-4 w-4" />
+          Cấu hình Telegram Bot
+        </div>
+        <div className="grid grid-cols-1 gap-3">
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Bot Token</span>
+            <div className="relative">
+              <input type={showToken ? "text" : "password"} value={tgBotToken}
+                onChange={(e) => setTgBotToken(e.target.value)}
+                placeholder="123456:ABC-DEF..."
+                className="w-full rounded-md border bg-background px-3 py-1.5 text-sm pr-9" />
+              <button type="button" onClick={() => setShowToken(!showToken)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <span className="text-xs text-muted-foreground">Chat ID</span>
+              <input type="text" value={tgChatId}
+                onChange={(e) => setTgChatId(e.target.value)}
+                placeholder="-1001234567890"
+                className="w-full rounded-md border bg-background px-3 py-1.5 text-sm" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs text-muted-foreground">Topic ID (tuỳ chọn)</span>
+              <input type="text" value={tgTopicId}
+                onChange={(e) => setTgTopicId(e.target.value)}
+                placeholder="12345"
+                className="w-full rounded-md border bg-background px-3 py-1.5 text-sm" />
+            </label>
+          </div>
+        </div>
+        <Button size="sm" onClick={handleSaveTelegram} disabled={updateSettings.isPending}>
+          {updateSettings.isPending ? "Đang lưu..." : "Lưu Telegram"}
         </Button>
       </div>
 

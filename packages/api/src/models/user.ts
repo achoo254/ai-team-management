@@ -4,7 +4,7 @@ export interface IUser extends Document {
   name: string
   email?: string
   role: 'admin' | 'user'
-  team?: 'dev' | 'mkt'
+  team?: string | null
   seat_ids?: Types.ObjectId[]
   active: boolean
   telegram_bot_token?: string | null  // encrypted via AES-256-GCM
@@ -17,7 +17,7 @@ const userSchema = new Schema<IUser>(
     name: { type: String, required: true },
     email: { type: String, unique: true, sparse: true },
     role: { type: String, enum: ['admin', 'user'], default: 'user' },
-    team: { type: String, enum: ['dev', 'mkt'] },
+    team: { type: String, default: null },
     seat_ids: [{ type: Schema.Types.ObjectId, ref: 'Seat' }],
     active: { type: Boolean, default: true },
     telegram_bot_token: { type: String, default: null },

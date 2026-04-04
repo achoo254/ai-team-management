@@ -44,6 +44,11 @@ app.use('/api/user', userSettingsRoutes)
 app.use(errorHandler)
 
 async function start() {
+  // Validate encryption key before accepting requests
+  if (config.encryptionKey && config.encryptionKey.length !== 64) {
+    throw new Error('ENCRYPTION_KEY must be a 64-char hex string (32 bytes) or empty to disable')
+  }
+
   await connectDb()
 
   // Seed data on first run

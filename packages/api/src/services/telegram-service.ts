@@ -3,7 +3,19 @@ import { Seat } from '../models/seat.js'
 import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Team } from '../models/team.js'
+import { getOrCreateSettings } from '../models/setting.js'
 import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
+
+/** Get telegram config from DB settings */
+async function getTelegramConfig() {
+  const settings = await getOrCreateSettings()
+  const tg = settings.telegram
+  return {
+    botToken: tg?.bot_token || '',
+    chatId: tg?.chat_id || '',
+    topicId: tg?.topic_id || '',
+  }
+}
 
 /** Escape HTML special chars for Telegram */
 function esc(str: string | number): string {
@@ -38,8 +50,9 @@ function buildProgressBar(pct: number): string {
 
 /** Send weekly usage report to Telegram using latest UsageSnapshot data. */
 export async function sendWeeklyReport() {
-  if (!config.telegram.botToken || !config.telegram.chatId) {
-    throw new Error('Telegram chưa được cấu hình (thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID)')
+  const tg = await getTelegramConfig()
+  if (!tg.botToken || !tg.chatId) {
+    throw new Error('Telegram chưa được cấu hình (thiếu Bot Token hoặc Chat ID)')
   }
 
   const seats = await Seat.find().sort({ team: 1 }).lean()
@@ -146,17 +159,18 @@ export async function sendWeeklyReport() {
     msg += `\n⚠️ <b>${high.length} seat(s) &gt; 80%</b> — cần giảm tải!`
   }
 
-  await sendMessage(msg)
+  await sendMessage(tg, msg)
 }
 
 /** Send alert when token refresh fails for a seat */
 export async function sendTokenRefreshAlert(seatLabel: string, error: string) {
-  if (!config.telegram.botToken || !config.telegram.chatId) return
+  const tg = await getTelegramConfig()
+  if (!tg.botToken || !tg.chatId) return
   const msg = `⚠️ <b>Token refresh failed</b>\n\n`
     + `Seat: <b>${esc(seatLabel)}</b>\n`
     + `Error: <code>${esc(error.slice(0, 200))}</code>\n\n`
     + `Token đã bị deactivate. Vui lòng re-import credential.`
-  await sendMessage(msg)
+  await sendMessage(tg, msg)
 }
 
 /** Send Telegram notification for a new alert. Silently skips if Telegram not configured. */
@@ -166,7 +180,8 @@ export async function sendAlertNotification(
   metadata: Record<string, unknown>,
   threshold?: number,
 ): Promise<void> {
-  if (!config.telegram.botToken || !config.telegram.chatId) return
+  const tg = await getTelegramConfig()
+  if (!tg.botToken || !tg.chatId) return
 
   let msg = ''
   switch (type) {
@@ -221,7 +236,7 @@ export async function sendAlertNotification(
       break
   }
 
-  await sendMessage(msg)
+  await sendMessage(tg, msg)
 }
 
 /** Send via arbitrary bot token + chat ID */
@@ -250,15 +265,15 @@ async function sendMessageWithBot(botToken: string, chatId: string, text: string
 }
 
 /** Send a message via system bot to group chat. Throws on failure. */
-async function sendMessage(text: string) {
-  const { botToken, chatId, topicId } = config.telegram
-  await sendMessageWithBot(botToken, chatId, text, topicId)
+async function sendMessage(tg: { botToken: string; chatId: string; topicId: string }, text: string) {
+  await sendMessageWithBot(tg.botToken, tg.chatId, text, tg.topicId)
 }
 
 /** Send notification to a specific user via their personal bot (if configured) + system bot */
 export async function sendToUser(userId: string, message: string) {
   // Always send to system bot (group chat)
-  await sendMessage(message).catch(console.error)
+  const tg = await getTelegramConfig()
+  await sendMessage(tg, message).catch(console.error)
 
   // Try user's personal bot
   if (!isEncryptionConfigured()) return
