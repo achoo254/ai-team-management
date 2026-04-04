@@ -126,7 +126,7 @@ quan-ly-team-claude/
   _id: ObjectId (auto),
   email: String (required, unique),
   label: String (required),
-  team: String (enum: ['dev', 'mkt']),
+  team_id: ObjectId | null (reference to Team, default: null, index: true),
   owner_id: ObjectId | null (reference to User, index: true),
   max_users: Number (default: 3),
   oauth_credential: {
@@ -136,8 +136,8 @@ quan-ly-team-claude/
     scopes: [String],
     subscription_type: String | null,
     rate_limit_tier: String | null
-  } | null,
-  token_active: Boolean,
+  } | null (select: false),
+  token_active: Boolean (default: false),
   last_fetched_at: Date | null,
   last_fetch_error: String | null,
   last_refreshed_at: Date | null,
@@ -149,10 +149,10 @@ quan-ly-team-claude/
 ```typescript
 {
   _id: ObjectId (auto),
-  name: String,
-  email: String (unique),
-  role: String (enum: ['admin', 'user']),
-  team: String (enum: ['dev', 'mkt']),
+  name: String (required),
+  email: String (unique, sparse),
+  role: String (enum: ['admin', 'user'], default: 'user'),
+  team_ids: [ObjectId] (reference to Team, default: [], multi-team support),
   seat_ids: [ObjectId] (reference to Seat),
   active: Boolean (default: true),
   telegram_bot_token: String | null (encrypted AES-256-GCM),
@@ -163,12 +163,14 @@ quan-ly-team-claude/
     report_enabled: Boolean (default: false),
     report_days: [Number] (default: [5] = Friday),
     report_hour: Number (0-23, default: 8)
-  } | null,
+  },
   alert_settings: {
     enabled: Boolean (default: false),
     rate_limit_pct: Number (default: 80),
     extra_credit_pct: Number (default: 80)
-  } | null,
+  },
+  fcm_tokens: [String] (Firebase Cloud Messaging push tokens, default: []),
+  push_enabled: Boolean (FCM push notifications enabled, default: false),
   created_at: Date (auto)
 }
 ```
@@ -221,10 +223,13 @@ quan-ly-team-claude/
 ```typescript
 {
   _id: ObjectId (auto),
-  name: String (unique),
-  label: String,
-  color: String,
-  created_at: Date (auto)
+  name: String (required, lowercase),
+  label: String (required),
+  color: String (default: '#3b82f6'),
+  created_by: ObjectId (reference to User, required, index: true),
+  created_at: Date (auto),
+  // Compound unique index: (created_by, name)
+  // Any authenticated user can create teams; ownership determined by created_by
 }
 ```
 
@@ -310,10 +315,17 @@ quan-ly-team-claude/
 - `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
 - `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
 
-### Teams
-- `GET /api/teams` — List teams
-- `POST /api/teams` — Create team (admin only)
-- `PUT /api/teams/:id` — Update team (admin only)
+### Teams (Multi-Team Support)
+- `GET /api/teams` — List teams (all members; admin can filter via ?owner; user sees own teams via ?mine=true)
+- `POST /api/teams` — Create team (any authenticated user becomes creator/owner)
+- `PUT /api/teams/:id` — Update team (creator or admin)
+- `DELETE /api/teams/:id` — Delete team (creator or admin)
+- `GET /api/teams/:id/members` — List team members (creator or admin)
+- `POST /api/teams/:id/members` — Add member to team (creator or admin)
+- `DELETE /api/teams/:id/members/:userId` — Remove member (creator or admin)
+- `GET /api/teams/:id/seats` — List team seats (creator or admin)
+- `POST /api/teams/:id/seats` — Assign seat to team (creator or admin)
+- `DELETE /api/teams/:id/seats/:seatId` — Remove seat from team (creator or admin)
 
 ### Admin
 - `GET /api/admin/users` — List all users (admin only)

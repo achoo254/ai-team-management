@@ -427,6 +427,66 @@ try {
 - Prioritize functionality over strict style enforcement
 - Avoid syntax errors and TypeScript type errors
 
+## Notification Patterns
+
+### Event Emitters (Asynchronous Notifications)
+
+For ad-hoc events (not cron-based), use event emitter functions that send notifications without blocking request flow.
+
+**Pattern** (from `alert-service.ts`):
+```typescript
+export async function emitTeamEvent(params: {
+  event_type: string          // e.g., 'team.member_added'
+  actor_id: string            // User who triggered action
+  target_user_id: string      // User receiving notification
+  team_id: string             // Team context
+  extra?: Record<string, unknown>  // Optional metadata
+}) {
+  // Skip self-actions
+  if (params.actor_id === params.target_user_id) return
+
+  // Fetch required entities
+  const [targetUser, team] = await Promise.all([
+    User.findById(params.target_user_id),
+    Team.findById(params.team_id, 'label'),
+  ])
+  if (!targetUser || !team) return
+
+  // Map event type to human-readable message
+  const messages: Record<string, string> = {
+    'team.member_added': `Bạn đã được thêm vào team ${team.label}`,
+    'team.member_removed': `Bạn đã bị xóa khỏi team ${team.label}`,
+    // ... more events
+  }
+
+  // Send via Telegram (personal bot) + FCM (if enabled)
+  if (targetUser.telegram_chat_id && targetUser.telegram_bot_token) {
+    await sendTelegramMessage(targetUser, messages[params.event_type])
+  }
+  if (targetUser.push_enabled && targetUser.fcm_tokens.length > 0) {
+    await sendFcmNotification(targetUser.fcm_tokens, messages[params.event_type])
+  }
+}
+```
+
+**Usage** (in routes):
+```typescript
+// After modifying team membership
+await emitTeamEvent({
+  event_type: 'team.member_added',
+  actor_id: req.user._id,
+  target_user_id: newMemberId,
+  team_id: teamId,
+})
+```
+
+**Key Rules**:
+- Don't await emitters in request handlers (fire-and-forget; user doesn't wait)
+- Skip self-actions (user cannot notify themselves)
+- Emitters handle missing users/entities gracefully (no errors)
+- Use personal Telegram bot only (never system bot for user-to-user events)
+- Include optional FCM push if user has enabled it
+
 ## File Size & Modularization
 
 - Keep files under 200 LOC where practical

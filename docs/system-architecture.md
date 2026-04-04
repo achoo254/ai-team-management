@@ -106,7 +106,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 - `routes/admin.ts` — User management, manual alert check trigger
 - `routes/schedules.ts` — Schedule CRUD with conflict prevention, hourly time slots, budget allocation
 - `routes/alerts.ts` — Alert creation, resolution, listing
-- `routes/teams.ts` — Team CRUD
+- `routes/teams.ts` — User-created team CRUD (not admin-only), team member & seat management
 - `routes/usage-snapshots.ts` — Query snapshots, trigger collection
 - `routes/user-settings.ts` — Per-user alert settings, Telegram bot config, notification schedule, test notifications
 
@@ -360,8 +360,16 @@ API calls via React Query (TanStack Query)
    - Lists alerts triggered
    - Sends formatted report to Telegram (system bot)
 
+4. **Ad-Hoc Team Event Notifications** — Emitted via `emitTeamEvent()` from alert-service.ts
+   - Triggered by: team member add/remove, seat reassignment, etc.
+   - Sends Telegram notification to affected user (personal bot only, no in-app alerts)
+   - Event types: `team.member_added`, `team.member_removed`, `team.seat_reassigned`
+   - Skips self-actions (user cannot trigger their own notifications)
+   - Parameters: `event_type`, `actor_id`, `target_user_id`, `team_id`, optional `extra` metadata
+
 **Configuration**:
 - `packages/api/src/index.ts` — Cron schedule setup
+- `packages/api/src/services/alert-service.ts` — Alert generation + `emitTeamEvent()` for team notifications
 - `packages/api/src/services/telegram-service.ts` — Message formatting, dual-bot support (system + per-user)
 - Requires `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (system bot)
 - Requires `ENCRYPTION_KEY` (64-char hex string = 32 bytes) for token encryption/decryption
@@ -540,6 +548,7 @@ Frontend: Query /api/usage-snapshots to display latest metrics
 | `requireAdmin` | role === 'admin' | Admin users only |
 | `requireSeatOwner(seatId)` | owner_id === req.user._id | Seat owner only (NO admin bypass) |
 | `requireSeatOwnerOrAdmin(seatId)` | owner_id === req.user._id OR role === 'admin' | Owner or Admin |
+| `requireTeamOwnerOrAdmin(teamId)` | created_by === req.user._id OR role === 'admin' | Team creator or Admin |
 
 **Critical Rule**: Admin users have ALL the same permissions as regular users EXCEPT credential export of seats owned by other users. The `requireSeatOwner()` middleware has NO admin bypass for credential export (`GET /seats/:id/credentials/export`).
 
@@ -589,6 +598,20 @@ DELETE /api/seats/:id/unassign/:userId   [authenticate, requireSeatOwnerOrAdmin]
 PUT    /api/seats/:id/token              [authenticate, requireSeatOwnerOrAdmin]
 DELETE /api/seats/:id/token              [authenticate, requireSeatOwnerOrAdmin]
 PUT    /api/seats/:id/transfer           [authenticate, requireAdmin] → Admin only
+```
+
+**Team Management** (multi-team support):
+```
+GET    /api/teams                          [authenticate] → List teams (user sees own + joined, admin sees all via ?owner filter)
+POST   /api/teams                          [authenticate] → Create team (creator becomes owner)
+PUT    /api/teams/:id                      [authenticate, requireTeamOwnerOrAdmin] → Update team
+DELETE /api/teams/:id                      [authenticate, requireTeamOwnerOrAdmin] → Delete team
+GET    /api/teams/:id/members              [authenticate, requireTeamOwnerOrAdmin] → List team members
+POST   /api/teams/:id/members              [authenticate, requireTeamOwnerOrAdmin] → Add member to team
+DELETE /api/teams/:id/members/:userId      [authenticate, requireTeamOwnerOrAdmin] → Remove member from team
+GET    /api/teams/:id/seats                [authenticate, requireTeamOwnerOrAdmin] → List team seats
+POST   /api/teams/:id/seats                [authenticate, requireTeamOwnerOrAdmin] → Assign seat to team
+DELETE /api/teams/:id/seats/:seatId        [authenticate, requireTeamOwnerOrAdmin] → Remove seat from team
 ```
 
 **Admin Routes (ALL require admin role)**:
