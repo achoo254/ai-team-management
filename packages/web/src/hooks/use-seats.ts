@@ -5,14 +5,18 @@ import { api } from "@/lib/api-client";
 import { toast } from "sonner";
 
 export interface SeatUser { id: string; name: string; email: string; }
+export interface SeatOwner { _id: string; name: string; email: string; }
 export interface Seat {
   _id: string; email: string; label: string; team: string;
   max_users: number; users: SeatUser[];
+  owner_id: string | null;
+  owner?: SeatOwner | null;
   has_token?: boolean; token_active?: boolean;
   last_fetched_at?: string | null; last_fetch_error?: string | null;
 }
 
 const KEY = ["seats"];
+const AVAILABLE_USERS_KEY = ["seats", "available-users"];
 
 export function useSeats() {
   return useQuery<{ seats: Seat[] }>({ queryKey: KEY, queryFn: () => api.get("/api/seats") });
@@ -64,6 +68,40 @@ export function useUnassignUser() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Đã huỷ gán"); },
     onError: (e: Error) => toast.error(e.message),
   });
+}
+
+/** Active users available for seat assignment — works for all authenticated users */
+export function useAvailableUsers() {
+  return useQuery<{ users: Array<{ id: string; name: string; email: string; team: string; active: boolean; seat_labels: string[] }> }>({
+    queryKey: AVAILABLE_USERS_KEY,
+    queryFn: () => api.get("/api/seats/available-users"),
+  });
+}
+
+export function useTransferOwnership() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ seatId, newOwnerId }: { seatId: string; newOwnerId: string }) =>
+      api.put(`/api/seats/${seatId}/transfer`, { new_owner_id: newOwnerId }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Đã chuyển quyền sở hữu"); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+/** Export single seat credential as JSON file download */
+export async function exportSeatCredential(seatId: string, seatLabel: string) {
+  const data = await api.get(`/api/seats/${seatId}/credentials/export`) as { credentials: Array<Record<string, unknown>> };
+  try {
+    const blob = new Blob([JSON.stringify(data.credentials, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `credential-${seatLabel}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    data.credentials.length = 0;
+  }
 }
 
 /** Export all seats' decrypted credentials as JSON file download */

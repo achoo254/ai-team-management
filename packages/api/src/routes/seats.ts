@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
-import { authenticate, requireAdmin } from '../middleware.js'
+import { authenticate, requireAdmin, requireSeatOwnerOrAdmin, validateObjectId } from '../middleware.js'
 import { Seat } from '../models/seat.js'
 import { encrypt, decrypt } from '../services/crypto-service.js'
 import { User } from '../models/user.js'
@@ -38,7 +38,7 @@ function parseCredential(body: Record<string, unknown>) {
 router.get('/', authenticate, async (_req, res) => {
   try {
     // Use select('+oauth_credential') so toJSON strips tokens but keeps metadata
-    const seats = await Seat.find().select('+oauth_credential').sort({ _id: 1 }).lean()
+    const seats = await Seat.find().select('+oauth_credential').populate('owner_id', 'name email').sort({ _id: 1 }).lean()
     const users = await User.find(
       { active: true, seat_ids: { $exists: true, $ne: [] } },
       'name email seat_ids team',
@@ -61,8 +61,16 @@ router.get('/', authenticate, async (_req, res) => {
         delete (seatObj.oauth_credential as any).access_token
         delete (seatObj.oauth_credential as any).refresh_token
       }
+      // Normalize owner_id back to string after populate
+      const populatedOwner = seatObj.owner_id && typeof seatObj.owner_id === 'object'
+        ? seatObj.owner_id as unknown as { _id: string; name: string; email: string }
+        : null
       return {
         ...seatObj,
+        owner_id: populatedOwner ? String(populatedOwner._id) : null,
+        owner: populatedOwner
+          ? { _id: String(populatedOwner._id), name: populatedOwner.name, email: populatedOwner.email }
+          : null,
         has_token: !!seat.token_active,
         users: (usersBySeat[String(seat._id)] || []).map((u) => ({
           _id: u._id,
@@ -74,6 +82,26 @@ router.get('/', authenticate, async (_req, res) => {
     })
 
     res.json({ seats: enriched })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// GET /api/seats/available-users — list active users for seat assignment (auth only)
+// Must be before /:id routes to avoid param matching
+router.get('/available-users', authenticate, async (_req, res) => {
+  try {
+    const users = await User.find({ active: true }, 'name email team seat_ids').populate('seat_ids', 'label').lean()
+    const mapped = users.map((u) => ({
+      id: u._id,
+      name: u.name,
+      email: u.email,
+      team: u.team,
+      active: true,
+      seat_labels: ((u.seat_ids ?? []) as { label?: string }[]).map(s => s.label).filter(Boolean),
+    }))
+    res.json({ users: mapped })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
@@ -111,8 +139,40 @@ router.get('/credentials/export', authenticate, requireAdmin, async (req, res) =
   }
 })
 
-// POST /api/seats — create seat (admin)
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+// GET /api/seats/:id/credentials/export — export single seat credential (owner or admin)
+router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
+  try {
+    console.log(`[AUDIT] Single credential export seat=${req.params.id} by user=${req.user!.email} ip=${req.ip} at ${new Date().toISOString()}`)
+
+    const seat = await Seat.findById(req.params.id).select('+oauth_credential').lean()
+    if (!seat?.oauth_credential?.access_token) {
+      res.status(404).json({ error: 'No credential found' })
+      return
+    }
+
+    const cred = seat.oauth_credential
+    res.json({
+      credentials: [{
+        seat_label: seat.label,
+        seat_email: seat.email,
+        claudeAiOauth: {
+          accessToken: cred.access_token ? decrypt(cred.access_token) : null,
+          refreshToken: cred.refresh_token ? decrypt(cred.refresh_token) : null,
+          expiresAt: cred.expires_at ? new Date(cred.expires_at).getTime() : null,
+          scopes: cred.scopes ?? [],
+          subscriptionType: cred.subscription_type ?? null,
+          rateLimitTier: cred.rate_limit_tier ?? null,
+        },
+      }],
+    })
+  } catch (error) {
+    console.error('[Single Credential Export] Failed:', error)
+    res.status(500).json({ error: 'Credential export failed' })
+  }
+})
+
+// POST /api/seats — create seat (any authenticated user becomes owner)
+router.post('/', authenticate, async (req, res) => {
   try {
     const { email, label, team, max_users } = req.body
 
@@ -121,7 +181,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
       return
     }
 
-    const seat = await Seat.create({ email, label, team, max_users })
+    const seat = await Seat.create({ email, label, team, max_users, owner_id: req.user!._id })
     res.status(201).json(seat)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -129,16 +189,11 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// PUT /api/seats/:id — update seat (admin)
-router.put('/:id', authenticate, requireAdmin, async (req, res) => {
+// PUT /api/seats/:id — update seat (owner or admin)
+router.put('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
   try {
     const id = req.params.id as string
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
-
+    // owner_id intentionally excluded — ownership transfer uses PUT /:id/transfer (admin only)
     const allowed = ['email', 'label', 'team', 'max_users']
     const update: Record<string, unknown> = {}
     for (const key of allowed) {
@@ -158,16 +213,10 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// DELETE /api/seats/:id — delete seat, unassign users, clear schedules (admin)
-router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
+// DELETE /api/seats/:id — delete seat, unassign users, clear schedules (owner or admin)
+router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
   try {
     const id = req.params.id as string
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
-
     const seat = await Seat.findById(id)
     if (!seat) {
       res.status(404).json({ error: 'Seat not found' })
@@ -187,16 +236,10 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// POST /api/seats/:id/assign — assign user to seat (admin)
-router.post('/:id/assign', authenticate, requireAdmin, async (req, res) => {
+// POST /api/seats/:id/assign — assign user to seat (owner or admin)
+router.post('/:id/assign', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
   try {
     const id = req.params.id as string
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
-
     const { userId } = req.body
     if (!userId) {
       res.status(400).json({ error: 'userId is required' })
@@ -236,16 +279,12 @@ router.post('/:id/assign', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// DELETE /api/seats/:id/unassign/:userId — unassign user + clear their schedules (admin)
-router.delete('/:id/unassign/:userId', authenticate, requireAdmin, async (req, res) => {
+// DELETE /api/seats/:id/unassign/:userId — unassign user + clear their schedules (owner or admin)
+router.delete('/:id/unassign/:userId', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
   try {
     const id = req.params.id as string
     const userId = req.params.userId as string
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       res.status(400).json({ error: 'Invalid user ID' })
       return
@@ -273,15 +312,10 @@ router.delete('/:id/unassign/:userId', authenticate, requireAdmin, async (req, r
   }
 })
 
-// PUT /api/seats/:id/token — set/update OAuth credential (admin)
-router.put('/:id/token', authenticate, requireAdmin, async (req, res) => {
+// PUT /api/seats/:id/token — set/update OAuth credential (owner or admin)
+router.put('/:id/token', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
   try {
     const id = req.params.id as string
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
-
     const cred = parseCredential(req.body)
     if (!cred.access_token || typeof cred.access_token !== 'string') {
       res.status(400).json({ error: 'access_token is required' })
@@ -318,15 +352,10 @@ router.put('/:id/token', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// DELETE /api/seats/:id/token — remove credential (admin)
-router.delete('/:id/token', authenticate, requireAdmin, async (req, res) => {
+// DELETE /api/seats/:id/token — remove credential (owner or admin)
+router.delete('/:id/token', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
   try {
     const id = req.params.id as string
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
-
     const seat = await Seat.findByIdAndUpdate(
       id,
       { oauth_credential: null, token_active: false, last_fetch_error: null, last_refreshed_at: null },
@@ -338,6 +367,38 @@ router.delete('/:id/token', authenticate, requireAdmin, async (req, res) => {
     }
 
     res.json({ message: 'Token removed', seat })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// PUT /api/seats/:id/transfer — transfer seat ownership (admin only)
+router.put('/:id/transfer', authenticate, requireAdmin, validateObjectId('id'), async (req, res) => {
+  try {
+    const { new_owner_id } = req.body
+    if (!new_owner_id || !mongoose.Types.ObjectId.isValid(new_owner_id)) {
+      res.status(400).json({ error: 'Valid new_owner_id is required' })
+      return
+    }
+
+    const newOwner = await User.findById(new_owner_id)
+    if (!newOwner) {
+      res.status(404).json({ error: 'New owner not found' })
+      return
+    }
+
+    const seat = await Seat.findByIdAndUpdate(
+      req.params.id,
+      { owner_id: new_owner_id },
+      { new: true },
+    ).populate('owner_id', 'name email')
+    if (!seat) {
+      res.status(404).json({ error: 'Seat not found' })
+      return
+    }
+
+    res.json({ message: 'Ownership transferred', seat })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

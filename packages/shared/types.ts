@@ -11,8 +11,10 @@ export interface Seat {
   _id: string
   email: string
   label: string
-  team: 'dev' | 'mkt'
+  team: 'dev' | 'mkt' | 'personal'
   max_users: number
+  owner_id: string | null
+  owner?: { _id: string; name: string; email: string } | null
   has_token?: boolean
   token_active?: boolean
   oauth_credential?: OAuthCredentialMeta | null

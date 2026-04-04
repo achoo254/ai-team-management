@@ -1,4 +1,4 @@
-import mongoose, { Schema, type Document } from 'mongoose'
+import mongoose, { Schema, type Document, type Types } from 'mongoose'
 
 export interface IOAuthCredential {
   access_token: string | null
@@ -12,8 +12,9 @@ export interface IOAuthCredential {
 export interface ISeat extends Document {
   email: string
   label: string
-  team: 'dev' | 'mkt'
+  team: 'dev' | 'mkt' | 'personal'
   max_users: number
+  owner_id: Types.ObjectId | null
   oauth_credential: IOAuthCredential | null
   token_active: boolean
   last_fetched_at: Date | null
@@ -26,8 +27,9 @@ const seatSchema = new Schema<ISeat>(
   {
     email: { type: String, required: true, unique: true },
     label: { type: String, required: true },
-    team: { type: String, required: true, enum: ['dev', 'mkt'] },
+    team: { type: String, required: true, enum: ['dev', 'mkt', 'personal'] },
     max_users: { type: Number, default: 3 },
+    owner_id: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     oauth_credential: {
       type: {
         access_token: { type: String, default: null },

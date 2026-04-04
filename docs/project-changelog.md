@@ -6,6 +6,150 @@ All notable changes to the Claude Teams Management Dashboard project are documen
 
 ---
 
+## [2026-04-04] User Self-Service Seat Management
+
+### Major Features
+
+**Seat Ownership System**
+- Seats now have `owner_id` field (ref to User)
+- Any authenticated user can create a seat and becomes its owner
+- Owners have full management rights: edit, delete, assign/unassign users, credential upload
+- Admin users can manage any seat and transfer ownership between users
+
+**Grouped Seat UI**
+- Frontend displays seats in three sections:
+  - "My Seats" — user is owner
+  - "Assigned to Me" — user is assigned but not owner
+  - "Other Seats" — user has no relationship (admin views only)
+- Owner badge visible on seat cards
+- Clearer visual separation by role/relationship
+
+**Per-Seat Credential Export**
+- New endpoint: `GET /api/seats/:id/credentials/export` (owner or admin)
+- Returns single seat's decrypted OAuth credentials
+- Audit-logged with user, IP, timestamp
+- Complements existing bulk export (admin only)
+
+**Seat Transfer (Admin)**
+- New endpoint: `PUT /api/seats/:id/transfer` (admin)
+- Allows reassigning ownership to another user
+- Required when seat owner leaves or role changes
+
+### Data Model Changes
+
+**Seat schema** (breaking):
+- Added: `owner_id` (ObjectId ref to User, indexed, nullable)
+- Updated: `oauth_credential` field structure (refactored from simple encrypted string):
+  - Nested object: access_token, refresh_token, expires_at, scopes, subscription_type, rate_limit_tier
+  - Still encrypted, but with explicit metadata fields
+  - Excluded from default queries via `select: false`
+
+**Type updates** (`packages/shared/types.ts`):
+- `Seat.owner_id: string | null` (added)
+- `Seat.owner?: { _id: string; name: string; email: string } | null` (added, populated on response)
+
+### Route Changes
+
+**Seats route endpoints**:
+- `POST /api/seats` — Now available to all auth users (auto-set owner), was admin-only
+- `GET /api/seats` — Returns with owner field populated + user assignments grouped
+- `GET /api/seats/available-users` — List active users (NEW, auth required)
+- `GET /api/seats/credentials/export` — Bulk export (NEW, admin)
+- `GET /api/seats/:id/credentials/export` — Single export (NEW, owner or admin)
+- `PUT /api/seats/:id` — Update seat (now owner-or-admin via requireSeatOwnerOrAdmin)
+- `DELETE /api/seats/:id` — Delete + cascade (now owner-or-admin)
+- `POST /api/seats/:id/assign` — Assign user (now owner-or-admin)
+- `DELETE /api/seats/:id/unassign/:userId` — Unassign + clear schedules (now owner-or-admin)
+- `PUT /api/seats/:id/token` — Upload credential (now owner-or-admin)
+- `PUT /api/seats/:id/transfer` — Change owner (NEW, admin)
+
+**Authorization middleware**:
+- New `requireSeatOwnerOrAdmin(paramName?)` — Allow seat owner or any admin
+- Checks `seat.owner_id === req.user._id` or `req.user.role === 'admin'`
+- Queries seat on each request (no caching)
+
+### Migration
+
+**Script**: `pnpm db:migrate-owners`
+- One-time migration assigning all null owner_id seats to first admin user
+- Idempotent — safe to run multiple times
+- File: `packages/api/src/scripts/migrate-seat-owners.ts`
+- Should run after deployment before UI changes go live
+
+### Frontend Changes
+
+**Seats page** (components/pages/seats.tsx):
+- Three-section layout: mySeats, assignedSeats, otherSeats
+- Each section conditional — hidden if empty
+- SeatCard shows owner badge + current user's role relative to seat
+- "Create Seat" button still in top bar (any user can create)
+- Transfer UI (admin only) in seat menu
+
+**Seat Card Component** (components/seat-card.tsx):
+- Owner name badge (shows "You" if current user)
+- Edit/Delete buttons visible only to owner or admin
+- Assign/Unassign dropdowns for owner or admin
+- Export credential button per-seat
+- Transfer dropdown (admin only)
+
+### Configuration
+
+No new env vars required. Existing `ENCRYPTION_KEY` used for oauth_credential tokens.
+
+### Breaking Changes
+
+1. **POST /api/seats now public** (was admin-only)
+   - Any auth user can create seats
+   - API clients no longer require admin role for seat creation
+   - Ownership determined by creator, not hardcoded
+
+2. **Seat edit/delete/assign/unassign authorization changed**
+   - Was: admin-only
+   - Now: owner or admin (via requireSeatOwnerOrAdmin middleware)
+   - Existing admin integrations unaffected; new self-service enabled
+
+3. **Seat response includes owner field**
+   - `owner_id` is string | null in response (MongoDB ID)
+   - `owner` is populated object { _id, name, email } when populated
+   - Clients expecting flat seat structure unaffected
+
+### Backward Compatibility
+
+- Existing seats without owner_id still queryable; migration assigns them to first admin
+- Existing seat data (email, label, team, max_users) unchanged
+- Old API clients (assuming admin-only access) continue working — migration maintains admin ownership
+- oauth_credential field structure refactored but encryption key same
+
+### Testing
+
+- Build: ✓ TypeScript compilation passes
+- Tests: ✓ All passing
+- Linting: ✓ Clean
+- Manual: Seat creation as non-admin, ownership enforcement, transfer workflow, per-seat export
+
+### Files Modified
+
+Backend:
+- `packages/api/src/models/seat.ts` — Add owner_id field, refactor oauth_credential
+- `packages/api/src/middleware.ts` — New requireSeatOwnerOrAdmin function
+- `packages/api/src/routes/seats.ts` — 6 routes now use requireSeatOwnerOrAdmin, 3 new endpoints
+- `packages/api/src/scripts/migrate-seat-owners.ts` — NEW migration script
+
+Frontend:
+- `packages/web/src/pages/seats.tsx` — Three-section layout, ownership-based UI
+- `packages/web/src/components/seat-card.tsx` — Owner badge, role-based buttons
+- `packages/web/src/hooks/use-seats.ts` — useTransferOwnership hook, updated mutations
+
+Shared:
+- `packages/shared/types.ts` — Seat type with owner_id + owner fields
+
+### Related Plans
+
+- Plan: `plans/dattqh/260404-1644-user-self-service-seats/`
+- Brainstorm: `plans/dattqh/reports/brainstorm-260404-1644-user-self-service-seat-management.md`
+
+---
+
 ## [2026-04-04] Hourly Schedule + Per-User Budget Alerts + Personal Bot Config
 
 ### Major Features

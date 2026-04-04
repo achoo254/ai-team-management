@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
-import { authenticate, requireAdmin } from '../middleware.js'
+import { authenticate, requireAdmin, requireSeatOwnerOrAdmin, validateObjectId } from '../middleware.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { collectAllUsage, collectSeatUsage } from '../services/usage-collector-service.js'
 
@@ -17,14 +17,10 @@ router.post('/collect', authenticate, requireAdmin, async (_req, res) => {
   }
 })
 
-// POST /api/usage-snapshots/collect/:seatId — trigger single seat (admin)
-router.post('/collect/:seatId', authenticate, requireAdmin, async (req, res) => {
+// POST /api/usage-snapshots/collect/:seatId — trigger single seat (owner or admin)
+router.post('/collect/:seatId', authenticate, validateObjectId('seatId'), requireSeatOwnerOrAdmin('seatId'), async (req, res) => {
   try {
     const seatId = req.params.seatId as string
-    if (!mongoose.Types.ObjectId.isValid(seatId)) {
-      res.status(400).json({ error: 'Invalid seat ID' })
-      return
-    }
     const result = await collectSeatUsage(seatId)
     if (result.skipped) {
       res.json({ message: 'Skipped: no active token' })

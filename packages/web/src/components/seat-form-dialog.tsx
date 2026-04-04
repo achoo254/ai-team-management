@@ -15,7 +15,7 @@ interface Props {
   initial?: Seat | null;
 }
 
-const empty = { email: "", label: "", team: "dev", max_users: 2 };
+const empty = { email: "", label: "", team: "personal", max_users: 2 };
 
 export function SeatFormDialog({ open, onClose, onSubmit, loading, initial }: Props) {
   const [form, setForm] = useState(empty);
@@ -44,6 +44,7 @@ export function SeatFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
             <Select value={form.team} onValueChange={(v) => set("team", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="personal">Personal</SelectItem>
                 <SelectItem value="dev">Dev</SelectItem>
                 <SelectItem value="mkt">MKT</SelectItem>
               </SelectContent>

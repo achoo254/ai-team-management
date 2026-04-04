@@ -17,9 +17,15 @@ export async function seedData() {
   ])
 
   // Users (seat_ids is an array — user can belong to multiple seats)
+  const admin = await User.create(
+    { name: 'Admin', email: 'quocdat254@gmail.com', role: 'admin' },
+  )
+
+  // Assign admin as owner of all seed seats
+  await Seat.updateMany({}, { $set: { owner_id: admin._id } })
+
   const users = await User.insertMany([
     // Dev team
-    { name: 'Admin', email: 'quocdat254@gmail.com', role: 'admin' },
     { name: 'Đạt', email: 'dattqh@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[0]._id] },
     { name: 'Hổ', email: 'hobv@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[0]._id] },
     { name: 'Hoàng', email: 'hoangnh@inet.vn', role: 'user', team: 'dev', seat_ids: [seats[1]._id] },
@@ -49,10 +55,10 @@ export async function seedData() {
     scheduleEntries.push({ seat_id: seats[3]._id, user_id: users[7 + (day % 3)]._id, day_of_week: day, slot: 'morning' as const })
     scheduleEntries.push({ seat_id: seats[3]._id, user_id: users[7 + ((day + 1) % 3)]._id, day_of_week: day, slot: 'afternoon' as const })
   }
-  // Seat 5 (quanlm): users[10]=Quan, users[11]=Ngoc, users[12]=Phuong
+  // Seat 5 (quanlm): users[11]=Quan, users[12]=Ngoc, users[13]=Phuong
   for (let day = 0; day < 5; day++) {
-    scheduleEntries.push({ seat_id: seats[4]._id, user_id: users[10 + (day % 3)]._id, day_of_week: day, slot: 'morning' as const })
-    scheduleEntries.push({ seat_id: seats[4]._id, user_id: users[10 + ((day + 1) % 3)]._id, day_of_week: day, slot: 'afternoon' as const })
+    scheduleEntries.push({ seat_id: seats[4]._id, user_id: users[11 + (day % 3)]._id, day_of_week: day, slot: 'morning' as const })
+    scheduleEntries.push({ seat_id: seats[4]._id, user_id: users[11 + ((day + 1) % 3)]._id, day_of_week: day, slot: 'afternoon' as const })
   }
   await Schedule.insertMany(scheduleEntries)
 

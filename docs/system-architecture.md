@@ -92,7 +92,18 @@ Subsequent requests: JWT read from cookie or Authorization header
 **Route Structure** (10 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
-- `routes/seats.ts` — Seat CRUD, team assignment, token management
+- `routes/seats.ts` — Seat CRUD (owner auto-set), user assignment, token management, credentials export
+  - `POST /seats` — Any auth user (auto-sets owner)
+  - `GET /seats` — List all seats with owner + assigned users
+  - `GET /seats/available-users` — List active users for assignment
+  - `GET /seats/credentials/export` — Export all (admin)
+  - `GET /seats/:id/credentials/export` — Export single (owner or admin)
+  - `PUT /seats/:id` — Update seat details (owner or admin)
+  - `DELETE /seats/:id` — Delete seat (owner or admin)
+  - `POST /seats/:id/assign` — Assign user (owner or admin)
+  - `DELETE /seats/:id/unassign/:userId` — Unassign user (owner or admin)
+  - `PUT /seats/:id/token` — Set/update credential (owner or admin)
+  - `PUT /seats/:id/transfer` — Transfer ownership (admin)
 - `routes/admin.ts` — User management, manual alert check trigger
 - `routes/schedules.ts` — Schedule CRUD with conflict prevention, hourly time slots, budget allocation
 - `routes/alerts.ts` — Alert creation, resolution, listing
@@ -125,11 +136,19 @@ Subsequent requests: JWT read from cookie or Authorization header
   label: String,
   team: String (enum: ['dev', 'mkt']),
   max_users: Number,
-  access_token: String | null (encrypted AES-256-GCM),
+  owner_id: ObjectId | null (ref: User, index: true),
+  oauth_credential: {
+    access_token: String | null (encrypted),
+    refresh_token: String | null (encrypted),
+    expires_at: Date | null,
+    scopes: [String],
+    subscription_type: String | null,
+    rate_limit_tier: String | null
+  } | null (select: false),
   token_active: Boolean,
   last_fetched_at: Date | null,
   last_fetch_error: String | null,
-  has_token: Boolean (virtual),
+  last_refreshed_at: Date | null,
   created_at: Date
 }
 ```
@@ -427,15 +446,25 @@ Admin: View/update thresholds via GET/PUT /api/settings
 
 ### Seat Management Flow
 ```
-Admin: POST /api/seats { email, label, team, max_users }
+Any Auth User: POST /api/seats { email, label, team, max_users }
     ↓
-Backend: Validate unique email, create Seat document
+Backend: Validate unique email, create Seat document with owner_id = req.user._id
     ↓
-Admin: Edit → PUT /api/seats/:id
+Owner/Admin: Edit → PUT /api/seats/:id (allowed via requireSeatOwnerOrAdmin)
     ↓
-Admin: Delete → DELETE /api/seats/:id (cascade-safe)
+Owner/Admin: Delete → DELETE /api/seats/:id (cascade-safe, unassigns users, clears schedules)
     ↓
-Frontend: Refresh seats list
+Owner/Admin: Assign → POST /api/seats/:id/assign { userId } (add to seat)
+    ↓
+Owner/Admin: Unassign → DELETE /api/seats/:id/unassign/:userId (remove + clear schedules)
+    ↓
+Owner/Admin: Credential → PUT /api/seats/:id/token { access_token, ... } (encrypted storage)
+    ↓
+Owner/Admin: Export Credential → GET /api/seats/:id/credentials/export (audit logged)
+    ↓
+Admin: Transfer Ownership → PUT /api/seats/:id/transfer { newOwnerId }
+    ↓
+Frontend: Group seats into "My Seats" / "Assigned to Me" / "Other Seats" by ownership + assignment
 ```
 
 ### Usage Collection Flow
@@ -500,6 +529,7 @@ Frontend: Query /api/usage-snapshots to display latest metrics
 ### Authorization
 - `authenticate()` middleware: Verifies JWT, sets `req.user` in types
 - `requireAdmin()` middleware: Checks `req.user.role === 'admin'`
+- `requireSeatOwnerOrAdmin()` middleware: Allows seat owner or admin; queries seat.owner_id
 - `validateObjectId()` middleware: Validates MongoDB ObjectIds in URLs
 
 ### Data Protection
