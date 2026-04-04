@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/table";
 import { useUsageBySeat } from "@/hooks/use-dashboard";
 
-function pctColor(pct: number) {
+function pctColor(pct: number | null) {
+  if (pct === null) return "text-muted-foreground";
   if (pct >= 80) return "text-red-600 font-semibold";
   if (pct >= 50) return "text-yellow-600 font-semibold";
   return "text-green-600";
@@ -22,7 +23,11 @@ function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("vi-VN");
+  return d.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtPct(pct: number | null) {
+  return pct !== null ? `${pct}%` : "—";
 }
 
 export function UsageTable() {
@@ -46,8 +51,9 @@ export function UsageTable() {
               <TableRow>
                 <TableHead>Seat</TableHead>
                 <TableHead>Team</TableHead>
-                <TableHead>Usage %</TableHead>
-                <TableHead>Logged</TableHead>
+                <TableHead>5h %</TableHead>
+                <TableHead>7d %</TableHead>
+                <TableHead>Fetched</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -59,17 +65,20 @@ export function UsageTable() {
                       {seat.team?.toLowerCase() ?? "—"}
                     </Badge>
                   </TableCell>
-                  <TableCell className={pctColor(seat.weekly_all_pct ?? 0)}>
-                    {seat.weekly_all_pct ?? 0}%
+                  <TableCell className={pctColor(seat.five_hour_pct)}>
+                    {fmtPct(seat.five_hour_pct)}
+                  </TableCell>
+                  <TableCell className={pctColor(seat.seven_day_pct)}>
+                    {fmtPct(seat.seven_day_pct)}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {formatDate(seat.last_logged)}
+                    {formatDate(seat.last_fetched_at)}
                   </TableCell>
                 </TableRow>
               ))}
               {!data?.seats?.length && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Chưa có dữ liệu
                   </TableCell>
                 </TableRow>

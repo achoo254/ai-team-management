@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import mongoose from "mongoose";
 import { Seat } from "@/models/seat";
 import { User } from "@/models/user";
-import { UsageLog } from "@/models/usage-log";
+import { UsageSnapshot } from "@/models/usage-snapshot";
 import { Team } from "@/models/team";
 
 // Single top-level mock — hoisted before any module evaluation
@@ -16,16 +16,7 @@ vi.mock("@/lib/config", () => ({
 }));
 
 // Import service after mock declaration so it receives the mocked config
-import { sendWeeklyReport, sendLogReminder } from "@/services/telegram-service";
-
-/** Get Monday of current week as YYYY-MM-DD using same local-time logic as the service */
-function currentWeekStart(): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(now.getFullYear(), now.getMonth(), diff);
-  return monday.toISOString().split("T")[0];
-}
+import { sendWeeklyReport } from "@/services/telegram-service";
 
 /** Seed minimal data: team, seat, user */
 async function seedBaseData() {
@@ -102,13 +93,14 @@ describe("telegram-service", () => {
       expect(body.text).toContain("TG Seat");
     });
 
-    it("includes usage log data when logs exist for current week", async () => {
-      const { seat, user } = await seedBaseData();
-      await UsageLog.create({
+    it("includes snapshot data when snapshots exist", async () => {
+      const { seat } = await seedBaseData();
+      await UsageSnapshot.create({
         seat_id: seat._id,
-        week_start: currentWeekStart(),
-        weekly_all_pct: 75,
-                user_id: user._id,
+        raw_response: {},
+        five_hour_pct: 75,
+        seven_day_pct: 50,
+        fetched_at: new Date(),
       });
 
       await sendWeeklyReport();
@@ -116,6 +108,7 @@ describe("telegram-service", () => {
       const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(init.body as string);
       expect(body.text).toContain("75%");
+      expect(body.text).toContain("50%");
     });
 
     it("includes inline keyboard with app links in reply_markup", async () => {
@@ -137,74 +130,6 @@ describe("telegram-service", () => {
       await expect(sendWeeklyReport()).resolves.toBeUndefined();
       // The service should still call fetch (sends an empty-stats report)
       expect(fetchSpy).toHaveBeenCalledOnce();
-    });
-  });
-
-  describe("sendLogReminder()", () => {
-    it("calls Telegram API when there are seats without logs this week", async () => {
-      await seedBaseData();
-      // No UsageLog created — seat is missing this week's log
-
-      await sendLogReminder();
-
-      expect(fetchSpy).toHaveBeenCalledOnce();
-      const calledUrl = fetchSpy.mock.calls[0][0] as string;
-      expect(calledUrl).toBe("https://api.telegram.org/bottest-token/sendMessage");
-    });
-
-    it("includes seat label of missing seats in reminder message", async () => {
-      await seedBaseData();
-
-      await sendLogReminder();
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(init.body as string);
-      expect(body.text).toContain("TG Seat");
-      expect(body.text).toContain("Nhắc log usage");
-    });
-
-    it("does NOT call Telegram API when all seats have already logged this week", async () => {
-      const { seat, user } = await seedBaseData();
-      await UsageLog.create({
-        seat_id: seat._id,
-        week_start: currentWeekStart(),
-        weekly_all_pct: 40,
-                user_id: user._id,
-      });
-
-      await sendLogReminder();
-
-      // All seats have logged → missing.length === 0 → returns early, no fetch call
-      expect(fetchSpy).not.toHaveBeenCalled();
-    });
-
-    it("sends HTML parse_mode in reminder body", async () => {
-      await seedBaseData();
-
-      await sendLogReminder();
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(init.body as string);
-      expect(body.parse_mode).toBe("HTML");
-      expect(body.chat_id).toBe("123");
-    });
-
-    it("includes member names in reminder when users are assigned to missing seat", async () => {
-      await seedBaseData();
-      // User seeded with active: true — their name should appear in the reminder
-
-      await sendLogReminder();
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const body = JSON.parse(init.body as string);
-      expect(body.text).toContain("TG User");
-    });
-
-    it("does NOT call Telegram API when there are no seats at all", async () => {
-      // No seats seeded — missing list will be empty
-      await sendLogReminder();
-
-      expect(fetchSpy).not.toHaveBeenCalled();
     });
   });
 });

@@ -18,34 +18,29 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Track seat capacity (max users per seat)
 - View seat status and current users
 
-### 2. Usage Logging (Weekly %)
-- Users log their weekly usage percentage (all models combined)
-- Store per-user usage data: seat, week_start, all_pct
-- Week range: Monday 00:00 - Sunday 23:59 Asia/Saigon
-
-### 3. Scheduling (Morning/Afternoon)
+### 2. Scheduling (Morning/Afternoon)
 - Define morning (8:00-12:00) and afternoon (13:00-17:00) slots
 - Assign users to day-of-week + slot (e.g., Mon-Fri morning, Wed afternoon)
 - Prevent double-booking on same seat
 - Default round-robin schedules for 3-person seats
 
-### 4. Alerts
-- **High Usage**: Trigger when seat usage > 80%
-- **Inactivity**: Trigger when user hasn't logged for 1+ week
-- Alert resolution/marking as read
-- Alert history
+### 3. Alerts (Real-time)
+- **Rate Limit**: Trigger when seat usage exceeds configurable threshold (default 80%) across 5h, 7d, 7d_sonnet, 7d_opus windows
+- **Extra Credit**: Trigger when extra credit utilization exceeds threshold (default 80%)
+- **Token Failure**: Trigger for seats with active tokens but failed API fetch
+- Alert resolution with audit trail (who, when, timestamp)
+- Alert history and deduplication
 
-### 5. Telegram Notifications
-- **Weekly Report** (Friday 17:00 Asia/Saigon): Usage summary, alerts, inactive users
-- **Log Reminder** (Friday 15:00 Asia/Saigon): Remind users to log past week usage
+### 4. Telegram Notifications
+- **Weekly Report** (Friday 17:00 Asia/Saigon): Usage summary from snapshots, alerts, inactive users
 - Integration via Telegram bot + topic
 
-### 6. User & Team Management
+### 5. User & Team Management
 - Create/update users (name, email, role, team)
 - Manage teams (dev/mkt): name, label, color
 - Admin role gating for sensitive operations
 
-### 7. Usage Metrics Collection
+### 6. Usage Metrics Collection
 - Store Anthropic API access tokens (encrypted with AES-256-GCM)
 - Auto-collect usage every 30 minutes for all active seats
 - Track 5-hour, 7-day, and model-specific (Sonnet, Opus) utilization %
@@ -72,7 +67,7 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 ### Database
 - MongoDB (via MONGO_URI env var)
-- Collections: seats, users, usage_logs, schedules, alerts, teams, usage_snapshots
+- Collections: seats, users, schedules, alerts, settings, teams, usage_snapshots
 - Mongoose models with schema validation
 - TTL indexes for automatic data cleanup (usage_snapshots: 90-day retention)
 
@@ -120,10 +115,10 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 ### Current State (Done)
 - Seat CRUD + team assignment
 - User management (create, update, delete, active status)
-- Weekly usage logging per user per week
 - Schedule CRUD with conflict prevention
-- Alert creation/resolution
-- Telegram weekly reports & reminders
+- Real-time alert system (rate_limit, extra_credit, token_failure)
+- Configurable alert thresholds (admin dashboard)
+- Telegram weekly reports
 - SPA dashboard with all views
 - Google sign-in + JWT auth
 - Usage metrics collection (30-min cron)

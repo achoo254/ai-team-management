@@ -26,7 +26,7 @@
 
 ### Route Handlers
 - Lowercase HTTP verbs: `GET /api/resource`, `POST /api/resource/:id`
-- Plural resource names: `/api/seats`, `/api/users`, `/api/usage-logs`
+- Plural resource names: `/api/seats`, `/api/users`, `/api/usage-snapshots`
 - Nested resources: `/api/seats/:seatId/schedules`
 
 ### Class/Object Keys
@@ -83,22 +83,27 @@ Example:
 ```typescript
 import Seat from '../models/seat';
 
-export async function calculateHighUsageAlerts(): Promise<Alert[]> {
+export async function checkSnapshotAlerts(): Promise<number> {
   const alerts: Alert[] = [];
-  const seats = await Seat.find();
+  const snapshots = await UsageSnapshot.find({ fetched_at: { $gte: new Date(Date.now() - 3600000) } });
+  const settings = await getOrCreateSettings();
 
-  for (const seat of seats) {
-    const usage = await getWeeklyUsage(seat._id);
-    if (usage > 80) {
-      alerts.push({
-        seat_id: seat._id,
-        type: 'high_usage',
-        message: `Seat at ${usage}% usage`
-      });
+  for (const snapshot of snapshots) {
+    if (snapshot.five_hour_pct !== null && snapshot.five_hour_pct > settings.alerts.rate_limit_pct) {
+      const existing = await Alert.findOne({ seat_id: snapshot.seat_id, type: 'rate_limit', resolved: false });
+      if (!existing) {
+        alerts.push({
+          seat_id: snapshot.seat_id,
+          type: 'rate_limit',
+          message: `Usage at ${snapshot.five_hour_pct}%`,
+          metadata: { window: '5h', pct: snapshot.five_hour_pct }
+        });
+      }
     }
   }
 
-  return alerts;
+  const created = await Alert.insertMany(alerts);
+  return created.length;
 }
 ```
 

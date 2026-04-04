@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { authenticate } from '../middleware.js'
 import { Seat } from '../models/seat.js'
 import { User } from '../models/user.js'
-import { UsageLog } from '../models/usage-log.js'
+import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Alert } from '../models/alert.js'
 import { Schedule } from '../models/schedule.js'
 
@@ -13,29 +13,20 @@ router.use(authenticate)
 // GET /api/dashboard/summary — basic stats
 router.get('/summary', async (_req, res) => {
   try {
-    const latestLog = await UsageLog.findOne().sort({ week_start: -1 }).lean()
-    const latestWeek = latestLog?.week_start
-
-    let avgAll = 0
-    if (latestWeek) {
-      const result = await UsageLog.aggregate([
-        { $match: { week_start: latestWeek } },
-        {
-          $group: {
-            _id: null,
-            avgAll: { $avg: '$weekly_all_pct' },
-          },
-        },
-      ])
-      if (result.length > 0) {
-        avgAll = Math.round(result[0].avgAll) || 0
-      }
-    }
+    // Latest snapshot per seat (no time window — TTL index handles cleanup)
+    const latestSnapshots = await UsageSnapshot.aggregate([
+      { $sort: { fetched_at: -1 } },
+      { $group: { _id: '$seat_id', seven_day_pct: { $first: '$seven_day_pct' } } },
+    ])
+    const valid = latestSnapshots.filter(r => r.seven_day_pct != null)
+    const avgAll = valid.length > 0
+      ? Math.round(valid.reduce((s, r) => s + r.seven_day_pct, 0) / valid.length)
+      : 0
 
     const activeAlerts = await Alert.countDocuments({ resolved: false })
-    const totalLogs = await UsageLog.countDocuments()
+    const totalSnapshots = await UsageSnapshot.countDocuments()
 
-    res.json({ avgAllPct: avgAll, activeAlerts, totalLogs })
+    res.json({ avgAllPct: avgAll, activeAlerts, totalSnapshots })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
@@ -70,55 +61,48 @@ router.get('/enhanced', async (_req, res) => {
     // Unresolved alerts count
     const unresolvedAlerts = await Alert.countDocuments({ resolved: false })
 
-    // Latest week usage per seat
-    const latestUsage = await UsageLog.aggregate([
-      { $sort: { week_start: -1 } },
-      {
-        $group: {
-          _id: '$seat_id',
-          weekly_all_pct: { $first: '$weekly_all_pct' },
-        },
-      },
+    // Latest snapshot per seat (no time window — TTL index handles cleanup)
+    const latestSnapshots = await UsageSnapshot.aggregate([
+      { $sort: { fetched_at: -1 } },
+      { $group: {
+        _id: '$seat_id',
+        five_hour_pct: { $first: '$five_hour_pct' },
+        seven_day_pct: { $first: '$seven_day_pct' },
+      }},
     ])
-
-    const usageMap: Record<string, { weekly_all_pct: number }> = {}
-    for (const u of latestUsage) usageMap[String(u._id)] = u
+    const snapshotMap = new Map(latestSnapshots.map(s => [String(s._id), s]))
 
     const seats = await Seat.find().sort({ _id: 1 }).lean()
 
     const usagePerSeat = seats.map((s) => ({
       label: s.label,
       team: s.team,
-      all_pct: usageMap[String(s._id)]?.weekly_all_pct || 0,
+      five_hour_pct: snapshotMap.get(String(s._id))?.five_hour_pct ?? null,
+      seven_day_pct: snapshotMap.get(String(s._id))?.seven_day_pct ?? null,
     }))
 
-    // 8-week usage trend
-    const usageTrend = await UsageLog.aggregate([
-      {
-        $group: {
-          _id: '$week_start',
-          avg_all: { $avg: '$weekly_all_pct' },
-        },
-      },
-      { $sort: { _id: -1 } },
-      { $limit: 8 },
-      {
-        $project: {
-          week_start: '$_id',
-          avg_all: { $round: ['$avg_all', 0] },
-          _id: 0,
-        },
-      },
+    // 30-day usage trend (daily avg of seven_day_pct)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const usageTrend = await UsageSnapshot.aggregate([
+      { $match: { fetched_at: { $gte: thirtyDaysAgo }, seven_day_pct: { $ne: null } } },
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$fetched_at', timezone: 'Asia/Ho_Chi_Minh' } },
+        avg_pct: { $avg: '$seven_day_pct' },
+      }},
+      { $sort: { _id: 1 } },
+      { $project: { date: '$_id', avg_pct: { $round: ['$avg_pct', 0] }, _id: 0 } },
     ])
-    usageTrend.reverse()
 
-    // Team usage breakdown
+    // Team usage breakdown — only count seats with actual snapshot data
     const teamUsageCalc: Record<string, { total: number; count: number }> = {}
     for (const s of seats) {
       const team = s.team
+      const pct = snapshotMap.get(String(s._id))?.seven_day_pct
       if (!teamUsageCalc[team]) teamUsageCalc[team] = { total: 0, count: 0 }
-      teamUsageCalc[team].total += usageMap[String(s._id)]?.weekly_all_pct || 0
-      teamUsageCalc[team].count++
+      if (pct != null) {
+        teamUsageCalc[team].total += pct
+        teamUsageCalc[team].count++
+      }
     }
     const teamUsage = Object.entries(teamUsageCalc).map(([team, data]) => ({
       team,
@@ -144,25 +128,22 @@ router.get('/enhanced', async (_req, res) => {
 // GET /api/dashboard/usage/by-seat — per-seat usage with user names
 router.get('/usage/by-seat', async (_req, res) => {
   try {
-    // Latest week per seat_id
-    const latestUsage = await UsageLog.aggregate([
-      { $sort: { week_start: -1 } },
-      {
-        $group: {
-          _id: '$seat_id',
-          weekly_all_pct: { $first: '$weekly_all_pct' },
-          last_logged: { $first: '$logged_at' },
-        },
-      },
+    // Latest snapshot per seat (no time window — TTL index handles cleanup)
+    const latestSnapshots = await UsageSnapshot.aggregate([
+      { $sort: { fetched_at: -1 } },
+      { $group: {
+        _id: '$seat_id',
+        five_hour_pct: { $first: '$five_hour_pct' },
+        seven_day_pct: { $first: '$seven_day_pct' },
+        last_fetched_at: { $first: '$fetched_at' },
+      }},
     ])
-
-    const usageMap: Record<string, { weekly_all_pct: number; last_logged: string }> = {}
-    for (const u of latestUsage) usageMap[String(u._id)] = u
+    const snapshotMap = new Map(latestSnapshots.map(s => [String(s._id), s]))
 
     const seats = await Seat.find().lean()
     const users = await User.find({ active: true, seat_ids: { $exists: true, $ne: [] } }, 'name seat_ids').lean()
 
-    // Map seat _id → user names (user can be in multiple seats)
+    // Map seat _id → user names
     const usersBySeatId: Record<string, string[]> = {}
     for (const u of users) {
       for (const seatId of u.seat_ids ?? []) {
@@ -175,17 +156,19 @@ router.get('/usage/by-seat', async (_req, res) => {
     const enriched = seats
       .map((s) => {
         const key = String(s._id)
+        const snap = snapshotMap.get(key)
         return {
           seat_id: s._id,
           seat_email: s.email,
           label: s.label,
           team: s.team,
-          weekly_all_pct: usageMap[key]?.weekly_all_pct || 0,
-          last_logged: usageMap[key]?.last_logged || null,
+          five_hour_pct: snap?.five_hour_pct ?? null,
+          seven_day_pct: snap?.seven_day_pct ?? null,
+          last_fetched_at: snap?.last_fetched_at ?? null,
           users: usersBySeatId[key] || [],
         }
       })
-      .sort((a, b) => b.weekly_all_pct - a.weekly_all_pct)
+      .sort((a, b) => (b.seven_day_pct ?? 0) - (a.seven_day_pct ?? 0))
 
     res.json({ seats: enriched })
   } catch (error) {

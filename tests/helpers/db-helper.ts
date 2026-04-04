@@ -3,7 +3,7 @@ import { User } from "@/models/user";
 import { Team } from "@/models/team";
 import { Schedule } from "@/models/schedule";
 import { Alert } from "@/models/alert";
-import { UsageLog } from "@/models/usage-log";
+import { UsageSnapshot } from "@/models/usage-snapshot";
 
 /** Seed minimal test data, return created docs */
 export async function seedTestData() {
@@ -47,11 +47,12 @@ export async function seedAlert(seatId: string) {
   });
 }
 
-export async function seedUsageLog(seatId: string, userId: string) {
-  return UsageLog.create({
+export async function seedUsageSnapshot(seatId: string) {
+  return UsageSnapshot.create({
     seat_id: seatId,
-    week_start: "2026-03-23",
-    weekly_all_pct: 50,
-    user_id: userId,
+    raw_response: {},
+    five_hour_pct: 40,
+    seven_day_pct: 50,
+    fetched_at: new Date(),
   });
 }

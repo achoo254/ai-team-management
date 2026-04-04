@@ -9,8 +9,8 @@ export interface EnhancedDashboardData {
   totalSeats: number;
   unresolvedAlerts: number;
   todaySchedules: number;
-  usagePerSeat: { label: string; team: string; all_pct: number }[];
-  usageTrend: { week_start: string; avg_all: number }[];
+  usagePerSeat: { label: string; team: string; five_hour_pct: number | null; seven_day_pct: number | null }[];
+  usageTrend: { date: string; avg_pct: number }[];
   teamUsage: { team: string; avg_pct: number }[];
 }
 
@@ -20,8 +20,9 @@ export interface SeatUsageData {
     seat_email: string;
     label: string;
     team: string;
-    weekly_all_pct: number;
-    last_logged: string | null;
+    five_hour_pct: number | null;
+    seven_day_pct: number | null;
+    last_fetched_at: string | null;
     users: string[];
   }[];
 }

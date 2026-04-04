@@ -10,9 +10,8 @@ import SeatsPage from '@/pages/seats'
 import TeamsPage from '@/pages/teams'
 import SchedulePage from '@/pages/schedule'
 import AlertsPage from '@/pages/alerts'
-import LogUsagePage from '@/pages/log-usage'
 import AdminPage from '@/pages/admin'
-import UsageMetricsPage from '@/pages/usage-metrics'
+import UsagePage from '@/pages/usage'
 
 export default function App() {
   const [queryClient] = useState(
@@ -30,8 +29,8 @@ export default function App() {
             <Route path="teams" element={<TeamsPage />} />
             <Route path="schedule" element={<SchedulePage />} />
             <Route path="alerts" element={<AlertsPage />} />
-            <Route path="log-usage" element={<LogUsagePage />} />
-            <Route path="usage-metrics" element={<UsageMetricsPage />} />
+            <Route path="usage" element={<UsagePage />} />
+            <Route path="usage-metrics" element={<Navigate to="/usage" replace />} />
             <Route path="admin" element={<AdminPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

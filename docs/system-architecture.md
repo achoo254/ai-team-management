@@ -34,8 +34,8 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
 - **Connection**: Mongoose 9.3.1 ODM
-- **Collections**: 8 (seats, users, usage_logs, schedules, alerts, settings, teams, usage_snapshots)
-- **Indexing**: Compound indexes on (user_id, week_start), (seat_id, day_of_week, slot), (seat_id, type, resolved), and (seat_id, fetched_at)
+- **Collections**: 7 (seats, users, schedules, alerts, settings, teams, usage_snapshots)
+- **Indexing**: Compound indexes on (seat_id, day_of_week, slot), (seat_id, type, resolved), and (seat_id, fetched_at)
 - **TTL**: usage_snapshots collection auto-expires after 90 days
 
 ### Monorepo & Shared (`packages/shared`)
@@ -89,7 +89,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (10 files):
+**Route Structure** (9 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
 - `routes/seats.ts` — Seat CRUD, team assignment, token management
@@ -98,13 +98,11 @@ Subsequent requests: JWT read from cookie or Authorization header
 - `routes/alerts.ts` — Alert creation, resolution, listing
 - `routes/settings.ts` — Get/update alert thresholds (admin only)
 - `routes/teams.ts` — Team CRUD
-- `routes/usage-log.ts` — Usage logging, retrieval
 - `routes/usage-snapshots.ts` — Query snapshots, trigger collection
 
-**Service Layer** (6 files):
+**Service Layer** (5 files):
 - `services/alert-service.ts` — Alert generation and checking
 - `services/telegram-service.ts` — Telegram message formatting and sending
-- `services/usage-sync-service.ts` — Usage data synchronization
 - `services/crypto-service.ts` — AES-256-GCM encryption/decryption for access tokens
 - `services/usage-collector-service.ts` — Fetch usage data from Anthropic API, concurrent collection
 - `services/anthropic-service.ts` — Future Anthropic API integration
@@ -143,19 +141,6 @@ Subsequent requests: JWT read from cookie or Authorization header
   seat_id: ObjectId (ref: Seat),
   active: Boolean,
   created_at: Date
-}
-```
-
-#### UsageLogs
-```typescript
-{
-  _id: ObjectId,
-  user_id: ObjectId (ref: User),
-  seat_id: ObjectId (ref: Seat),
-  week_start: Date,
-  weekly_all_pct: Number (0-100),
-  created_at: Date,
-  // Index: (user_id, week_start) compound unique
 }
 ```
 
@@ -290,21 +275,23 @@ API calls via React Query (TanStack Query)
 
 **Jobs** (via node-cron in `packages/api/src/index.ts`):
 
-1. **Every 30 minutes** — `collectAllUsage()` from usage-collector-service.ts
-   - Fetches usage metrics from Anthropic API for all seats with active tokens
-   - Decrypts stored access tokens (AES-256-GCM)
-   - Stores snapshots in usage_snapshots collection with 90-day TTL
-   - Logs completion stats and errors per seat
-   - Mutex guard prevents overlapping runs
+1. **Every 30 minutes** — `collectAllUsage()` → `checkSnapshotAlerts()`
+   - **collectAllUsage()** from usage-collector-service.ts:
+     - Fetches usage metrics from Anthropic API for all seats with active tokens
+     - Decrypts stored access tokens (AES-256-GCM)
+     - Stores snapshots in usage_snapshots collection with 90-day TTL
+     - Logs completion stats and errors per seat
+     - Mutex guard prevents overlapping runs
+   - **checkSnapshotAlerts()** from alert-service.ts (chained after collection):
+     - Evaluates latest UsageSnapshot against admin-configured thresholds
+     - Creates alerts for: rate_limit (5h, 7d, 7d_sonnet, 7d_opus), extra_credit, token_failure
+     - Deduplicates: max 1 unresolved alert per (seat_id, type)
+     - Sends Telegram notification for each new alert
+     - Returns count of alerts created
 
-2. **Friday 15:00 Asia/Saigon** — `sendLogReminder()` from telegram-service.ts
-   - Reminds users to log past week usage
-   - Sends to Telegram chat
-
-3. **Friday 17:00 Asia/Saigon** — `sendWeeklyReport()` from telegram-service.ts
-   - Compiles usage summary by seat
+2. **Friday 17:00 Asia/Saigon** — `sendWeeklyReport()` from telegram-service.ts
+   - Compiles usage summary using UsageSnapshot data
    - Lists alerts triggered
-   - Identifies inactive users
    - Sends formatted report to Telegram
 
 **Configuration**:
@@ -355,36 +342,30 @@ Frontend: Redirect to SPA (index.html)
 Subsequent API calls include JWT in cookie
 ```
 
-### Usage Logging Flow
-```
-User fills usage form → POST /api/usage-log
-    ↓
-Validate: user exists, seat assigned, week not duplicate
-    ↓
-Create UsageLog document in MongoDB
-    ↓
-Frontend: Display success, refresh user's history
-    ↓
-Friday 17:00: Cron job aggregates weekly data
-    ↓
-Telegram: Send summary to chat
-```
-
 ### Alert Generation Flow
 ```
-Cron job / Manual trigger → Alert Service
+Every 30 min Cron / Admin manual trigger → checkSnapshotAlerts()
     ↓
-Query UsageLogs: find seats with weekly_all_pct > 80%
+Get latest UsageSnapshot per seat (last 1 hour)
     ↓
-Query Users: find inactive (no log for >7 days)
+Load Settings: admin-configured rate_limit_pct, extra_credit_pct
     ↓
-Create Alert documents for triggered conditions
+For each snapshot, evaluate:
+  • Rate Limit: Check five_hour_pct, seven_day_pct, etc. vs rate_limit_pct
+  • Extra Credit: Check extra_usage.utilization vs extra_credit_pct
+  • Token Failure: Check for active tokens with fetch errors
     ↓
-Telegram: Send notification if enabled
+Dedup check: If unresolved alert exists for (seat_id, type), skip creation
     ↓
-Frontend: Display in Alerts view
+Create Alert with metadata (window, pct, error, etc.)
+    ↓
+Telegram: Send alert-specific notification (rate_limit/extra_credit/token_failure)
+    ↓
+Frontend: Display in Alerts view, grouped by type
     ↓
 User: Resolve alert via PUT /api/alerts/:id/resolve
+    ↓
+Admin: View/update thresholds via GET/PUT /api/settings
 ```
 
 ### Seat Management Flow

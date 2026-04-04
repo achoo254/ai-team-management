@@ -15,7 +15,6 @@ quan-ly-team-claude/
 │   │   │   ├── models/              # Mongoose schemas (TypeScript)
 │   │   │   │   ├── seat.ts           # Includes access_token (encrypted)
 │   │   │   │   ├── user.ts
-│   │   │   │   ├── usage-log.ts
 │   │   │   │   ├── schedule.ts
 │   │   │   │   ├── alert.ts
 │   │   │   │   ├── team.ts
@@ -28,12 +27,10 @@ quan-ly-team-claude/
 │   │   │   │   ├── alerts.ts
 │   │   │   │   ├── admin.ts
 │   │   │   │   ├── teams.ts
-│   │   │   │   ├── usage-log.ts
 │   │   │   │   └── usage-snapshots.ts # Query & collect usage snapshots
 │   │   │   ├── services/            # Business logic (TypeScript)
 │   │   │   │   ├── alert-service.ts
 │   │   │   │   ├── telegram-service.ts
-│   │   │   │   ├── usage-sync-service.ts
 │   │   │   │   ├── crypto-service.ts  # AES-256-GCM encryption/decryption
 │   │   │   │   └── usage-collector-service.ts # Collect usage from Anthropic API
 │   │   │   ├── scripts/
@@ -54,7 +51,6 @@ quan-ly-team-claude/
 │   │   │   │   ├── alerts.tsx
 │   │   │   │   ├── admin.tsx
 │   │   │   │   ├── teams.tsx
-│   │   │   │   ├── usage-log.tsx
 │   │   │   │   ├── usage-metrics.tsx  # Usage snapshots & token management
 │   │   │   │   └── login.tsx
 │   │   │   ├── components/          # Reusable React components
@@ -151,19 +147,6 @@ quan-ly-team-claude/
 }
 ```
 
-#### UsageLog
-```typescript
-{
-  _id: ObjectId (auto),
-  user_id: ObjectId (reference to User),
-  seat_id: ObjectId (reference to Seat),
-  week_start: Date,
-  weekly_all_pct: Number,
-  created_at: Date (auto),
-  // Unique compound index: (user_id, week_start)
-}
-```
-
 #### Schedule
 ```typescript
 {
@@ -182,10 +165,14 @@ quan-ly-team-claude/
 {
   _id: ObjectId (auto),
   seat_id: ObjectId (reference to Seat),
-  type: String (enum: ['high_usage', 'no_activity']),
+  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure']),
   message: String,
+  metadata: Object (optional: window, pct, credits_used, error),
   resolved: Boolean (default: false),
-  created_at: Date (auto)
+  resolved_by: String | null,
+  resolved_at: String | null,
+  created_at: Date (auto),
+  // Compound index: (seat_id, type, resolved)
 }
 ```
 
@@ -258,11 +245,6 @@ quan-ly-team-claude/
 - `POST /api/schedules` — Create schedule
 - `DELETE /api/schedules/:id` — Delete schedule (admin only)
 
-### Usage Logs
-- `GET /api/usage-log/user/:userId` — Get user's usage history
-- `POST /api/usage-log` — Log usage (user/admin)
-- `GET /api/usage-log/weekly` — Get weekly summary
-
 ### Usage Snapshots
 - `GET /api/usage-snapshots` — Query snapshots (filter by seatId, date range, limit, offset)
 - `GET /api/usage-snapshots/latest` — Get latest snapshot per active seat (last 24h)
@@ -273,6 +255,10 @@ quan-ly-team-claude/
 - `GET /api/alerts` — List alerts
 - `POST /api/alerts` — Create alert (admin only)
 - `PUT /api/alerts/:id/resolve` — Mark alert as resolved
+
+### Settings
+- `GET /api/settings` — Get alert thresholds (authenticated)
+- `PUT /api/settings` — Update alert thresholds (admin only)
 
 ### Teams
 - `GET /api/teams` — List teams
@@ -301,8 +287,8 @@ quan-ly-team-claude/
 - **Seats**: List, create, edit, delete seats + assign users
 - **Teams**: Manage team definitions (dev/mkt)
 - **Schedules**: Assign users to time slots
-- **Usage Log**: Log weekly % + view history
-- **Admin**: User CRUD, system config
+- **Usage Metrics**: View real-time usage snapshots + manage tokens
+- **Admin**: User CRUD, system config, alert threshold settings
 - **Alerts**: View, resolve alerts
 
 ## Authentication Flow
@@ -317,17 +303,15 @@ quan-ly-team-claude/
 
 ## Cron Jobs
 
-### Every 30 minutes (Usage Collection)
+### Every 30 minutes (Usage Collection & Alert Check)
 - Collects usage metrics from Anthropic API for all seats with active tokens
 - Called via `collectAllUsage()` in usage-collector-service.ts
 - Stores snapshots in usage_snapshots collection (TTL: 90 days)
-
-### Friday 15:00 Asia/Saigon (Log Reminder)
-- Sends Telegram message to remind users to log usage
-- Called via `sendLogReminder()` in telegram-service.ts
+- Chains `checkSnapshotAlerts()` to evaluate alerts immediately after collection
 
 ### Friday 17:00 Asia/Saigon (Weekly Report)
-- Compiles usage summary, alerts, inactive users
+- Compiles usage summary using latest UsageSnapshot data
+- Lists alerts triggered
 - Sends formatted report to Telegram
 - Called via `sendWeeklyReport()` in telegram-service.ts
 
@@ -349,11 +333,11 @@ See `.env.example` for all variables. Key:
 
 ## Performance Characteristics
 
-- **DB Queries**: Indexed on user_id, week_start (usage_logs); seat_id, day_of_week, slot (schedules)
+- **DB Queries**: Indexed on seat_id, day_of_week, slot (schedules); seat_id, type, resolved (alerts); seat_id, fetched_at (usage_snapshots)
 - **API Response Time**: <100ms for most endpoints (simple queries)
 - **Concurrent Users**: Design assumes <100 users; MongoDB handles concurrent writes
 - **Cron Jobs**: Fire-and-forget; timeouts logged but don't block
-- **Frontend**: No bundler; vanilla JS loads quickly
+- **Frontend**: Vite dev server; lazy-loads views on demand
 
 ## Common Patterns
 

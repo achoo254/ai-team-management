@@ -6,8 +6,8 @@
  RUN  v4.1.2 D:/CONG VIEC/quan-ly-team-claude
 
 
- Test Files  8 passed (8)
-      Tests  33 passed (33)
-   Start at  10:51:41
-   Duration  1.43s (transform 263ms, setup 0ms, import 1.93s, tests 2.12s, environment 5.01s)
+ Test Files  7 passed (7)
+      Tests  28 passed (28)
+   Start at  11:24:59
+   Duration  1.39s (transform 263ms, setup 0ms, import 1.71s, tests 1.95s, environment 4.09s)
 

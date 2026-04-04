@@ -8,7 +8,7 @@ import { useSeats, type Seat } from '@/hooks/use-seats'
 import { useAuth } from '@/hooks/use-auth'
 import type { Seat as SharedSeat } from '@repo/shared'
 
-export default function UsageMetricsPage() {
+export default function UsagePage() {
   const { user } = useAuth()
   const { data: seatsData } = useSeats()
   const isAdmin = user?.role === 'admin'

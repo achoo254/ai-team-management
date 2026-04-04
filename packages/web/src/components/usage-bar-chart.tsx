@@ -37,7 +37,8 @@ export function UsageBarChart() {
                 itemStyle={{ color: cssVar("--foreground") }}
               />
               <Legend />
-              <Bar dataKey="all_pct" name="All models" fill={cssVar("--chart-1")} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="seven_day_pct" name="7d" fill={cssVar("--chart-1")} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="five_hour_pct" name="5h" fill={cssVar("--chart-2")} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}

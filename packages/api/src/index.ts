@@ -12,10 +12,9 @@ import dashboardRoutes from './routes/dashboard.js'
 import scheduleRoutes from './routes/schedules.js'
 import seatRoutes from './routes/seats.js'
 import teamRoutes from './routes/teams.js'
-import usageLogRoutes from './routes/usage-log.js'
 import usageSnapshotRoutes from './routes/usage-snapshots.js'
 import settingsRoutes from './routes/settings.js'
-import { sendLogReminder, sendWeeklyReport } from './services/telegram-service.js'
+import { sendWeeklyReport } from './services/telegram-service.js'
 import { collectAllUsage } from './services/usage-collector-service.js'
 import { checkSnapshotAlerts } from './services/alert-service.js'
 import { checkAndRefreshExpiring } from './services/token-refresh-service.js'
@@ -36,7 +35,6 @@ app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/schedules', scheduleRoutes)
 app.use('/api/seats', seatRoutes)
 app.use('/api/teams', teamRoutes)
-app.use('/api/usage-log', usageLogRoutes)
 app.use('/api/usage-snapshots', usageSnapshotRoutes)
 app.use('/api/settings', settingsRoutes)
 
@@ -49,16 +47,6 @@ async function start() {
   // Seed data on first run
   const { initializeDb } = await import('./seed-data.js')
   await initializeDb()
-
-  // Cron: Thursday 16:30 — log reminder (skip VN holidays)
-  cron.schedule('30 16 * * 4', () => {
-    if (isVietnamHoliday()) {
-      console.log('[Cron] Skipping log reminder — Vietnam holiday')
-      return
-    }
-    console.log('[Cron] Triggering log reminder...')
-    sendLogReminder().catch(console.error)
-  }, { timezone: 'Asia/Ho_Chi_Minh' })
 
   // Cron: Friday 08:00 — weekly report (skip VN holidays)
   cron.schedule('0 8 * * 5', () => {
@@ -76,8 +64,8 @@ async function start() {
     checkAndRefreshExpiring().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
-  // Cron: Every 30 min — collect usage snapshots, then check alerts
-  cron.schedule('*/30 * * * *', async () => {
+  // Cron: Every 5 min — collect usage snapshots, then check alerts
+  cron.schedule('*/5 * * * *', async () => {
     console.log('[Cron] Triggering usage collection...')
     await collectAllUsage().catch(console.error)
     console.log('[Cron] Checking snapshot alerts...')

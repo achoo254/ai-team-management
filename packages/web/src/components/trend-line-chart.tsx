@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardEnhanced } from "@/hooks/use-dashboard";
 import { cssVar } from "@/lib/chart-colors";
 
-function formatWeek(dateStr: string) {
+function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -24,13 +24,13 @@ export function TrendLineChart() {
 
   const chartData = (data?.usageTrend ?? []).map((row) => ({
     ...row,
-    week: formatWeek(row.week_start),
+    label: formatDate(row.date),
   }));
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Xu hướng 8 tuần</CardTitle>
+        <CardTitle className="text-base">Xu hướng 30 ngày</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -38,7 +38,7 @@ export function TrendLineChart() {
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 4 }}>
-              <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12 }} />
               <Tooltip
                 formatter={(val) => `${val}%`}
@@ -50,8 +50,8 @@ export function TrendLineChart() {
               <Legend />
               <Line
                 type="monotone"
-                dataKey="avg_all"
-                name="All models"
+                dataKey="avg_pct"
+                name="Avg 7d"
                 stroke={cssVar("--chart-1")}
                 strokeWidth={2}
                 dot={{ r: 3 }}

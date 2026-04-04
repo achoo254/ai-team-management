@@ -82,15 +82,6 @@ export interface Team {
   created_at: string
 }
 
-export interface UsageLog {
-  _id: string
-  seat_id: string
-  week_start: string
-  weekly_all_pct: number
-  user_id: string
-  logged_at: string
-}
-
 export interface UsageSnapshot {
   _id: string
   seat_id: string
@@ -115,10 +106,6 @@ export interface UsageSnapshot {
 // Populated variants
 export interface SchedulePopulated extends Omit<Schedule, 'seat_id' | 'user_id'> {
   seat_id: Seat
-  user_id: User
-}
-
-export interface UsageLogPopulated extends Omit<UsageLog, 'user_id'> {
   user_id: User
 }
 

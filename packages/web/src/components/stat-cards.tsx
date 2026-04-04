@@ -56,8 +56,9 @@ export function StatCards() {
     );
   }
 
-  const avgUsage = data?.usagePerSeat?.length
-    ? Math.round(data.usagePerSeat.reduce((s, x) => s + x.all_pct, 0) / data.usagePerSeat.length)
+  const validSeats = data?.usagePerSeat?.filter((x) => x.seven_day_pct !== null) ?? [];
+  const avgUsage = validSeats.length
+    ? Math.round(validSeats.reduce((s, x) => s + (x.seven_day_pct ?? 0), 0) / validSeats.length)
     : 0;
 
   return (
@@ -76,7 +77,7 @@ export function StatCards() {
         iconColor="text-green-500"
       />
       <StatCard
-        title="Avg Usage"
+        title="Avg Usage (7d)"
         value={`${avgUsage}%`}
         subtitle="trung bình tất cả seat"
         icon={BarChart3}
