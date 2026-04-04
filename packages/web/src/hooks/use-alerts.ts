@@ -7,8 +7,15 @@ import { toast } from "sonner";
 export interface Alert {
   _id: string;
   seat_id: { _id: string; email: string; label: string } | string;
-  type: string;
+  type: 'rate_limit' | 'extra_credit' | 'token_failure';
   message: string;
+  metadata?: {
+    window?: string;
+    pct?: number;
+    credits_used?: number;
+    credits_limit?: number;
+    error?: string;
+  };
   resolved: boolean;
   resolved_by?: string;
   resolved_at?: string;

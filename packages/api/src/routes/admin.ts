@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authenticate, requireAdmin } from '../middleware.js'
 import { User } from '../models/user.js'
-import { checkAlerts } from '../services/alert-service.js'
+import { checkSnapshotAlerts } from '../services/alert-service.js'
 import { sendWeeklyReport } from '../services/telegram-service.js'
 
 const router = Router()
@@ -113,7 +113,7 @@ router.delete('/users/:id', async (req, res) => {
 // POST /api/admin/check-alerts — run alert check
 router.post('/check-alerts', async (_req, res) => {
   try {
-    const result = await checkAlerts()
+    const result = await checkSnapshotAlerts()
     res.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

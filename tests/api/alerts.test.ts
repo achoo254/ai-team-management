@@ -12,8 +12,9 @@ describe("GET /api/alerts", () => {
     // Seed a resolved alert
     await Alert.create({
       seat_id: seat._id,
-      type: "no_activity",
-      message: "No activity for 1 week",
+      type: "token_failure",
+      message: "Token error",
+      metadata: { error: "invalid_token" },
       resolved: true,
       resolved_by: "admin@test.com",
       resolved_at: new Date(),

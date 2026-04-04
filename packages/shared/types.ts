@@ -42,15 +42,36 @@ export interface Schedule {
   created_at: string
 }
 
+export type AlertType = 'rate_limit' | 'extra_credit' | 'token_failure'
+
+export interface AlertMetadata {
+  window?: '5h' | '7d' | '7d_sonnet' | '7d_opus'
+  pct?: number
+  credits_used?: number
+  credits_limit?: number
+  error?: string
+}
+
 export interface Alert {
   _id: string
   seat_id: string
-  type: 'high_usage' | 'no_activity'
+  type: AlertType
   message: string
+  metadata?: AlertMetadata
   resolved: boolean
   resolved_by: string | null
   resolved_at: string | null
   created_at: string
+}
+
+export interface AlertSettings {
+  rate_limit_pct: number
+  extra_credit_pct: number
+}
+
+export interface AppSettings {
+  _id?: string
+  alerts: AlertSettings
 }
 
 export interface Team {

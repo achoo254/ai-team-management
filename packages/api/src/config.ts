@@ -5,8 +5,8 @@ export const config = {
   webUrl: process.env.WEB_URL || 'http://localhost:5173',
   apiPort: parseInt(process.env.API_PORT || '8386'),
   alerts: {
-    highUsagePct: 80,
-    inactivityWeeks: 1,
+    defaultRateLimitPct: 80,
+    defaultExtraCreditPct: 80,
   },
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',

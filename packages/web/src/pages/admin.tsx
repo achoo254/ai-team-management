@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { Plus, Users, RefreshCw, Send, ToggleLeft, ToggleRight } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { Plus, Users, RefreshCw, Send, ToggleLeft, ToggleRight, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserTable } from "@/components/user-table";
@@ -8,7 +8,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import {
   useAdminUsers, useCreateUser, useUpdateUser, useDeleteUser,
-  useBulkActive, useCheckAlerts, useSendReport, type AdminUser,
+  useBulkActive, useCheckAlerts, useSendReport, useSettings, useUpdateSettings,
+  type AdminUser,
 } from "@/hooks/use-admin";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -22,11 +23,26 @@ export default function AdminPage() {
   const bulkActive = useBulkActive();
   const checkAlerts = useCheckAlerts();
   const sendReport = useSendReport();
+  const { data: settingsData } = useSettings();
+  const updateSettings = useUpdateSettings();
 
   const [formOpen, setFormOpen] = useState(false);
+  const [rateLimitPct, setRateLimitPct] = useState(80);
+  const [extraCreditPct, setExtraCreditPct] = useState(80);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
   const [reportCooldown, setReportCooldown] = useState(false);
+
+  useEffect(() => {
+    if (settingsData?.alerts) {
+      setRateLimitPct(settingsData.alerts.rate_limit_pct);
+      setExtraCreditPct(settingsData.alerts.extra_credit_pct);
+    }
+  }, [settingsData]);
+
+  const handleSaveSettings = () => {
+    updateSettings.mutate({ alerts: { rate_limit_pct: rateLimitPct, extra_credit_pct: extraCreditPct } });
+  };
 
   const handleSubmit = useCallback((body: Partial<AdminUser> & { seatId?: string }) => {
     const mut = editing
@@ -78,6 +94,31 @@ export default function AdminPage() {
       ) : (
         <UserTable users={data.users} onEdit={handleEdit} onDelete={setDeleting} />
       )}
+
+      {/* Alert Settings */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Settings className="h-4 w-4" />
+          Cài đặt Alert
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Rate limit threshold (%)</span>
+            <input type="number" min={1} max={100} value={rateLimitPct}
+              onChange={(e) => setRateLimitPct(Number(e.target.value))}
+              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm" />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs text-muted-foreground">Extra credit threshold (%)</span>
+            <input type="number" min={1} max={100} value={extraCreditPct}
+              onChange={(e) => setExtraCreditPct(Number(e.target.value))}
+              className="w-full rounded-md border bg-background px-3 py-1.5 text-sm" />
+          </label>
+        </div>
+        <Button size="sm" onClick={handleSaveSettings} disabled={updateSettings.isPending}>
+          {updateSettings.isPending ? "Đang lưu..." : "Lưu cài đặt"}
+        </Button>
+      </div>
 
       <UserFormDialog open={formOpen} onClose={() => { setFormOpen(false); setEditing(null); }}
         onSubmit={handleSubmit} loading={createUser.isPending || updateUser.isPending} initial={editing} />

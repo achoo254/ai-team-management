@@ -41,8 +41,9 @@ export async function seedSchedule(seatId: string, userId: string) {
 export async function seedAlert(seatId: string) {
   return Alert.create({
     seat_id: seatId,
-    type: "high_usage",
-    message: "Usage exceeded 80%",
+    type: "rate_limit",
+    message: "Rate limit exceeded 80%",
+    metadata: { window: "5h", pct: 85 },
   });
 }
 

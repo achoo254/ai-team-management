@@ -7,8 +7,9 @@ import { useAlerts, useResolveAlert } from "@/hooks/use-alerts";
 const mockAlert = {
   _id: "alert-1",
   seat_id: { _id: "seat-1", email: "seat1@example.com", label: "Seat 1" },
-  type: "high_usage",
-  message: "Usage exceeded 80%",
+  type: "rate_limit",
+  message: "Rate limit exceeded 80%",
+  metadata: { window: "5h", pct: 85 },
   resolved: false,
   created_at: "2026-03-24T08:00:00.000Z",
 };
@@ -29,7 +30,7 @@ describe("useAlerts", () => {
     const { result } = renderHook(() => useAlerts(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.alerts).toHaveLength(1);
-    expect(result.current.data?.alerts[0].type).toBe("high_usage");
+    expect(result.current.data?.alerts[0].type).toBe("rate_limit");
   });
 
   it("fetches alerts with resolved=0 filter", async () => {

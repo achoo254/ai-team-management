@@ -186,6 +186,40 @@ export async function sendTokenRefreshAlert(seatLabel: string, error: string) {
   await sendMessage(msg)
 }
 
+/** Send Telegram notification for a new alert. Silently skips if Telegram not configured. */
+export async function sendAlertNotification(
+  type: 'rate_limit' | 'extra_credit' | 'token_failure',
+  seatLabel: string,
+  metadata: Record<string, unknown>,
+  threshold?: number,
+): Promise<void> {
+  if (!config.telegram.botToken || !config.telegram.chatId) return
+
+  let msg = ''
+  switch (type) {
+    case 'rate_limit':
+      msg = `🔴 <b>Rate Limit Warning</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Window: ${esc(String(metadata.window ?? ''))} | Usage: ${esc(String(metadata.pct ?? ''))}%\n`
+        + `Ngưỡng: ${threshold ?? ''}%`
+      break
+    case 'extra_credit':
+      msg = `💳 <b>Extra Credit Warning</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Credits: $${esc(String(metadata.credits_used ?? ''))}/$${esc(String(metadata.credits_limit ?? ''))} (${esc(String(metadata.pct ?? ''))}%)\n`
+        + `Ngưỡng: ${threshold ?? ''}%`
+      break
+    case 'token_failure':
+      msg = `⚠️ <b>Token Failure</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Error: <code>${esc(String(metadata.error ?? 'unknown'))}</code>\n`
+        + `→ Cần re-import credential`
+      break
+  }
+
+  await sendMessage(msg)
+}
+
 /** Send a message to Telegram with HTML + inline buttons. Throws on failure. */
 async function sendMessage(text: string) {
   const { botToken, chatId, topicId } = config.telegram

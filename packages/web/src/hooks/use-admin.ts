@@ -72,3 +72,30 @@ export function useSendReport() {
     onError: (e: Error) => toast.error(e.message),
   });
 }
+
+// --- Alert Settings ---
+
+export interface AlertSettings {
+  rate_limit_pct: number;
+  extra_credit_pct: number;
+}
+
+export function useSettings() {
+  return useQuery<{ alerts: AlertSettings }>({
+    queryKey: ["settings"],
+    queryFn: () => api.get("/api/settings"),
+  });
+}
+
+export function useUpdateSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { alerts: Partial<AlertSettings> }) =>
+      api.put("/api/settings", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["settings"] });
+      toast.success("Cập nhật cài đặt thành công");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}

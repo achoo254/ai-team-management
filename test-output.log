@@ -1,0 +1,13 @@
+
+> quan-ly-team-claude@3.0.0 test D:\CONG VIEC\quan-ly-team-claude
+> vitest run
+
+
+ RUN  v4.1.2 D:/CONG VIEC/quan-ly-team-claude
+
+
+ Test Files  8 passed (8)
+      Tests  33 passed (33)
+   Start at  10:51:41
+   Duration  1.43s (transform 263ms, setup 0ms, import 1.93s, tests 2.12s, environment 5.01s)
+
