@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router";
 import { useAlerts, useUnreadAlertCount, useMarkAlertsRead } from "@/hooks/use-alerts";
@@ -62,12 +63,14 @@ export function NotificationBell() {
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Thông báo</span>
-          {count > 0 && (
-            <Badge variant="secondary" className="text-[10px]">{count}</Badge>
-          )}
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex items-center justify-between">
+            <span>Thông báo</span>
+            {count > 0 && (
+              <Badge variant="secondary" className="text-[10px]">{count}</Badge>
+            )}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         {recentAlerts.length === 0 ? (
           <div className="px-2 py-4 text-center text-xs text-muted-foreground">
