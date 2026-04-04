@@ -14,9 +14,10 @@ quan-ly-team-claude/
 │   │   │   ├── middleware.ts        # Auth middleware
 │   │   │   ├── models/              # Mongoose schemas (TypeScript)
 │   │   │   │   ├── seat.ts           # Includes access_token (encrypted)
-│   │   │   │   ├── user.ts
+│   │   │   │   ├── user.ts           # Includes alert_settings + notification_settings
 │   │   │   │   ├── schedule.ts
 │   │   │   │   ├── alert.ts
+│   │   │   │   ├── active-session.ts
 │   │   │   │   ├── team.ts
 │   │   │   │   └── usage-snapshot.ts # Usage data from Anthropic API
 │   │   │   ├── routes/              # Express route handlers (TypeScript)
@@ -173,9 +174,9 @@ quan-ly-team-claude/
 {
   _id: ObjectId (auto),
   seat_id: ObjectId (reference to Seat),
-  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure']),
+  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded']),
   message: String,
-  metadata: Object (optional: window, pct, credits_used, error),
+  metadata: Object (optional: window, pct, credits_used, error, delta, budget, user_id, user_name),
   resolved: Boolean (default: false),
   resolved_by: String | null,
   resolved_at: String | null,
@@ -264,13 +265,9 @@ quan-ly-team-claude/
 - `POST /api/alerts` — Create alert (admin only)
 - `PUT /api/alerts/:id/resolve` — Mark alert as resolved
 
-### Settings
-- `GET /api/settings` — Get alert thresholds (authenticated)
-- `PUT /api/settings` — Update alert thresholds (admin only)
-
 ### User Settings
-- `GET /api/user/settings` — Get user's Telegram bot config + notification settings
-- `PUT /api/user/settings` — Set bot token, chat ID, notification schedule
+- `GET /api/user/settings` — Get user's alert + notification settings, Telegram bot config, available seats
+- `PUT /api/user/settings` — Set bot token, chat ID, notification schedule, alert settings (per-seat subscriptions + thresholds)
 - `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
 
 ### Teams

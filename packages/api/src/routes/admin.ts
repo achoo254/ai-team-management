@@ -2,16 +2,11 @@ import { Router } from 'express'
 import { authenticate, requireAdmin } from '../middleware.js'
 import { User } from '../models/user.js'
 import { checkSnapshotAlerts } from '../services/alert-service.js'
-import { sendWeeklyReport } from '../services/telegram-service.js'
 
 const router = Router()
 
 // All admin routes require auth + admin role
 router.use(authenticate, requireAdmin)
-
-// Module-level cooldown state for send-report (60s)
-let lastReportSent = 0
-const COOLDOWN_MS = 60_000
 
 // GET /api/admin/users — list all users with populated seat
 router.get('/users', async (req, res) => {
@@ -115,25 +110,6 @@ router.post('/check-alerts', async (_req, res) => {
   try {
     const result = await checkSnapshotAlerts()
     res.json(result)
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    res.status(500).json({ error: message })
-  }
-})
-
-// POST /api/admin/send-report — send telegram weekly report with cooldown
-router.post('/send-report', async (_req, res) => {
-  try {
-    const now = Date.now()
-    const elapsed = now - lastReportSent
-    if (lastReportSent > 0 && elapsed < COOLDOWN_MS) {
-      const waitSec = Math.ceil((COOLDOWN_MS - elapsed) / 1000)
-      res.status(429).json({ error: 'Rate limited', waitSeconds: waitSec })
-      return
-    }
-    lastReportSent = now
-    await sendWeeklyReport()
-    res.json({ success: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

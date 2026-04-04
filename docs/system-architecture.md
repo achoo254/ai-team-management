@@ -34,8 +34,8 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
 - **Connection**: Mongoose 9.3.1 ODM
-- **Collections**: 8 (seats, users, schedules, alerts, settings, teams, usage_snapshots, active_sessions)
-- **Indexing**: Compound indexes on (seat_id, day_of_week, slot), (seat_id, type, resolved), and (seat_id, fetched_at)
+- **Collections**: 7 (seats, users, schedules, alerts, teams, usage_snapshots, active_sessions)
+- **Indexing**: Compound indexes on (seat_id, day_of_week), (seat_id, type, resolved), and (seat_id, fetched_at)
 - **TTL**: usage_snapshots collection auto-expires after 90 days
 
 ### Monorepo & Shared (`packages/shared`)
@@ -89,7 +89,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (10 files):
+**Route Structure** (9 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
 - `routes/seats.ts` — Seat CRUD (owner auto-set), user assignment, token management, credentials export
@@ -107,10 +107,9 @@ Subsequent requests: JWT read from cookie or Authorization header
 - `routes/admin.ts` — User management, manual alert check trigger
 - `routes/schedules.ts` — Schedule CRUD with conflict prevention, hourly time slots, budget allocation
 - `routes/alerts.ts` — Alert creation, resolution, listing
-- `routes/settings.ts` — Get/update alert thresholds (admin only)
 - `routes/teams.ts` — Team CRUD
 - `routes/usage-snapshots.ts` — Query snapshots, trigger collection
-- `routes/user-settings.ts` — Per-user Telegram bot config, test notifications
+- `routes/user-settings.ts` — Per-user alert settings, Telegram bot config, notification schedule, test notifications
 
 **Service Layer** (5 files):
 - `services/alert-service.ts` — Alert generation, budget violation checking, session tracking
@@ -160,8 +159,8 @@ Subsequent requests: JWT read from cookie or Authorization header
   name: String,
   email: String (unique),
   role: String (enum: ['admin', 'user']),
-  team: String (enum: ['dev', 'mkt']),
-  seat_id: ObjectId (ref: Seat),
+  team: String,
+  seat_ids: [ObjectId] (ref: Seat),
   active: Boolean,
   telegram_bot_token: String | null (encrypted AES-256-GCM),
   telegram_chat_id: String | null,
@@ -170,6 +169,12 @@ Subsequent requests: JWT read from cookie or Authorization header
     report_days: [Number] (default: [5], 0=Sun, 6=Sat),
     report_hour: Number (0-23, default: 8),
     report_scope: String (enum: ['own', 'all'], default: 'own', enforced 'own' for non-admin)
+  } | null,
+  alert_settings: {
+    enabled: Boolean (default: false),
+    rate_limit_pct: Number (default: 80),
+    extra_credit_pct: Number (default: 80),
+    subscribed_seat_ids: [ObjectId] (ref: Seat)
   } | null,
   created_at: Date
 }
@@ -214,20 +219,6 @@ Subsequent requests: JWT read from cookie or Authorization header
   resolved_at: String | null,
   created_at: Date,
   // Index: (seat_id, type, resolved) compound for dedup
-}
-```
-
-#### Settings
-```typescript
-{
-  _id: ObjectId,
-  alerts: {
-    rate_limit_pct: Number (default: 80),
-    extra_credit_pct: Number (default: 80)
-  },
-  created_at: Date,
-  updated_at: Date
-  // Single-document pattern: at most 1 document in collection
 }
 ```
 
@@ -419,24 +410,23 @@ Subsequent API calls include JWT in cookie
 ```
 Every 5 min Cron / Admin manual trigger → checkSnapshotAlerts() → checkBudgetAlerts()
 
-SNAPSHOT ALERTS (existing):
+SNAPSHOT ALERTS:
     ↓
 Get latest UsageSnapshot per seat (last snapshot)
     ↓
-Load Settings: admin-configured rate_limit_pct, extra_credit_pct
-    ↓
-For each snapshot, evaluate:
-  • Rate Limit: Check five_hour_pct, seven_day_pct, etc. vs rate_limit_pct
-  • Extra Credit: Check extra_usage.utilization vs extra_credit_pct
+For each subscribed user + seat combination:
+  • Load user's alert_settings: rate_limit_pct, extra_credit_pct, enabled flag
+  • Rate Limit: Check five_hour_pct, seven_day_pct, etc. vs user's rate_limit_pct
+  • Extra Credit: Check extra_usage.utilization vs user's extra_credit_pct
   • Token Failure: Check for active tokens with fetch errors
     ↓
 Dedup check: If unresolved alert exists for (seat_id, type), skip creation
     ↓
 Create Alert with metadata (window, pct, error, etc.)
     ↓
-Telegram: Send via system bot to group chat
+Telegram: Send to subscribed user via personal Telegram bot (no system bot)
 
-BUDGET ALERTS (new, per-user session tracking):
+BUDGET ALERTS (per-user session tracking):
     ↓
 Find active schedules: day_of_week=today, start_hour <= now < end_hour
     ↓
@@ -445,17 +435,15 @@ For each active session:
   2. Get latest UsageSnapshot
   3. Calculate delta across all 4 windows
   4. If worst_delta >= user's usage_budget_pct → create usage_exceeded alert
-  5. Telegram: Send to current user (stop) + next user (coming up) via personal bot, fallback to system bot
+  5. Telegram: Send to current user via personal bot only
     ↓
 Session cleanup:
   - On session end: Auto-resolve usage_exceeded alerts for that seat
   - Delete old ActiveSession record
     ↓
-Frontend: Display all alerts (snapshot + budget) in Alerts view
+Frontend: Display all alerts in Alerts view
     ↓
 User: Resolve alert via PUT /api/alerts/:id/resolve
-    ↓
-Admin: View/update thresholds via GET/PUT /api/settings
 ```
 
 ### Seat Management Flow

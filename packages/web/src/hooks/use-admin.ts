@@ -1,5 +1,3 @@
-
-
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -61,47 +59,6 @@ export function useCheckAlerts() {
   return useMutation({
     mutationFn: () => api.post("/api/admin/check-alerts"),
     onSuccess: () => toast.success("Đã kiểm tra alerts"),
-    onError: (e: Error) => toast.error(e.message),
-  });
-}
-
-export function useSendReport() {
-  return useMutation({
-    mutationFn: () => api.post("/api/admin/send-report"),
-    onSuccess: () => toast.success("Đã gửi báo cáo"),
-    onError: (e: Error) => toast.error(e.message),
-  });
-}
-
-// --- Alert Settings ---
-
-export interface AlertSettings {
-  rate_limit_pct: number;
-  extra_credit_pct: number;
-}
-
-export interface TelegramSettings {
-  bot_token: string;
-  chat_id: string;
-  topic_id: string;
-}
-
-export function useSettings() {
-  return useQuery<{ alerts: AlertSettings; telegram: TelegramSettings }>({
-    queryKey: ["settings"],
-    queryFn: () => api.get("/api/settings"),
-  });
-}
-
-export function useUpdateSettings() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { alerts?: Partial<AlertSettings>; telegram?: Partial<TelegramSettings> }) =>
-      api.put("/api/settings", body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["settings"] });
-      toast.success("Cập nhật cài đặt thành công");
-    },
     onError: (e: Error) => toast.error(e.message),
   });
 }

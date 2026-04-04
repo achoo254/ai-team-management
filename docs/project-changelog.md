@@ -6,6 +6,129 @@ All notable changes to the Claude Teams Management Dashboard project are documen
 
 ---
 
+## [2026-04-04] Refactor Alert Settings to User Settings
+
+### Major Changes
+
+**Global Setting Model Removed**
+- Deleted `packages/api/src/models/setting.ts` — no longer used
+- Deleted `packages/api/src/routes/settings.ts` — no longer used
+- Alert thresholds now **per-user**, not global
+
+**Per-User Alert Settings**
+- New nested `alert_settings` object in User model:
+  - `enabled` (boolean, default: false) — User toggle for alerts
+  - `rate_limit_pct` (number, default: 80) — User's rate limit threshold
+  - `extra_credit_pct` (number, default: 80) — User's extra credit threshold
+  - `subscribed_seat_ids` (ObjectId[], default: []) — Which seats trigger user's alerts
+
+**Alert Notification Flow Changed**
+- Alerts now sent **only to subscribed users** via their personal Telegram bot
+- System bot (`TELEGRAM_BOT_TOKEN`) no longer used for alert notifications
+- Users control which seats they monitor and at what thresholds
+- Non-admin users can only subscribe to their owned + assigned seats
+
+**Admin Page Updated**
+- Alert threshold / Telegram bot config sections **removed** from admin page
+- Users self-manage alerts via Settings page → Alert Settings Form
+
+**Settings Page Extended**
+- New `AlertSettingsForm` component added
+- Users toggle alerts on/off
+- Per-seat subscription checkboxes
+- Rate limit % and extra credit % thresholds
+- Save persists to `/api/user/settings`
+
+### API Changes
+
+**Removed Endpoints**:
+- `GET /api/settings` (was: get global thresholds)
+- `PUT /api/settings` (was: update global thresholds)
+- `POST /api/admin/send-report` (was: manual global alert trigger)
+
+**Extended Endpoints**:
+- `GET /api/user/settings` — Now returns `alert_settings` + `available_seats` list
+- `PUT /api/user/settings` — Accepts `alert_settings` with validation
+
+### Data Model Changes
+
+**User schema** (additive):
+- Added: `alert_settings` nested object (optional)
+  - Validates subscribed_seat_ids: non-admin users limited to owned + assigned
+
+**Type updates** (`packages/shared/types.ts`):
+- New `AlertSettings` interface exported
+- User.alert_settings field added (optional)
+
+### Service Changes
+
+**alert-service.ts**:
+- `checkSnapshotAlerts()` refactored to:
+  - Iterate over users with `alert_settings.enabled = true`
+  - For each user + subscribed seat: evaluate against user's thresholds
+  - Create alert per user (not per seat globally)
+  - Send Telegram only to subscribed user's personal bot
+
+**telegram-service.ts**:
+- `sendAlertToUser(user, type, seatLabel, metadata)` — NEW function
+  - Sends via user's personal bot only (no system bot fallback for alerts)
+  - Decrypts user's telegram_bot_token
+  - Returns success/error
+
+### Breaking Changes
+
+1. **Alert notification routing changed**
+   - System bot no longer sends alert notifications
+   - Personal bots required for users to receive alerts
+   - Unconfigured users receive no alerts (graceful skip)
+
+2. **Alert thresholds now per-user**
+   - Admin no longer sets global thresholds
+   - Each user controls their own alert sensitivity
+   - Default: 80% for both rate_limit and extra_credit
+
+3. **/api/settings route removed**
+   - Client code expecting GET/PUT /api/settings will fail
+   - Replace with GET/PUT /api/user/settings
+
+### Backward Compatibility
+
+- Existing alert documents remain queryable
+- Existing usage snapshots unaffected
+- Cron schedule unchanged (still 5-minute cycle)
+- Non-enabled users (default) receive no alerts (opt-in required)
+
+### Testing
+
+- Build: ✓ TypeScript compilation passes
+- Tests: ✓ All passing
+- Linting: ✓ Clean
+- Manual: Per-user alert creation, subscription filtering, Telegram send
+
+### Files Modified
+
+Backend:
+- `packages/api/src/models/user.ts` — Add alert_settings field
+- `packages/api/src/services/alert-service.ts` — Refactor checkSnapshotAlerts() for per-user logic
+- `packages/api/src/services/telegram-service.ts` — New sendAlertToUser() function
+- Deleted: `packages/api/src/models/setting.ts`
+- Deleted: `packages/api/src/routes/settings.ts`
+
+Frontend:
+- `packages/web/src/pages/settings.tsx` — Remove global settings sections (if any)
+- `packages/web/src/pages/admin.tsx` — Remove alert threshold UI
+- `packages/web/src/components/alert-settings-form.tsx` — NEW component
+- `packages/web/src/hooks/use-user-settings.ts` — Add alert_settings field
+
+Shared:
+- `packages/shared/types.ts` — Add AlertSettings interface
+
+### Related Plans
+
+- Plan: `plans/dattqh/260404-1754-refactor-alert-to-user-settings/`
+
+---
+
 ## [2026-04-04] Per-User Notification Schedule
 
 ### Major Features

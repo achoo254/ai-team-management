@@ -1,21 +1,9 @@
 import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
-import { User } from '../models/user.js'
+import { User, type IUser } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Team } from '../models/team.js'
-import { getOrCreateSettings } from '../models/setting.js'
 import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
-
-/** Get telegram config from DB settings */
-async function getTelegramConfig() {
-  const settings = await getOrCreateSettings()
-  const tg = settings.telegram
-  return {
-    botToken: tg?.bot_token || '',
-    chatId: tg?.chat_id || '',
-    topicId: tg?.topic_id || '',
-  }
-}
 
 /** Escape HTML special chars for Telegram */
 function esc(str: string | number): string {
@@ -173,21 +161,6 @@ function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
   })
 }
 
-/** Send weekly usage report to Telegram using latest UsageSnapshot data (admin manual trigger). */
-export async function sendWeeklyReport() {
-  const tg = await getTelegramConfig()
-  if (!tg.botToken || !tg.chatId) {
-    throw new Error('Telegram chưa được cấu hình (thiếu Bot Token hoặc Chat ID)')
-  }
-
-  const seats = await Seat.find().sort({ team: 1 }).lean()
-  const { snapMap, usersBySeat, teamLabels } = await fetchReportData()
-  const rows = buildSeatRows(seats, snapMap)
-  const msg = buildReportHtml(rows, usersBySeat, teamLabels)
-
-  await sendMessage(tg, msg)
-}
-
 /** Send usage report for a specific user, filtered by their seats */
 export async function sendUserReport(userId: string, scope: 'own' | 'all') {
   if (!isEncryptionConfigured()) return
@@ -249,26 +222,14 @@ export async function checkAndSendScheduledReports() {
   }
 }
 
-/** Send alert when token refresh fails for a seat */
-export async function sendTokenRefreshAlert(seatLabel: string, error: string) {
-  const tg = await getTelegramConfig()
-  if (!tg.botToken || !tg.chatId) return
-  const msg = `⚠️ <b>Token refresh failed</b>\n\n`
-    + `Seat: <b>${esc(seatLabel)}</b>\n`
-    + `Error: <code>${esc(error.slice(0, 200))}</code>\n\n`
-    + `Token đã bị deactivate. Vui lòng re-import credential.`
-  await sendMessage(tg, msg)
-}
-
-/** Send Telegram notification for a new alert. Silently skips if Telegram not configured. */
-export async function sendAlertNotification(
+/** Send alert to a specific user via their personal bot */
+export async function sendAlertToUser(
+  user: IUser,
   type: 'rate_limit' | 'extra_credit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk',
   seatLabel: string,
   metadata: Record<string, unknown>,
-  threshold?: number,
 ): Promise<void> {
-  const tg = await getTelegramConfig()
-  if (!tg.botToken || !tg.chatId) return
+  if (!user.telegram_bot_token || !user.telegram_chat_id || !isEncryptionConfigured()) return
 
   let msg = ''
   switch (type) {
@@ -276,16 +237,14 @@ export async function sendAlertNotification(
       const resetsAt = metadata.resets_at ? new Date(metadata.resets_at as string).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
       msg = `🔴 <b>Rate Limit Warning</b>\n`
         + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Window: ${esc(String(metadata.window ?? ''))} | Usage: ${esc(String(metadata.pct ?? ''))}%\n`
-        + `Ngưỡng: ${threshold ?? ''}%`
+        + `Window: ${esc(String(metadata.window ?? ''))} | Usage: ${esc(String(metadata.pct ?? ''))}%`
         + (resetsAt ? `\nReset: ${esc(resetsAt)}` : '')
       break
     }
     case 'extra_credit':
       msg = `💳 <b>Extra Credit Warning</b>\n`
         + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Credits: $${esc(String(metadata.credits_used ?? ''))}/$${esc(String(metadata.credits_limit ?? ''))} (${esc(String(metadata.pct ?? ''))}%)\n`
-        + `Ngưỡng: ${threshold ?? ''}%`
+        + `Credits: $${esc(String(metadata.credits_used ?? ''))}/$${esc(String(metadata.credits_limit ?? ''))} (${esc(String(metadata.pct ?? ''))}%)`
       break
     case 'token_failure':
       msg = `⚠️ <b>Token Failure</b>\n`
@@ -323,7 +282,8 @@ export async function sendAlertNotification(
       break
   }
 
-  await sendMessage(tg, msg)
+  const token = decrypt(user.telegram_bot_token)
+  await sendMessageWithBot(token, user.telegram_chat_id, msg)
 }
 
 /** Send via arbitrary bot token + chat ID */
@@ -351,18 +311,8 @@ async function sendMessageWithBot(botToken: string, chatId: string, text: string
   }
 }
 
-/** Send a message via system bot to group chat. Throws on failure. */
-async function sendMessage(tg: { botToken: string; chatId: string; topicId: string }, text: string) {
-  await sendMessageWithBot(tg.botToken, tg.chatId, text, tg.topicId)
-}
-
-/** Send notification to a specific user via their personal bot (if configured) + system bot */
+/** Send notification to a specific user via their personal bot */
 export async function sendToUser(userId: string, message: string) {
-  // Always send to system bot (group chat)
-  const tg = await getTelegramConfig()
-  await sendMessage(tg, message).catch(console.error)
-
-  // Try user's personal bot
   if (!isEncryptionConfigured()) return
   try {
     const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id')

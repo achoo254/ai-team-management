@@ -7,6 +7,13 @@ export interface INotificationSettings {
   report_scope: 'own' | 'all'
 }
 
+export interface IAlertSettings {
+  enabled: boolean
+  rate_limit_pct: number
+  extra_credit_pct: number
+  subscribed_seat_ids: Types.ObjectId[]
+}
+
 export interface IUser extends Document {
   name: string
   email?: string
@@ -17,6 +24,7 @@ export interface IUser extends Document {
   telegram_bot_token?: string | null  // encrypted via AES-256-GCM
   telegram_chat_id?: string | null
   notification_settings?: INotificationSettings
+  alert_settings?: IAlertSettings
   created_at: Date
 }
 
@@ -35,6 +43,12 @@ const userSchema = new Schema<IUser>(
       report_days: { type: [Number], default: [5] },
       report_hour: { type: Number, default: 8 },
       report_scope: { type: String, enum: ['own', 'all'], default: 'own' },
+    },
+    alert_settings: {
+      enabled: { type: Boolean, default: false },
+      rate_limit_pct: { type: Number, default: 80 },
+      extra_credit_pct: { type: Number, default: 80 },
+      subscribed_seat_ids: [{ type: Schema.Types.ObjectId, ref: 'Seat' }],
     },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } },

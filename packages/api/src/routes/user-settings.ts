@@ -1,22 +1,42 @@
 import { Router } from 'express'
 import { authenticate } from '../middleware.js'
 import { User } from '../models/user.js'
+import { Seat } from '../models/seat.js'
 import { encrypt, decrypt, isEncryptionConfigured } from '../lib/encryption.js'
 
 const router = Router()
 
 router.use(authenticate)
 
-// GET /api/user/settings — current user's bot settings (masked)
+// GET /api/user/settings — current user's bot + alert settings
 router.get('/settings', async (req, res) => {
   try {
-    const user = await User.findById(req.user!._id, 'telegram_chat_id telegram_bot_token notification_settings')
+    const user = await User.findById(
+      req.user!._id,
+      'telegram_chat_id telegram_bot_token notification_settings alert_settings seat_ids',
+    )
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
+
+    // Available seats: admin → all, user → owned + assigned
+    let availableSeats
+    if (req.user!.role === 'admin') {
+      availableSeats = await Seat.find({}, '_id label email team').lean()
+    } else {
+      const ownedSeats = await Seat.find({ owner_id: req.user!._id }, '_id label email team').lean()
+      const assignedSeats = user.seat_ids?.length
+        ? await Seat.find({ _id: { $in: user.seat_ids } }, '_id label email team').lean()
+        : []
+      const seatMap = new Map<string, any>()
+      for (const s of [...ownedSeats, ...assignedSeats]) seatMap.set(String(s._id), s)
+      availableSeats = Array.from(seatMap.values())
+    }
 
     res.json({
       telegram_chat_id: user.telegram_chat_id ?? null,
       has_telegram_bot: !!user.telegram_bot_token && !!user.telegram_chat_id,
       notification_settings: user.notification_settings ?? null,
+      alert_settings: user.alert_settings ?? null,
+      available_seats: availableSeats,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -27,7 +47,7 @@ router.get('/settings', async (req, res) => {
 // PUT /api/user/settings — update bot config
 router.put('/settings', async (req, res) => {
   try {
-    const { telegram_bot_token, telegram_chat_id, notification_settings } = req.body
+    const { telegram_bot_token, telegram_chat_id, notification_settings, alert_settings } = req.body
 
     if (telegram_bot_token !== undefined && !isEncryptionConfigured()) {
       res.status(503).json({ error: 'Encryption not configured. Set ENCRYPTION_KEY env var.' })
@@ -67,11 +87,40 @@ router.put('/settings', async (req, res) => {
       }
     }
 
+    // Update alert settings
+    if (alert_settings) {
+      const as = alert_settings
+      const rlp = Math.max(1, Math.min(100, Math.floor(Number(as.rate_limit_pct) || 80)))
+      const ecp = Math.max(1, Math.min(100, Math.floor(Number(as.extra_credit_pct) || 80)))
+
+      // Validate seat IDs exist in DB (prevents garbage ObjectIds)
+      let validSeatIds: string[] = as.subscribed_seat_ids ?? []
+      const existingSeats = await Seat.find({ _id: { $in: validSeatIds } }, '_id').lean()
+      const existingSet = new Set(existingSeats.map(s => String(s._id)))
+      validSeatIds = validSeatIds.filter((id: string) => existingSet.has(id))
+
+      // Non-admin: further restrict to owned/assigned seats
+      if (req.user!.role !== 'admin') {
+        const userSeatIds = new Set((user.seat_ids ?? []).map(String))
+        const ownedSeats = await Seat.find({ owner_id: req.user!._id }, '_id').lean()
+        for (const s of ownedSeats) userSeatIds.add(String(s._id))
+        validSeatIds = validSeatIds.filter((id: string) => userSeatIds.has(id))
+      }
+
+      user.alert_settings = {
+        enabled: !!as.enabled,
+        rate_limit_pct: rlp,
+        extra_credit_pct: ecp,
+        subscribed_seat_ids: validSeatIds as any,
+      }
+    }
+
     await user.save()
     res.json({
       telegram_chat_id: user.telegram_chat_id,
       has_telegram_bot: !!user.telegram_bot_token && !!user.telegram_chat_id,
       notification_settings: user.notification_settings ?? null,
+      alert_settings: user.alert_settings ?? null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

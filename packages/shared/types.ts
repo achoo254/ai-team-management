@@ -35,6 +35,7 @@ export interface User {
   telegram_chat_id?: string | null
   has_telegram_bot?: boolean
   notification_settings?: NotificationSettings
+  alert_settings?: UserAlertSettings
   created_at: string
 }
 
@@ -75,14 +76,11 @@ export interface Alert {
   created_at: string
 }
 
-export interface AlertSettings {
-  rate_limit_pct: number
-  extra_credit_pct: number
-}
-
-export interface AppSettings {
-  _id?: string
-  alerts: AlertSettings
+export interface UserAlertSettings {
+  enabled: boolean
+  rate_limit_pct: number        // 1-100, default 80
+  extra_credit_pct: number      // 1-100, default 80
+  subscribed_seat_ids: string[] // seats user wants alerts for
 }
 
 export interface Team {

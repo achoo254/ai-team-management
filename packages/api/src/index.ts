@@ -13,7 +13,6 @@ import scheduleRoutes from './routes/schedules.js'
 import seatRoutes from './routes/seats.js'
 import teamRoutes from './routes/teams.js'
 import usageSnapshotRoutes from './routes/usage-snapshots.js'
-import settingsRoutes from './routes/settings.js'
 import userSettingsRoutes from './routes/user-settings.js'
 import { checkAndSendScheduledReports } from './services/telegram-service.js'
 import { collectAllUsage } from './services/usage-collector-service.js'
@@ -35,7 +34,6 @@ app.use('/api/schedules', scheduleRoutes)
 app.use('/api/seats', seatRoutes)
 app.use('/api/teams', teamRoutes)
 app.use('/api/usage-snapshots', usageSnapshotRoutes)
-app.use('/api/settings', settingsRoutes)
 app.use('/api/user', userSettingsRoutes)
 
 // Global error handler — must be last

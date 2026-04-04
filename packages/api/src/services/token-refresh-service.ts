@@ -1,7 +1,6 @@
 import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
 import { decrypt, encrypt } from './crypto-service.js'
-import { sendTokenRefreshAlert } from './telegram-service.js'
 import { parallelLimit } from '../utils/parallel-limit.js'
 
 const REFRESH_URL = 'https://api.anthropic.com/v1/oauth/token'
@@ -103,7 +102,7 @@ export async function checkAndRefreshExpiring(): Promise<{
           token_active: false,
           last_fetch_error: truncated,
         })
-        await sendTokenRefreshAlert(seat.label, truncated)
+        // Token failure alerts are handled by checkSnapshotAlerts() via per-user notifications
       }
     })
 

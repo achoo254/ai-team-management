@@ -4,18 +4,19 @@ import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Schedule } from '../models/schedule.js'
 import { ActiveSession } from '../models/active-session.js'
 import { SessionMetric } from '../models/session-metric.js'
-import { getOrCreateSettings } from '../models/setting.js'
-import { sendAlertNotification } from './telegram-service.js'
+import { User } from '../models/user.js'
+import { sendAlertToUser } from './telegram-service.js'
 import type { AlertType } from '@repo/shared/types'
 
-/** Atomically insert alert if no recent alert exists for same seat+type (1h cooldown). Sends Telegram on success. */
+/** Atomically insert alert if no recent alert exists for same seat+type (1h cooldown). Notifies subscribed users. */
 async function insertIfNew(
   seatId: string,
   type: AlertType,
   message: string,
   metadata: Record<string, unknown>,
   seatLabel: string,
-  threshold?: number,
+  /** The actual value to compare against per-user thresholds (e.g. usage pct) */
+  triggerValue?: number,
 ): Promise<boolean> {
   // Cooldown: skip if any alert (resolved or not) exists for same seat+type in last 1 hour
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
@@ -30,20 +31,43 @@ async function insertIfNew(
     { upsert: true, new: true, rawResult: true },
   ) as unknown as { lastErrorObject?: { updatedExisting?: boolean } }
   if (!result.lastErrorObject?.updatedExisting) {
-    try {
-      await sendAlertNotification(type, seatLabel, metadata, threshold)
-    } catch (err) {
-      console.error('[Alert] Telegram notification failed:', err)
-    }
+    await notifySubscribedUsers(seatId, type, seatLabel, metadata, triggerValue)
     return true
   }
   return false
 }
 
-/** Check alerts based on latest UsageSnapshot data + seat token status */
+/** Notify subscribed users, filtering by their individual thresholds */
+async function notifySubscribedUsers(
+  seatId: string,
+  type: AlertType,
+  seatLabel: string,
+  metadata: Record<string, unknown>,
+  triggerValue?: number,
+) {
+  const users = await User.find({
+    'alert_settings.enabled': true,
+    'alert_settings.subscribed_seat_ids': seatId,
+    telegram_bot_token: { $ne: null },
+    telegram_chat_id: { $ne: null },
+  })
+
+  const eligible = users.filter((user) => {
+    if (triggerValue == null) return true // no threshold check (token_failure, session_waste, 7d_risk)
+    const as = user.alert_settings!
+    if (type === 'rate_limit') return triggerValue >= as.rate_limit_pct
+    if (type === 'extra_credit') return triggerValue >= as.extra_credit_pct
+    if (type === 'usage_exceeded') return true // budget alerts always notify
+    return true
+  })
+
+  await Promise.allSettled(
+    eligible.map((user) => sendAlertToUser(user, type, seatLabel, metadata)),
+  )
+}
+
+/** Check alerts based on latest UsageSnapshot data + seat token status. Uses per-user thresholds. */
 export async function checkSnapshotAlerts() {
-  const settings = await getOrCreateSettings()
-  const { rate_limit_pct, extra_credit_pct } = settings.alerts
   let created = 0
 
   // 1. Get latest snapshot per seat (within last 1 hour)
@@ -62,44 +86,69 @@ export async function checkSnapshotAlerts() {
   ).lean()
   const seatMap = new Map(seats.map((s) => [String(s._id), s]))
 
-  // 2. Check rate_limit + extra_credit for each snapshot
+  // Batch-load all users with alerts enabled who subscribe to any of these seats
+  const subscribedUsers = await User.find({
+    'alert_settings.enabled': true,
+    'alert_settings.subscribed_seat_ids': { $in: seatIds },
+    telegram_bot_token: { $ne: null },
+    telegram_chat_id: { $ne: null },
+  })
+
+  // Find the lowest threshold per seat across all subscribed users (for alert record creation)
+  const seatThresholds = new Map<string, { rate_limit_pct: number; extra_credit_pct: number }>()
+  for (const u of subscribedUsers) {
+    const as = u.alert_settings!
+    for (const sid of as.subscribed_seat_ids) {
+      const key = String(sid)
+      const existing = seatThresholds.get(key)
+      seatThresholds.set(key, {
+        rate_limit_pct: existing ? Math.min(existing.rate_limit_pct, as.rate_limit_pct) : as.rate_limit_pct,
+        extra_credit_pct: existing ? Math.min(existing.extra_credit_pct, as.extra_credit_pct) : as.extra_credit_pct,
+      })
+    }
+  }
+
+  // 2. Check rate_limit + extra_credit for each snapshot using lowest user threshold
   for (const { _id: seatId, snapshot } of snapshots) {
     const seat = seatMap.get(String(seatId))
     if (!seat) continue
     const label = seat.label || seat.email
+    const thresholds = seatThresholds.get(String(seatId))
+    if (!thresholds) continue // no users subscribed to this seat
 
-    // Rate limit: check all windows, alert on highest
+    // Rate limit: check all windows against lowest user threshold
     const resetsAtMap: Record<string, string | null> = {
       '5h': snapshot.five_hour_resets_at ?? null,
       '7d': snapshot.seven_day_resets_at ?? null,
       '7d_sonnet': snapshot.seven_day_sonnet_resets_at ?? null,
       '7d_opus': snapshot.seven_day_opus_resets_at ?? null,
     }
-    const windows = [
+    const allWindows = [
       { key: '5h' as const, pct: snapshot.five_hour_pct },
       { key: '7d' as const, pct: snapshot.seven_day_pct },
       { key: '7d_sonnet' as const, pct: snapshot.seven_day_sonnet_pct },
       { key: '7d_opus' as const, pct: snapshot.seven_day_opus_pct },
-    ].filter((w) => w.pct != null && w.pct >= rate_limit_pct)
+    ].filter((w) => w.pct != null)
 
+    const windows = allWindows.filter((w) => w.pct! >= thresholds.rate_limit_pct)
     if (windows.length > 0) {
       const worst = windows.reduce((a, b) => (a.pct! > b.pct! ? a : b))
       const resetsAt = resetsAtMap[worst.key] ?? null
-      const msg = `Seat ${label}: ${worst.pct}% usage (${worst.key} window, ngưỡng: ${rate_limit_pct}%)`
+      const msg = `Seat ${label}: ${worst.pct}% usage (${worst.key} window)`
       if (await insertIfNew(String(seatId), 'rate_limit', msg, {
         window: worst.key, pct: worst.pct, resets_at: resetsAt,
-      }, label, rate_limit_pct)) created++
+      }, label, worst.pct)) created++
     }
 
     // Extra credit
     const extra = snapshot.extra_usage
-    if (extra?.is_enabled && extra.utilization != null && extra.utilization >= extra_credit_pct) {
+    if (extra?.is_enabled && extra.utilization != null && extra.utilization >= thresholds.extra_credit_pct) {
       const msg = `Seat ${label}: extra credits ${extra.utilization}% used ($${extra.used_credits}/$${extra.monthly_limit})`
       if (await insertIfNew(String(seatId), 'extra_credit', msg, {
         pct: extra.utilization,
         credits_used: extra.used_credits,
         credits_limit: extra.monthly_limit,
-      }, label, extra_credit_pct)) created++
+      }, label, extra.utilization)) created++
     }
   }
 
@@ -212,14 +261,16 @@ async function notifyNextUser(seatId: string, dayOfWeek: number, currentHour: nu
     seat_id: seatId,
     day_of_week: dayOfWeek,
     start_hour: { $gt: currentHour },
-  }).sort({ start_hour: 1 }).populate('user_id', 'name')
+  }).sort({ start_hour: 1 }).populate('user_id', 'name telegram_bot_token telegram_chat_id alert_settings')
 
   if (nextSchedule) {
-    const userName = (nextSchedule.user_id as any).name
-    await sendAlertNotification('usage_exceeded', seatLabel, {
-      user_name: userName,
-      next_user: true,
-    }).catch(console.error)
+    const nextUser = nextSchedule.user_id as any
+    if (nextUser?.telegram_bot_token && nextUser?.telegram_chat_id) {
+      await sendAlertToUser(nextUser, 'usage_exceeded', seatLabel, {
+        user_name: nextUser.name,
+        next_user: true,
+      }).catch(console.error)
+    }
   }
 }
 

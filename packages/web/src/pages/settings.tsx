@@ -1,4 +1,5 @@
 import { BotSettingsForm } from "@/components/bot-settings-form";
+import { AlertSettingsForm } from "@/components/alert-settings-form";
 import { NotificationScheduleForm } from "@/components/notification-schedule-form";
 
 export default function SettingsPage() {
@@ -9,6 +10,7 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground mt-0.5">Cài đặt cá nhân</p>
       </div>
       <BotSettingsForm />
+      <AlertSettingsForm />
       <NotificationScheduleForm />
     </div>
   );
