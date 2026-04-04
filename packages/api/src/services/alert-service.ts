@@ -19,15 +19,17 @@ async function insertIfNew(
   /** The actual value to compare against per-user thresholds (e.g. usage pct) */
   triggerValue?: number,
 ): Promise<boolean> {
-  // Cooldown: skip if any alert exists for same seat+type in last 1 hour
+  // Atomic upsert with 1h cooldown — prevents race condition under concurrent cron runs
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-  const recentAlert = await Alert.findOne({
-    seat_id: seatId, type, created_at: { $gte: oneHourAgo },
-  })
-  if (recentAlert) return false
+  const result = await Alert.findOneAndUpdate(
+    { seat_id: seatId, type, created_at: { $gte: oneHourAgo } },
+    { $setOnInsert: { seat_id: seatId, type, message, metadata, read_by: [] } },
+    { upsert: true, new: true, rawResult: true },
+  ) as unknown as { lastErrorObject?: { updatedExisting?: boolean }; value?: { _id: any } }
+  if (result.lastErrorObject?.updatedExisting) return false
 
-  const alert = await Alert.create({ seat_id: seatId, type, message, metadata, read_by: [] })
-  await notifySubscribedUsers(seatId, type, seatLabel, metadata, triggerValue, String(alert._id))
+  const alertId = String(result.value?._id ?? '')
+  await notifySubscribedUsers(seatId, type, seatLabel, metadata, triggerValue, alertId)
   return true
 }
 

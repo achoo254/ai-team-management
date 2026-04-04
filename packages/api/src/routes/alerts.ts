@@ -24,6 +24,11 @@ router.get('/', authenticate, async (req, res) => {
         res.json({ alerts: [], has_more: false })
         return
       }
+      // Validate seat param against watched seats
+      if (seat && !watchedIds.includes(seat)) {
+        res.json({ alerts: [], has_more: false })
+        return
+      }
       filter.seat_id = seat ? seat : { $in: watchedIds }
     }
 
@@ -50,8 +55,20 @@ router.post('/mark-read', authenticate, async (req, res) => {
       return
     }
 
+    // Scope check: non-admin can only mark alerts for watched seats
+    let scopeFilter: Record<string, unknown> = { _id: { $in: alert_ids } }
+    if (req.user!.role !== 'admin') {
+      const user = await User.findById(req.user!._id, 'watched_seat_ids')
+      const watchedIds = (user?.watched_seat_ids ?? []).map(String)
+      if (watchedIds.length === 0) {
+        res.json({ updated: 0 })
+        return
+      }
+      scopeFilter.seat_id = { $in: watchedIds }
+    }
+
     const result = await Alert.updateMany(
-      { _id: { $in: alert_ids } },
+      scopeFilter,
       { $addToSet: { read_by: req.user!._id } },
     )
     res.json({ updated: result.modifiedCount })
