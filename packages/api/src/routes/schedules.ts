@@ -184,29 +184,55 @@ router.get('/realtime', authenticate, async (req, res) => {
     }
 
     const seats = await Seat.find(seatFilter).select('_id label last_fetched_at').lean()
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000)
+    const STALE_THRESHOLD_MS = 10 * 60 * 1000  // 10 min → data considered stale
+    const GRACE_PERIOD_MS = 15 * 60 * 1000     // 15 min → keep "active" if activity detected recently
+    const twentyMinAgo = new Date(Date.now() - 20 * 60 * 1000)
 
     const results = await Promise.all(seats.map(async (seat) => {
-      // Get two most recent snapshots to detect current activity
-      const [latest, previous] = await UsageSnapshot.find({ seat_id: seat._id })
-        .sort({ fetched_at: -1 }).limit(2).lean()
+      const snapshots = await UsageSnapshot.find({
+        seat_id: seat._id,
+        fetched_at: { $gte: twentyMinAgo },
+      }).sort({ fetched_at: -1 }).limit(5).lean()
+
+      // Staleness: how old is the most recent snapshot?
+      const lastSnapshotAt = snapshots[0]?.fetched_at ?? seat.last_fetched_at
+      const lastSnapshotMs = lastSnapshotAt ? new Date(lastSnapshotAt).getTime() : 0
+      const staleMs = lastSnapshotMs ? Date.now() - lastSnapshotMs : Infinity
+      const isStale = staleMs > STALE_THRESHOLD_MS
 
       let isActive = false
       let currentDelta = 0
-      if (latest && previous) {
-        const currPct = latest.five_hour_pct ?? 0
-        const prevPct = previous.five_hour_pct ?? 0
+      // Check consecutive pairs: if ANY pair shows increase → active
+      for (let i = 0; i < snapshots.length - 1; i++) {
+        const currPct = snapshots[i].five_hour_pct ?? 0
+        const prevPct = snapshots[i + 1].five_hour_pct ?? 0
         const delta = currPct - prevPct
-        if (delta > 0) { isActive = true; currentDelta = delta }
-        else if (delta < 0 && currPct > 0) { isActive = true; currentDelta = currPct }
+        if (delta > 0) { isActive = true; currentDelta = Math.max(currentDelta, delta); break }
+        if (delta < 0 && currPct > 0) { isActive = true; currentDelta = currPct; break }
+      }
+
+      // Grace period: if stale but had activity within grace window, keep active
+      if (!isActive && isStale && lastSnapshotMs > 0) {
+        const graceStart = new Date(Date.now() - GRACE_PERIOD_MS)
+        const recentActivity = await SeatActivityLog.findOne({
+          seat_id: seat._id,
+          is_active: true,
+          created_at: { $gte: graceStart },
+        }).lean()
+        if (recentActivity) {
+          isActive = true
+          currentDelta = recentActivity.delta_5h_pct
+        }
       }
 
       return {
         seat_id: String(seat._id),
         seat_label: seat.label,
-        is_active: isActive && latest && new Date(latest.fetched_at) >= fiveMinAgo,
+        is_active: isActive,
         current_delta: currentDelta,
-        last_snapshot_at: latest?.fetched_at?.toISOString() ?? null,
+        is_stale: isStale,
+        stale_minutes: isStale ? Math.round(staleMs / 60_000) : 0,
+        last_snapshot_at: lastSnapshotAt ? new Date(lastSnapshotAt).toISOString() : null,
       }
     }))
 

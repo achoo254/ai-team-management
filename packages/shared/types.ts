@@ -97,6 +97,8 @@ export interface RealtimeStatus {
   seat_label: string
   is_active: boolean
   current_delta: number
+  is_stale: boolean
+  stale_minutes: number
   last_snapshot_at: string | null
 }
 
