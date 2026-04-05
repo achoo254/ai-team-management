@@ -79,7 +79,7 @@ export function DashboardPeakHoursHeatmap({ range, seatIds }: { range: Dashboard
                     <div
                       key={h}
                       className={`w-5 h-5 rounded-sm ${intensityColor(v, maxVal)}`}
-                      title={`${label} ${h}h: ${v.toFixed(1)}% avg Δ7d · ${n} windows`}
+                      title={`${label} ${h}h: ${v.toFixed(1)}% avg Δ7d · ${n} sessions`}
                     />
                   );
                 })}
