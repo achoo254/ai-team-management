@@ -21,6 +21,7 @@ import {
   useClearAll,
   type ScheduleEntry,
 } from "@/hooks/use-schedules";
+import { useAvailableUsers } from "@/hooks/use-seats";
 import { useAuth } from "@/hooks/use-auth";
 import { resolveSchedulePermissions } from "@repo/shared/schedule-permissions";
 
@@ -64,6 +65,7 @@ export default function SchedulePage() {
 
   const { data: schedulesData, isLoading: loadingSchedules } = useSchedules();
   const { data: seatsData, isLoading: loadingSeats } = useSeatsWithUsers();
+  const { data: availableUsersData } = useAvailableUsers();
 
   const createMutation = useCreateScheduleEntry();
   const updateMutation = useUpdateScheduleEntry();
@@ -83,6 +85,15 @@ export default function SchedulePage() {
 
   const activeSeat = visibleSeats.find((s) => s._id === activeSeatId);
   const seatUsers = activeSeat?.users ?? [];
+  const assignedSeatUserIds = new Set(seatUsers.map((u) => u._id));
+  // For owner/admin picking schedule members: show ALL active users (auto-assign on create).
+  // Self-schedule members still pick from seat members only.
+  const selectableUsers = (availableUsersData?.users ?? []).map((u) => ({
+    _id: u.id,
+    name: u.name,
+    email: u.email,
+    isSeatMember: assignedSeatUserIds.has(u.id),
+  }));
 
   // Compute permissions for active seat
   const userSeatIds = seats
@@ -238,15 +249,20 @@ export default function SchedulePage() {
               <SelectTrigger>
                 <SelectValue placeholder="Chọn thành viên">
                   {form.userId
-                    ? seatUsers.find((u) => u._id === form.userId)?.name
-                      || seatUsers.find((u) => u._id === form.userId)?.email
+                    ? selectableUsers.find((u) => u._id === form.userId)?.name
+                      || selectableUsers.find((u) => u._id === form.userId)?.email
                       || "—"
                     : undefined}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {seatUsers.map((u) => (
-                  <SelectItem key={u._id} value={u._id}>{u.name} ({u.email})</SelectItem>
+                {selectableUsers.map((u) => (
+                  <SelectItem key={u._id} value={u._id}>
+                    {u.name} ({u.email})
+                    {!u.isSeatMember && (
+                      <span className="ml-1.5 text-[10px] text-muted-foreground">· sẽ thêm vào seat</span>
+                    )}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

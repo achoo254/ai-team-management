@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: UserAlertSettings = {
   enabled: false,
   rate_limit_pct: 80,
   extra_credit_pct: 80,
+  token_failure_enabled: true,
 };
 
 export function AlertSettingsForm() {
@@ -20,10 +21,13 @@ export function AlertSettingsForm() {
   const [as, setAs] = useState<UserAlertSettings>(DEFAULT_SETTINGS);
   const [dirty, setDirty] = useState(false);
 
-  // Sync from server
+  // Sync from server (default token_failure_enabled=true for legacy records)
   useEffect(() => {
     if (settings?.alert_settings) {
-      setAs(settings.alert_settings);
+      setAs({
+        ...settings.alert_settings,
+        token_failure_enabled: settings.alert_settings.token_failure_enabled ?? true,
+      });
     }
   }, [settings?.alert_settings]);
 
@@ -103,6 +107,22 @@ export function AlertSettingsForm() {
               {pushEnabled ? "Đang bật" : "Bật"}
             </Button>
           )}
+        </div>
+
+        {/* Token failure alert toggle */}
+        <div className="flex items-center gap-3">
+          <Label className="text-xs">Cảnh báo token invalid</Label>
+          <Button
+            size="sm"
+            variant={as.token_failure_enabled ? "default" : "outline"}
+            disabled={!as.enabled}
+            onClick={() => {
+              setDirty(true);
+              setAs((prev) => ({ ...prev, token_failure_enabled: !prev.token_failure_enabled }));
+            }}
+          >
+            {as.token_failure_enabled ? "Đang bật" : "Tắt"}
+          </Button>
         </div>
 
         {/* Thresholds */}

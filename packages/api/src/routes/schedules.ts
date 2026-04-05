@@ -143,12 +143,26 @@ router.post('/entry', authenticate, async (req, res) => {
       return
     }
 
-    // Validate user belongs to seat
+    // Auto-assign user to seat if not yet a member (owner/admin picking any user)
+    // Respects seat.max_users capacity.
     const user = await User.findById(userId)
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
-    if (!user.seat_ids?.some((sid) => String(sid) === String(seatId))) {
-      res.status(400).json({ error: 'User does not belong to this seat' })
-      return
+    const alreadyMember = user.seat_ids?.some((sid) => String(sid) === String(seatId)) ?? false
+    if (!alreadyMember) {
+      // Only owner/admin can auto-assign (self-schedule already requires user on seat)
+      if (!perms.canCreateForOthers) {
+        res.status(400).json({ error: 'User does not belong to this seat' })
+        return
+      }
+      const seatDoc = await Seat.findById(seatId).select('max_users').lean()
+      if (!seatDoc) { res.status(404).json({ error: 'Seat not found' }); return }
+      const currentMemberCount = await User.countDocuments({ seat_ids: seatId })
+      if (currentMemberCount >= seatDoc.max_users) {
+        res.status(400).json({ error: 'Seat đã đầy, không thể thêm thành viên mới' })
+        return
+      }
+      user.seat_ids = [...(user.seat_ids ?? []), new mongoose.Types.ObjectId(String(seatId))]
+      await user.save()
     }
 
     // Overlap detection

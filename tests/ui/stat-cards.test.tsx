@@ -14,7 +14,7 @@ const mockData = {
   totalUsers: 10,
   activeUsers: 7,
   totalSeats: 4,
-  unresolvedAlerts: 3,
+  unreadAlerts: 3,
   todaySchedules: 2,
   usagePerSeat: [
     { label: "Seat 1", team: "dev", all_pct: 60 },
@@ -71,7 +71,7 @@ describe("StatCards", () => {
 
   it("renders zero values when data has no usage seats", () => {
     vi.mocked(useDashboardEnhanced).mockReturnValue({
-      data: { ...mockData, usagePerSeat: [], totalSeats: 0, activeUsers: 0, totalUsers: 0, unresolvedAlerts: 0 },
+      data: { ...mockData, usagePerSeat: [], totalSeats: 0, activeUsers: 0, totalUsers: 0, unreadAlerts: 0 },
       isLoading: false,
       isSuccess: true,
       isError: false,

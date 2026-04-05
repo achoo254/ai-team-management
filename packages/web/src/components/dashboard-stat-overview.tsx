@@ -83,6 +83,14 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
           <span className="text-xs text-muted-foreground">Kiểm tra lại OAuth credentials</span>
         </div>
       )}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Tổng quan hiện tại
+        </h2>
+        <span className="text-[10px] text-muted-foreground/70 italic">
+          Không chịu ảnh hưởng bởi filter thời gian
+        </span>
+      </div>
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <MiniStat
         label="Seats"
@@ -114,10 +122,10 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
       />
       <MiniStat
         label="Cảnh báo"
-        value={data?.unresolvedAlerts ?? 0}
-        sub="chưa xử lý"
+        value={data?.unreadAlerts ?? 0}
+        sub="chưa đọc"
         icon={AlertTriangle}
-        accent={data?.unresolvedAlerts ? "bg-error-surface text-error-text" : "bg-muted text-muted-foreground"}
+        accent={data?.unreadAlerts ? "bg-error-surface text-error-text" : "bg-muted text-muted-foreground"}
       />
       <MiniStat
         label="Lịch hôm nay"

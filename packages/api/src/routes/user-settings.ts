@@ -125,6 +125,7 @@ router.put('/settings', async (req, res) => {
         enabled: !!as.enabled,
         rate_limit_pct: rlp,
         extra_credit_pct: ecp,
+        token_failure_enabled: as.token_failure_enabled !== false,
       }
     }
 

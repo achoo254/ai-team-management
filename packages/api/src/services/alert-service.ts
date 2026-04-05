@@ -58,8 +58,10 @@ async function notifySubscribedUsers(
   })
 
   const eligible = users.filter((user) => {
-    if (triggerValue == null) return true // no threshold check (token_failure, session_waste, 7d_risk)
     const as = user.alert_settings!
+    // Per-user opt-in for token_failure (default true for backwards compat)
+    if (type === 'token_failure') return as.token_failure_enabled !== false
+    if (triggerValue == null) return true // no threshold check (session_waste, 7d_risk)
     if (type === 'rate_limit') return triggerValue >= as.rate_limit_pct
     if (type === 'extra_credit') return triggerValue >= as.extra_credit_pct
     if (type === 'usage_exceeded') return true // budget alerts always notify
@@ -171,17 +173,24 @@ export async function checkSnapshotAlerts() {
     }
   }
 
-  // 3. Check token_failure — seats with active token but fetch error
+  // 3. Check token_failure — seats with any fetch error (access token expired
+  // OR refresh token invalid → token_active auto-set to false by refresh service)
   const failedSeats = await Seat.find(
-    { token_active: true, last_fetch_error: { $ne: null } },
-    'label email last_fetch_error',
+    { last_fetch_error: { $ne: null } },
+    'label email token_active last_fetch_error',
   ).lean()
 
   for (const seat of failedSeats) {
     const label = seat.label || seat.email
-    const msg = `Seat ${label}: token lỗi — ${seat.last_fetch_error}`
+    // Distinguish: token_active=false + error = refresh token invalid (hard fail, needs re-auth)
+    const isHardFail = !seat.token_active
+    const prefix = isHardFail
+      ? `Seat ${label}: refresh token invalid — cần đăng nhập lại`
+      : `Seat ${label}: token lỗi`
+    const msg = `${prefix} — ${seat.last_fetch_error}`
     if (await insertIfNew(String(seat._id), 'token_failure', msg, {
       error: seat.last_fetch_error?.slice(0, 200),
+      hard_fail: isHardFail,
     }, label)) created++
   }
 

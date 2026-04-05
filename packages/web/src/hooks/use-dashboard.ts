@@ -54,7 +54,7 @@ export interface EnhancedDashboardData {
   totalUsers: number;
   activeUsers: number;
   totalSeats: number;
-  unresolvedAlerts: number;
+  unreadAlerts: number;
   tokenIssueCount: number;
   fullSeatCount: number;
   todaySchedules: TodayScheduleItem[];
@@ -94,6 +94,8 @@ export interface EfficiencySummary {
   avg_impact_ratio: number | null;
   avg_delta_5h: number;
   avg_delta_7d: number;
+  avg_delta_7d_sonnet: number;
+  avg_delta_7d_opus: number;
   total_sessions: number;
   waste_sessions: number;
   total_resets: number;
@@ -106,9 +108,18 @@ export interface EfficiencyPerSeat {
   avg_utilization: number;
   avg_delta_5h: number;
   avg_delta_7d: number;
+  avg_delta_7d_sonnet: number;
+  avg_delta_7d_opus: number;
   avg_impact_ratio: number | null;
   session_count: number;
   waste_count: number;
+}
+
+export interface EfficiencyCoverage {
+  has_data: boolean;
+  seats_with_data: number;
+  seats_total: number;
+  missing_seat_ids: string[];
 }
 
 export interface EfficiencyPerUser {
@@ -135,6 +146,27 @@ export interface EfficiencyData {
   perUser: EfficiencyPerUser[];
   dailyTrend: { date: string; avg_utilization: number; avg_delta_5h: number; sessions: number }[];
   activeSessions: ActiveSessionLive[];
+  coverage: EfficiencyCoverage;
+}
+
+export interface PeakHourCell {
+  dow: number; // 0=Sun..6=Sat
+  hour: number; // 0-23
+  avg_delta_7d: number;
+  window_count: number;
+}
+
+export interface PeakHoursData {
+  grid: PeakHourCell[];
+}
+
+export function usePeakHours(range: DashboardRange = "month", seatIds?: string[]) {
+  const qs = buildDashboardQuery(range, seatIds);
+  const key = seatIds && seatIds.length > 0 ? seatIds.join(",") : "all";
+  return useQuery<PeakHoursData>({
+    queryKey: ["dashboard", "peak-hours", range, key],
+    queryFn: () => fetchJson<PeakHoursData>(`/api/dashboard/peak-hours?${qs}`),
+  });
 }
 
 /** Build query string fragment from range + optional seatIds filter */
@@ -184,10 +216,28 @@ export interface MyUsageRank {
   avgDelta5h: number;
 }
 
+export interface MyEfficiencySeatRow {
+  seat_id: string;
+  label: string;
+  avg_utilization: number;
+  window_count: number;
+}
+
+export interface MyEfficiencyData {
+  my_avg_utilization: number;
+  my_waste_count: number;
+  my_window_count: number;
+  my_sonnet_avg: number;
+  my_opus_avg: number;
+  my_top_seats: MyEfficiencySeatRow[];
+  my_bottom_seats: MyEfficiencySeatRow[];
+}
+
 export interface PersonalDashboardData {
   mySchedulesToday: MyScheduleItem[];
   mySeats: MySeatItem[];
   myUsageRank: MyUsageRank | null;
+  myEfficiency: MyEfficiencyData | null;
 }
 
 export function usePersonalDashboard() {

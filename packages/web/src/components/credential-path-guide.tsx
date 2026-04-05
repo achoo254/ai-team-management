@@ -35,32 +35,34 @@ function CopyPathButton({ path }: { path: string }) {
   )
 }
 
+/** Path snippet row with copy button (reused for Windows/Linux) */
+function PathRow({ path, hint }: { path: string; hint?: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground">Copy file tại:</p>
+      <div className="flex items-center gap-2 rounded bg-muted/50 px-2 py-1">
+        <code className="text-xs flex-1 break-all">{path}</code>
+        <CopyPathButton path={path} />
+      </div>
+      {hint && <p className="text-[11px] text-muted-foreground/70">{hint}</p>}
+    </div>
+  )
+}
+
 /** OS-specific credential path instructions */
-const OS_CONTENT: Record<OS, (username: string) => React.ReactNode> = {
-  windows: (username) => {
-    const path = `C:\\Users\\${username}\\.claude\\.credentials.json`
-    return (
-      <div className="space-y-1">
-        <p className="text-muted-foreground">Copy file tại:</p>
-        <div className="flex items-center gap-2 rounded bg-muted/50 px-2 py-1">
-          <code className="text-xs flex-1 break-all">{path}</code>
-          <CopyPathButton path={path} />
-        </div>
-      </div>
-    )
-  },
-  linux: () => {
-    const path = '~/.claude/.credentials.json'
-    return (
-      <div className="space-y-1">
-        <p className="text-muted-foreground">Copy file tại:</p>
-        <div className="flex items-center gap-2 rounded bg-muted/50 px-2 py-1">
-          <code className="text-xs flex-1">{path}</code>
-          <CopyPathButton path={path} />
-        </div>
-      </div>
-    )
-  },
+const OS_CONTENT: Record<OS, () => React.ReactNode> = {
+  windows: () => (
+    <PathRow
+      path={`%USERPROFILE%\\.claude\\.credentials.json`}
+      hint='Paste vào File Explorer hoặc CMD/PowerShell — Windows tự expand %USERPROFILE% thành C:\Users\<tên bạn>'
+    />
+  ),
+  linux: () => (
+    <PathRow
+      path="~/.claude/.credentials.json"
+      hint="~ tự expand thành /home/<tên bạn> trong terminal"
+    />
+  ),
   macos: () => (
     <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
       <li>Mở <strong>Keychain Access</strong> (Spotlight → "Keychain")</li>
@@ -74,12 +76,6 @@ const OS_CONTENT: Record<OS, (username: string) => React.ReactNode> = {
 /** Collapsible guide showing where to find Claude credential files per OS */
 export function CredentialPathGuide() {
   const currentOS = useMemo(() => detectOS(), [])
-  // Best-effort username for Windows path display
-  const username = useMemo(() => {
-    const ua = navigator.userAgent
-    // Cannot reliably get username from browser — use placeholder
-    return navigator.platform?.includes('Win') ? (window as any).__USERNAME__ || 'you' : 'you'
-  }, [])
 
   const osOrder: OS[] = useMemo(() => {
     // Current OS first, then the rest
@@ -102,7 +98,7 @@ export function CredentialPathGuide() {
             )}
           </summary>
           <div className="pl-4 pt-1.5 pb-1 text-sm">
-            {OS_CONTENT[os](username)}
+            {OS_CONTENT[os]()}
           </div>
         </details>
       ))}

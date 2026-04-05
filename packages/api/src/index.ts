@@ -17,6 +17,8 @@ import { checkAndSendScheduledReports } from './services/telegram-service.js'
 import { collectAllUsage } from './services/usage-collector-service.js'
 import { checkSnapshotAlerts, checkBudgetAlerts } from './services/alert-service.js'
 import { checkAndRefreshExpiring } from './services/token-refresh-service.js'
+import { closeStaleUsageWindows } from './services/usage-window-applier.js'
+import { cleanupExpiredDeletedSeats } from './services/seat-cleanup-service.js'
 const app = express()
 
 // Middleware
@@ -65,6 +67,17 @@ async function start() {
     await checkSnapshotAlerts().catch(console.error)
     console.log('[Cron] Checking budget alerts...')
     await checkBudgetAlerts().catch(console.error)
+  }, { timezone: 'Asia/Ho_Chi_Minh' })
+
+  // Cron: Every 30 min — close stale UsageWindows
+  cron.schedule('*/30 * * * *', () => {
+    closeStaleUsageWindows().catch(console.error)
+  }, { timezone: 'Asia/Ho_Chi_Minh' })
+
+  // Cron: Daily 03:00 — hard-delete seats soft-deleted > 30 days ago (+ cascade usage/alerts)
+  cron.schedule('0 3 * * *', () => {
+    console.log('[Cron] Running seat cleanup...')
+    cleanupExpiredDeletedSeats().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
   app.listen(config.apiPort, () => {

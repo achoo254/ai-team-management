@@ -33,20 +33,6 @@ export function useUsageSnapshots(params: {
   })
 }
 
-export function useCollectAllUsage() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => api.post<{ success: number; errors: number }>('/api/usage-snapshots/collect'),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: LATEST_KEY })
-      qc.invalidateQueries({ queryKey: SNAPSHOTS_KEY })
-      const d = data as { success: number; errors: number }
-      toast.success(`Thu thập xong: ${d.success} thành công, ${d.errors} lỗi`)
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-}
-
 export function useCollectSeatUsage() {
   const qc = useQueryClient()
   return useMutation({

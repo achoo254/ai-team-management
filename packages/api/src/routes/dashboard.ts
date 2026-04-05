@@ -6,8 +6,7 @@ import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Alert } from '../models/alert.js'
 import { Schedule } from '../models/schedule.js'
-import { SessionMetric } from '../models/session-metric.js'
-import { ActiveSession } from '../models/active-session.js'
+import { UsageWindow } from '../models/usage-window.js'
 
 const router = Router()
 
@@ -78,11 +77,11 @@ router.get('/enhanced', async (req, res) => {
     // User/seat counts (scoped for non-admin)
     const seatCountFilter = effectiveIds ? { _id: { $in: effectiveIds } } : {}
     const userCountFilter = effectiveIds ? { active: true, seat_ids: { $in: effectiveIds } } : { active: true }
-    const [totalUsers, activeUsers, totalSeats, unresolvedAlerts] = await Promise.all([
+    const [totalUsers, activeUsers, totalSeats, unreadAlerts] = await Promise.all([
       effectiveIds ? User.countDocuments({ seat_ids: { $in: effectiveIds } }) : User.countDocuments(),
       User.countDocuments(userCountFilter),
       Seat.countDocuments(seatCountFilter),
-      Alert.countDocuments({ resolved: false, ...seatIdMatch }),
+      Alert.countDocuments({ read_by: { $ne: req.user!._id }, ...seatIdMatch }),
     ])
 
     // Today's schedules (scoped)
@@ -103,9 +102,9 @@ router.get('/enhanced', async (req, res) => {
       seat_label: (sc.seat_id as { label?: string } | null)?.label,
     }))
 
-    // Seats with unresolved usage_exceeded alerts (for OVER BUDGET badge)
+    // Seats with unread usage_exceeded alerts (for OVER BUDGET badge)
     const budgetAlerts = await Alert.find(
-      { type: 'usage_exceeded', resolved: false, ...seatIdMatch },
+      { type: 'usage_exceeded', read_by: { $ne: req.user!._id }, ...seatIdMatch },
       'seat_id metadata',
     ).lean()
     const overBudgetSeats = budgetAlerts.map((a) => ({
@@ -210,7 +209,7 @@ router.get('/enhanced', async (req, res) => {
       totalUsers,
       activeUsers,
       totalSeats,
-      unresolvedAlerts,
+      unreadAlerts,
       tokenIssueCount,
       fullSeatCount,
       todaySchedules,
@@ -295,33 +294,40 @@ router.get('/efficiency', async (req, res) => {
         ? { seat_id: singleSeatId }
         : {}
 
-    // 1. Aggregated metrics from SessionMetric
-    const metrics = await SessionMetric.aggregate([
-      { $match: { date: { $gte: rangeStart }, ...seatFilter } },
+    // Base match: closed windows in range (for historical metrics)
+    const windowMatch = { window_end: { $gte: rangeStart }, is_closed: true, ...seatFilter }
+
+    // 1. Summary metrics from UsageWindow
+    const metrics = await UsageWindow.aggregate([
+      { $match: windowMatch },
       { $group: {
         _id: null,
         avg_utilization: { $avg: '$utilization_pct' },
         avg_impact_ratio: { $avg: '$impact_ratio' },
-        avg_delta_5h: { $avg: '$delta_5h_pct' },
+        avg_delta_5h: { $avg: '$utilization_pct' }, // legacy alias
         avg_delta_7d: { $avg: '$delta_7d_pct' },
+        avg_delta_7d_sonnet: { $avg: '$delta_7d_sonnet_pct' },
+        avg_delta_7d_opus: { $avg: '$delta_7d_opus_pct' },
         total_sessions: { $sum: 1 },
-        waste_sessions: { $sum: { $cond: [{ $and: [{ $gte: ['$duration_hours', 2] }, { $lt: ['$delta_5h_pct', 5] }] }, 1, 0] } },
-        total_resets: { $sum: '$reset_count_5h' },
+        waste_sessions: { $sum: { $cond: ['$is_waste', 1, 0] } },
+        total_resets: { $sum: 1 }, // each window = 1 cycle
         total_hours: { $sum: '$duration_hours' },
       }},
     ])
 
     // 2. Per-seat breakdown
-    const perSeat = await SessionMetric.aggregate([
-      { $match: { date: { $gte: rangeStart }, ...seatFilter } },
+    const perSeat = await UsageWindow.aggregate([
+      { $match: windowMatch },
       { $group: {
         _id: '$seat_id',
         avg_utilization: { $avg: '$utilization_pct' },
-        avg_delta_5h: { $avg: '$delta_5h_pct' },
+        avg_delta_5h: { $avg: '$utilization_pct' }, // legacy alias
         avg_delta_7d: { $avg: '$delta_7d_pct' },
+        avg_delta_7d_sonnet: { $avg: '$delta_7d_sonnet_pct' },
+        avg_delta_7d_opus: { $avg: '$delta_7d_opus_pct' },
         avg_impact_ratio: { $avg: '$impact_ratio' },
         session_count: { $sum: 1 },
-        waste_count: { $sum: { $cond: [{ $and: [{ $gte: ['$duration_hours', 2] }, { $lt: ['$delta_5h_pct', 5] }] }, 1, 0] } },
+        waste_count: { $sum: { $cond: ['$is_waste', 1, 0] } },
       }},
     ])
     const seatIds = perSeat.map(s => s._id)
@@ -331,13 +337,13 @@ router.get('/efficiency', async (req, res) => {
       ...s, seat_id: String(s._id), label: labelMap.get(String(s._id)) ?? '', _id: undefined,
     }))
 
-    // 3. Per-user breakdown
-    const perUser = await SessionMetric.aggregate([
-      { $match: { date: { $gte: rangeStart }, ...seatFilter } },
+    // 3. Per-user (owner) breakdown
+    const perUser = await UsageWindow.aggregate([
+      { $match: windowMatch },
       { $group: {
-        _id: '$user_id',
+        _id: '$owner_id',
         avg_utilization: { $avg: '$utilization_pct' },
-        avg_delta_5h: { $avg: '$delta_5h_pct' },
+        avg_delta_5h: { $avg: '$utilization_pct' },
         session_count: { $sum: 1 },
         total_hours: { $sum: '$duration_hours' },
       }},
@@ -350,44 +356,99 @@ router.get('/efficiency', async (req, res) => {
     }))
 
     // 4. Daily trend
-    const dailyTrend = await SessionMetric.aggregate([
-      { $match: { date: { $gte: rangeStart }, ...seatFilter } },
+    const dailyTrend = await UsageWindow.aggregate([
+      { $match: windowMatch },
       { $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: 'Asia/Ho_Chi_Minh' } },
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$window_end', timezone: 'Asia/Ho_Chi_Minh' } },
         avg_utilization: { $avg: '$utilization_pct' },
-        avg_delta_5h: { $avg: '$delta_5h_pct' },
+        avg_delta_5h: { $avg: '$utilization_pct' },
         sessions: { $sum: 1 },
       }},
       { $sort: { _id: 1 } },
       { $project: { date: '$_id', _id: 0, avg_utilization: { $round: ['$avg_utilization', 1] }, avg_delta_5h: { $round: ['$avg_delta_5h', 1] }, sessions: 1 } },
     ])
 
-    // 5. Active sessions (real-time, scoped)
-    const sessionFilter = effectiveIds ? { seat_id: { $in: effectiveIds } } : {}
-    const activeSessions = await ActiveSession.find(sessionFilter).populate('schedule_id').populate('user_id', 'name').lean()
-    const liveMetrics = []
-    for (const s of activeSessions) {
-      const snap = await UsageSnapshot.findOne({ seat_id: s.seat_id }).sort({ fetched_at: -1 }).lean()
-      if (!snap) continue
-      const delta5h = Math.max(0, (snap.five_hour_pct ?? 0) - (s.snapshot_at_start.five_hour_pct ?? 0))
-      const delta7d = Math.max(0, (snap.seven_day_pct ?? 0) - (s.snapshot_at_start.seven_day_pct ?? 0))
-      liveMetrics.push({
-        seat_id: String(s.seat_id),
-        user_name: (s.user_id as any)?.name ?? '',
-        delta_5h: Math.round(delta5h * 10) / 10,
-        delta_7d: Math.round(delta7d * 10) / 10,
-        reset_count: s.reset_count_5h ?? 0,
-        started_at: s.started_at,
-      })
+    // 5. Active windows (open, not closed)
+    const activeWindowFilter: Record<string, unknown> = { is_closed: false }
+    if (effectiveIds) activeWindowFilter.seat_id = { $in: effectiveIds }
+    const activeWins = await UsageWindow.find(activeWindowFilter).lean()
+    const activeSeatIds = [...new Set(activeWins.map(w => String(w.seat_id)))]
+    const activeSeats = activeSeatIds.length > 0
+      ? await Seat.find({ _id: { $in: activeSeatIds } }, 'label').lean()
+      : []
+    const seatLabelMap = new Map(activeSeats.map(s => [String(s._id), s.label]))
+    const liveMetrics = activeWins.map(w => ({
+      seat_id: String(w.seat_id),
+      user_name: seatLabelMap.get(String(w.seat_id)) ?? '',
+      delta_5h: Math.round(w.utilization_pct * 10) / 10,
+      delta_7d: Math.round(w.delta_7d_pct * 10) / 10,
+      reset_count: 0,
+      started_at: w.window_start,
+    }))
+
+    // 6. Coverage: data quality flag
+    const seatsWithData = await UsageWindow.distinct('seat_id', windowMatch)
+    const totalSeatsInScope = effectiveIds?.length
+      ?? (allowed?.length ?? (await Seat.countDocuments()))
+    const seatsWithDataStr = new Set(seatsWithData.map(String))
+    const missingIds = effectiveIds
+      ? effectiveIds.filter(id => !seatsWithDataStr.has(String(id))).map(String)
+      : []
+    const coverage = {
+      has_data: seatsWithData.length > 0,
+      seats_with_data: seatsWithData.length,
+      seats_total: totalSeatsInScope,
+      missing_seat_ids: missingIds,
     }
 
     res.json({
-      summary: metrics[0] ?? { avg_utilization: 0, avg_impact_ratio: null, total_sessions: 0, waste_sessions: 0, total_resets: 0, total_hours: 0 },
+      summary: metrics[0] ?? {
+        avg_utilization: 0, avg_impact_ratio: null,
+        avg_delta_5h: 0, avg_delta_7d: 0,
+        avg_delta_7d_sonnet: 0, avg_delta_7d_opus: 0,
+        total_sessions: 0, waste_sessions: 0, total_resets: 0, total_hours: 0,
+      },
       perSeat: perSeatWithLabels,
       perUser: perUserWithNames,
       dailyTrend,
       activeSessions: liveMetrics,
+      coverage,
     })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// GET /api/dashboard/peak-hours — 7x24 heatmap of usage activity
+router.get('/peak-hours', async (req, res) => {
+  try {
+    const rangeMs = RANGE_MS[typeof req.query.range === 'string' ? req.query.range : 'month'] ?? RANGE_MS.month
+    const rangeStart = new Date(Date.now() - rangeMs)
+    const allowed = await getAllowedSeatIds(req.user!)
+    const querySeatIds = parseSeatIds(req.query.seatIds)
+    const effectiveIds = allowed
+      ? (querySeatIds ? querySeatIds.filter((id) => allowed.some((a) => String(a) === String(id))) : allowed)
+      : querySeatIds
+    const seatFilter = effectiveIds ? { seat_id: { $in: effectiveIds } } : {}
+
+    const grid = await UsageWindow.aggregate([
+      { $match: { is_closed: true, window_end: { $gte: rangeStart }, peak_hour_of_day: { $ne: null }, ...seatFilter } },
+      { $addFields: { dow: { $dayOfWeek: { date: '$window_end', timezone: 'Asia/Ho_Chi_Minh' } } } },
+      { $group: {
+        _id: { dow: '$dow', hour: '$peak_hour_of_day' },
+        avg_delta_7d: { $avg: '$delta_7d_pct' },
+        window_count: { $sum: 1 },
+      }},
+      { $project: {
+        dow: { $subtract: ['$_id.dow', 1] }, // normalize Mongo 1-7 → JS 0-6
+        hour: '$_id.hour', _id: 0,
+        avg_delta_7d: { $round: ['$avg_delta_7d', 1] },
+        window_count: 1,
+      }},
+    ])
+
+    res.json({ grid })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })
@@ -433,13 +494,12 @@ router.get('/personal', async (req, res) => {
       ...memberSeats.map((s) => ({ seat_id: String(s._id), label: s.label, role: 'member' as const })),
     ]
 
-    // 3. Usage rank — aggregate avg delta_5h_pct per user over last 30 days, sort desc
-    // (lower delta = more efficient → rank ascending)
+    // 3. Usage rank — avg utilization per owner over last 30 days
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    const rankAgg = await SessionMetric.aggregate([
-      { $match: { created_at: { $gte: since } } },
-      { $group: { _id: '$user_id', avgDelta5h: { $avg: '$delta_5h_pct' } } },
-      { $sort: { avgDelta5h: 1 } },
+    const rankAgg = await UsageWindow.aggregate([
+      { $match: { window_end: { $gte: since }, is_closed: true } },
+      { $group: { _id: '$owner_id', avgDelta5h: { $avg: '$utilization_pct' } } },
+      { $sort: { avgDelta5h: -1 } }, // higher util = more efficient
     ])
 
     let myUsageRank: { rank: number; total: number; avgDelta5h: number } | null = null
@@ -454,7 +514,53 @@ router.get('/personal', async (req, res) => {
       }
     }
 
-    res.json({ mySchedulesToday, mySeats, myUsageRank })
+    // 4. My Efficiency — per-owner aggregation across owned seats
+    const myWindowMatch = { owner_id: userId, window_end: { $gte: since }, is_closed: true }
+    const [mySummaryAgg, mySeatsAgg] = await Promise.all([
+      UsageWindow.aggregate([
+        { $match: myWindowMatch },
+        { $group: {
+          _id: null,
+          my_avg_utilization: { $avg: '$utilization_pct' },
+          my_waste_count: { $sum: { $cond: ['$is_waste', 1, 0] } },
+          my_sonnet_avg: { $avg: '$delta_7d_sonnet_pct' },
+          my_opus_avg: { $avg: '$delta_7d_opus_pct' },
+          my_window_count: { $sum: 1 },
+        }},
+      ]),
+      UsageWindow.aggregate([
+        { $match: myWindowMatch },
+        { $group: {
+          _id: '$seat_id',
+          avg_utilization: { $avg: '$utilization_pct' },
+          window_count: { $sum: 1 },
+        }},
+        { $sort: { avg_utilization: -1 } },
+      ]),
+    ])
+    const mySeatIds = mySeatsAgg.map((s) => s._id)
+    const mySeatLabels = await Seat.find({ _id: { $in: mySeatIds } }, 'label').lean()
+    const myLabelMap = new Map(mySeatLabels.map((s) => [String(s._id), s.label]))
+    const rankedSeats = mySeatsAgg.map((s) => ({
+      seat_id: String(s._id),
+      label: myLabelMap.get(String(s._id)) ?? '',
+      avg_utilization: Math.round(s.avg_utilization * 10) / 10,
+      window_count: s.window_count,
+    }))
+    const mySummary = mySummaryAgg[0] ?? null
+    const myEfficiency = mySummary
+      ? {
+          my_avg_utilization: Math.round(mySummary.my_avg_utilization * 10) / 10,
+          my_waste_count: mySummary.my_waste_count,
+          my_window_count: mySummary.my_window_count,
+          my_sonnet_avg: Math.round(mySummary.my_sonnet_avg * 10) / 10,
+          my_opus_avg: Math.round(mySummary.my_opus_avg * 10) / 10,
+          my_top_seats: rankedSeats.slice(0, 3),
+          my_bottom_seats: rankedSeats.slice(-3).reverse(),
+        }
+      : null
+
+    res.json({ mySchedulesToday, mySeats, myUsageRank, myEfficiency })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

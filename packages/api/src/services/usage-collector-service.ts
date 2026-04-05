@@ -2,6 +2,7 @@ import { Seat } from '../models/seat.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { decrypt } from '../lib/encryption.js'
 import { parallelLimit } from '../utils/parallel-limit.js'
+import { applyWindowForSeat } from './usage-window-applier.js'
 
 const API_URL = 'https://api.anthropic.com/api/oauth/usage'
 const CONCURRENCY = 3
@@ -23,6 +24,7 @@ async function fetchSeatUsage(seat: {
   _id: import('mongoose').Types.ObjectId
   oauth_credential: { access_token: string }
   label: string
+  owner_id?: import('mongoose').Types.ObjectId | null
 }) {
   const token = decrypt(seat.oauth_credential.access_token)
 
@@ -47,7 +49,7 @@ async function fetchSeatUsage(seat: {
   const sevenDaySonnet = parseBucket(raw.seven_day_sonnet)
   const sevenDayOpus = parseBucket(raw.seven_day_opus)
 
-  await UsageSnapshot.create({
+  const createdSnapshot = await UsageSnapshot.create({
     seat_id: seat._id,
     raw_response: raw,
     five_hour_pct: fiveHour.pct,
@@ -70,6 +72,19 @@ async function fetchSeatUsage(seat: {
     last_fetched_at: new Date(),
     last_fetch_error: null,
   })
+
+  // Apply UsageWindow detection (non-fatal — log and continue)
+  if (seat.owner_id) {
+    await applyWindowForSeat({
+      seat_id: seat._id,
+      owner_id: seat.owner_id,
+      snapshotNow: createdSnapshot,
+    }).catch((err) => {
+      console.error(`[UsageWindow] apply failed for ${seat.label}:`, err)
+    })
+  } else {
+    console.warn(`[UsageWindow] seat ${seat.label} has no owner_id, skipping window tracking`)
+  }
 
   console.log(`[Collector] ✓ ${seat.label}`)
 }

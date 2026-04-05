@@ -89,9 +89,10 @@ router.get('/', authenticate, async (req, res) => {
   }
 })
 
-// GET /api/seats/available-users — list active users for seat assignment (admin only)
+// GET /api/seats/available-users — list active users for seat assignment (any authenticated user)
+// Owners need this to add members to their seats and to pick users for schedule entries.
 // Must be before /:id routes to avoid param matching
-router.get('/available-users', authenticate, requireAdmin, async (_req, res) => {
+router.get('/available-users', authenticate, async (_req, res) => {
   try {
     const users = await User.find({ active: true }, 'name email seat_ids').populate('seat_ids', 'label').lean()
     const mapped = users.map((u) => ({
@@ -151,6 +152,8 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     const seat = await Seat.create({ email, label, max_users, owner_id: req.user!._id })
+    // Auto-seed owner's watched_seat_ids so alerts appear in their feed
+    await User.findByIdAndUpdate(req.user!._id, { $addToSet: { watched_seat_ids: seat._id } })
     res.status(201).json(seat)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -182,7 +185,9 @@ router.put('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin
   }
 })
 
-// DELETE /api/seats/:id — delete seat, unassign users, clear schedules (owner or admin)
+// DELETE /api/seats/:id — soft delete seat, unassign users, clear schedules (owner or admin).
+// Usage history (snapshots, windows, alerts, session_metrics) retained for 30 days,
+// then hard-deleted by seat-cleanup-service cron.
 router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
   try {
     const id = req.params.id as string
@@ -192,11 +197,19 @@ router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAd
       return
     }
 
-    // Remove this seat from all users' seat_ids
-    await User.updateMany({ seat_ids: id }, { $pull: { seat_ids: id } })
-    // Clear all schedules for this seat
+    // Remove this seat from all users' seat_ids AND watched_seat_ids
+    await User.updateMany(
+      { $or: [{ seat_ids: id }, { watched_seat_ids: id }] },
+      { $pull: { seat_ids: id, watched_seat_ids: id } },
+    )
+    // Clear schedules + active_sessions (runtime state — must stop firing for deleted seat)
+    const { ActiveSession } = await import('../models/active-session.js')
     await Schedule.deleteMany({ seat_id: id })
-    await seat.deleteOne()
+    await ActiveSession.deleteMany({ seat_id: id })
+    // Soft delete the seat — cleanup cron will cascade-delete usage/alerts after 30 days
+    seat.deleted_at = new Date()
+    seat.token_active = false
+    await seat.save()
 
     res.json({ message: 'Seat deleted' })
   } catch (error) {
@@ -238,8 +251,11 @@ router.post('/:id/assign', authenticate, validateObjectId('id'), requireSeatOwne
       return
     }
 
-    // Add seat to user's seat_ids (avoid duplicates)
-    await User.findByIdAndUpdate(userId, { $addToSet: { seat_ids: new mongoose.Types.ObjectId(id) } })
+    // Add seat to user's seat_ids AND watched_seat_ids (avoid duplicates)
+    const seatObjId = new mongoose.Types.ObjectId(id)
+    await User.findByIdAndUpdate(userId, {
+      $addToSet: { seat_ids: seatObjId, watched_seat_ids: seatObjId },
+    })
 
     res.json({ message: 'User assigned to seat', user })
   } catch (error) {
@@ -366,6 +382,11 @@ router.put('/:id/transfer', authenticate, requireAdmin, validateObjectId('id'), 
       res.status(404).json({ error: 'Seat not found' })
       return
     }
+
+    // Auto-seed new owner's watched_seat_ids
+    await User.findByIdAndUpdate(new_owner_id, {
+      $addToSet: { watched_seat_ids: new mongoose.Types.ObjectId(req.params.id as string) },
+    })
 
     res.json({ message: 'Ownership transferred', seat })
   } catch (error) {

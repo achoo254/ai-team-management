@@ -10,6 +10,8 @@ import { DashboardTrendChart } from "@/components/dashboard-trend-chart";
 import { DashboardSeatEfficiency } from "@/components/dashboard-seat-efficiency";
 import { DashboardDetailTable } from "@/components/dashboard-detail-table";
 import { DashboardEfficiency } from "@/components/dashboard-efficiency";
+import { DashboardPeakHoursHeatmap } from "@/components/dashboard-peak-hours-heatmap";
+import { DashboardMyEfficiency } from "@/components/dashboard-my-efficiency";
 import { DashboardWelcome } from "@/components/dashboard-welcome";
 import { DashboardPersonalContext } from "@/components/dashboard-personal-context";
 
@@ -51,11 +53,17 @@ export default function DashboardPage() {
       {/* Row 3: Personal context (non-admin only) */}
       {user?.role !== "admin" && <DashboardPersonalContext />}
 
+      {/* My Efficiency (per-user summary) */}
+      <DashboardMyEfficiency />
+
       {/* Row 4: Seat efficiency */}
       <DashboardSeatEfficiency range={range} seatIds={seatIds} />
 
       {/* Row 5: Usage Efficiency */}
       <DashboardEfficiency range={range} seatIds={seatIds} />
+
+      {/* Peak hours heatmap */}
+      <DashboardPeakHoursHeatmap range={range} seatIds={seatIds} />
 
       {/* Row 5: Full detail table */}
       <DashboardDetailTable range={range} seatIds={seatIds} />

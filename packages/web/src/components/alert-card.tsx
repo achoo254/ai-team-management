@@ -108,7 +108,9 @@ export function AlertCard({ alert }: { alert: Alert }) {
   const [expanded, setExpanded] = useState(false);
   const cfg = TYPE_CONFIG[alert.type] ?? { label: alert.type, variant: "outline" as const, icon: AlertTriangle };
   const Icon = cfg.icon;
-  const seatLabel = typeof alert.seat_id === "object" ? (alert.seat_id.label ?? alert.seat_id.email) : "";
+  const seatLabel = alert.seat_id && typeof alert.seat_id === "object"
+    ? (alert.seat_id.label ?? alert.seat_id.email ?? "")
+    : "";
 
   return (
     <div

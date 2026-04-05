@@ -50,6 +50,8 @@ export function useCreateScheduleEntry() {
     }) => api.post("/api/schedules/entry", body),
     onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ["schedules"] });
+      // Auto-assign may have updated seat membership → refresh seats cache
+      qc.invalidateQueries({ queryKey: ["seats"] });
       if (data?.warnings?.length) {
         toast.warning("Có trùng lịch với entry khác");
       }

@@ -98,9 +98,15 @@ export function requireSeatOwnerOrAdmin(paramName = 'id') {
   }
 }
 
-/** Get seat IDs user owns or is assigned to. Returns null for admin (= no filter). */
-export async function getAllowedSeatIds(user: JwtPayload): Promise<mongoose.Types.ObjectId[] | null> {
-  if (user.role === 'admin') return null
+/** Get seat IDs user owns or is assigned to. Admin gets all non-deleted seats. */
+export async function getAllowedSeatIds(user: JwtPayload): Promise<mongoose.Types.ObjectId[]> {
+  if (user.role === 'admin') {
+    // Admin sees all non-deleted seats. Pre-find middleware on Seat auto-filters deleted_at:null.
+    // Returning concrete list (instead of null) ensures downstream queries on UsageWindow/
+    // snapshots/etc. naturally exclude data tied to soft-deleted seats.
+    const seats = await Seat.find({}, '_id').lean()
+    return seats.map((s) => new mongoose.Types.ObjectId(String(s._id)))
+  }
   const [dbUser, ownedSeats] = await Promise.all([
     User.findById(user._id, 'seat_ids').lean(),
     Seat.find({ owner_id: user._id }, '_id').lean(),

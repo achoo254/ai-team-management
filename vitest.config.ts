@@ -20,8 +20,11 @@ export default defineConfig({
   },
   test: {
     globals: false,
-    include: ["tests/hooks/**/*.test.{ts,tsx}"],
-    exclude: ["tests/api/**", "tests/ui/**", "tests/services/**"],
+    include: [
+      "tests/hooks/**/*.test.{ts,tsx}",
+      "tests/api/usage-window-detector.test.ts",
+    ],
+    exclude: ["tests/ui/**", "tests/services/**"],
     // UI tests opt-in via // @vitest-environment jsdom comment
     environment: "node",
   },

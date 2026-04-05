@@ -20,11 +20,12 @@ export interface ISeat extends Document {
   last_fetch_error: string | null
   last_refreshed_at: Date | null
   created_at: Date
+  deleted_at: Date | null
 }
 
 const seatSchema = new Schema<ISeat>(
   {
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true },
     label: { type: String, required: true },
     max_users: { type: Number, default: 3 },
     owner_id: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
@@ -44,9 +45,29 @@ const seatSchema = new Schema<ISeat>(
     last_fetched_at: { type: Date, default: null },
     last_fetch_error: { type: String, default: null },
     last_refreshed_at: { type: Date, default: null },
+    deleted_at: { type: Date, default: null, index: true },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } },
 )
+
+// Partial unique index on email — only enforced for non-deleted seats.
+// Allows recreating a seat with the same email after soft delete.
+// NOTE: If DB has legacy unique index on `email`, drop it manually:
+//   db.seats.dropIndex('email_1')
+seatSchema.index({ email: 1 }, { unique: true, partialFilterExpression: { deleted_at: null } })
+
+// Auto-filter out soft-deleted seats on all find/count queries.
+// Callers needing deleted seats (e.g. cleanup service) must pass `deleted_at` in filter explicitly.
+// Mongoose v9: pre-hooks no longer receive `next` callback — use async/Promise style.
+const addNotDeletedFilter = function (this: mongoose.Query<unknown, unknown>) {
+  const filter = this.getFilter()
+  if (!('deleted_at' in filter)) {
+    this.where({ deleted_at: null })
+  }
+}
+seatSchema.pre(/^find/, addNotDeletedFilter as never)
+seatSchema.pre('countDocuments', addNotDeletedFilter as never)
+seatSchema.pre('count' as never, addNotDeletedFilter as never)
 
 // oauth_credential excluded by default via `select: false`
 // Callers needing tokens must use .select('+oauth_credential')

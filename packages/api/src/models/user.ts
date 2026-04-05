@@ -10,6 +10,7 @@ export interface IAlertSettings {
   enabled: boolean
   rate_limit_pct: number
   extra_credit_pct: number
+  token_failure_enabled: boolean
 }
 
 export interface IUser extends Document {
@@ -49,6 +50,7 @@ const userSchema = new Schema<IUser>(
       enabled: { type: Boolean, default: false },
       rate_limit_pct: { type: Number, default: 80 },
       extra_credit_pct: { type: Number, default: 80 },
+      token_failure_enabled: { type: Boolean, default: true },
     },
     fcm_tokens: { type: [String], default: [] },
     push_enabled: { type: Boolean, default: false },

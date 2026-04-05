@@ -85,6 +85,7 @@ export interface UserAlertSettings {
   enabled: boolean
   rate_limit_pct: number        // 1-100, default 80
   extra_credit_pct: number      // 1-100, default 80
+  token_failure_enabled: boolean  // receive token invalid/failure alerts, default true
 }
 
 export interface UsageSnapshot {

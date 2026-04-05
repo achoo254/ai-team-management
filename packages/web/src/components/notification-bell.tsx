@@ -7,6 +7,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router";
 import { useAlerts, useUnreadAlertCount, useMarkAlertsRead } from "@/hooks/use-alerts";
+import { useAuth } from "@/hooks/use-auth";
+import { cn } from "@/lib/utils";
 import type { Alert } from "@repo/shared/types";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -29,16 +31,20 @@ function timeAgo(dateStr: string): string {
 }
 
 function getSeatLabel(alert: Alert): string {
-  return typeof alert.seat_id === "object" ? (alert.seat_id.label ?? alert.seat_id.email) : "";
+  if (!alert.seat_id || typeof alert.seat_id !== "object") return "";
+  return alert.seat_id.label ?? alert.seat_id.email ?? "";
 }
 
 export function NotificationBell() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: unread } = useUnreadAlertCount();
   const { data: recent } = useAlerts();
   const markRead = useMarkAlertsRead();
   const count = unread?.count ?? 0;
   const recentAlerts = (recent?.alerts ?? []).slice(0, 5);
+  const isUnread = (alert: Alert) =>
+    !!user && !(alert.read_by ?? []).some((id) => String(id) === user._id);
 
   function handleItemClick(alertId: string) {
     markRead.mutate([alertId]);
@@ -57,8 +63,9 @@ export function NotificationBell() {
       <DropdownMenuTrigger className="relative p-2 rounded-md hover:bg-accent transition-colors">
         <Bell className="h-4 w-4" />
         {count > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-destructive-foreground">
-            {count > 99 ? "99+" : count}
+          <span className="absolute top-1 right-1 flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500 ring-2 ring-background" />
           </span>
         )}
       </DropdownMenuTrigger>
@@ -78,22 +85,40 @@ export function NotificationBell() {
           </div>
         ) : (
           <>
-            {recentAlerts.map((alert) => (
-              <DropdownMenuItem
-                key={alert._id}
-                onClick={() => handleItemClick(alert._id)}
-                className="flex flex-col items-start gap-0.5 py-2 cursor-pointer"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold uppercase text-destructive">
-                    {TYPE_LABELS[alert.type] ?? alert.type}
-                  </span>
-                  <span className="text-[11px] text-foreground/70">{getSeatLabel(alert)}</span>
-                </div>
-                <p className="text-xs text-muted-foreground line-clamp-1">{alert.message}</p>
-                <span className="text-[10px] text-muted-foreground/60">{timeAgo(alert.created_at)}</span>
-              </DropdownMenuItem>
-            ))}
+            {recentAlerts.map((alert) => {
+              const unreadFlag = isUnread(alert);
+              return (
+                <DropdownMenuItem
+                  key={alert._id}
+                  onClick={() => handleItemClick(alert._id)}
+                  className={cn(
+                    "flex flex-col items-start gap-0.5 py-2 pl-3 cursor-pointer border-l-2 transition-colors",
+                    unreadFlag
+                      ? "border-l-destructive bg-destructive/5 hover:bg-destructive/10"
+                      : "border-l-transparent opacity-70",
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 w-full">
+                    {unreadFlag && (
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" aria-label="chưa đọc" />
+                    )}
+                    <span className="text-[10px] font-semibold uppercase text-destructive">
+                      {TYPE_LABELS[alert.type] ?? alert.type}
+                    </span>
+                    <span className="text-[11px] text-foreground/70">{getSeatLabel(alert)}</span>
+                  </div>
+                  <p
+                    className={cn(
+                      "text-xs line-clamp-1",
+                      unreadFlag ? "text-foreground font-medium" : "text-muted-foreground",
+                    )}
+                  >
+                    {alert.message}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground/60">{timeAgo(alert.created_at)}</span>
+                </DropdownMenuItem>
+              );
+            })}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleViewAll} className="justify-center text-xs">
               Xem tất cả →

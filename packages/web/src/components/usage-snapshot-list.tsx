@@ -1,7 +1,5 @@
-import { RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useLatestSnapshots, useCollectAllUsage } from '@/hooks/use-usage-snapshots'
+import { useLatestSnapshots } from '@/hooks/use-usage-snapshots'
 import { useSeats } from '@/hooks/use-seats'
 import { useAuth } from '@/hooks/use-auth'
 import { UsageSnapshotCard } from './usage-snapshot-card'
@@ -10,7 +8,6 @@ export function UsageSnapshotList() {
   const { user } = useAuth()
   const { data, isLoading } = useLatestSnapshots()
   const { data: seatsData } = useSeats()
-  const collectAll = useCollectAllUsage()
   const isAdmin = user?.role === 'admin'
 
   // Map seats by ID for lookup
@@ -32,20 +29,7 @@ export function UsageSnapshotList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Usage mới nhất</h2>
-        {isAdmin && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => collectAll.mutate()}
-            disabled={collectAll.isPending}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${collectAll.isPending ? 'animate-spin' : ''}`} />
-            {collectAll.isPending ? 'Đang thu thập...' : 'Thu thập tất cả'}
-          </Button>
-        )}
-      </div>
+      <h2 className="text-lg font-semibold">Usage mới nhất</h2>
 
       {snapshots.length === 0 ? (
         <p className="text-sm text-muted-foreground">

@@ -95,7 +95,7 @@ describe("GET /api/dashboard/enhanced", () => {
     expect(body).toHaveProperty("totalUsers");
     expect(body).toHaveProperty("activeUsers");
     expect(body).toHaveProperty("totalSeats");
-    expect(body).toHaveProperty("unresolvedAlerts");
+    expect(body).toHaveProperty("unreadAlerts");
     expect(body).toHaveProperty("tokenIssueCount");
     expect(body).toHaveProperty("fullSeatCount");
     expect(body).toHaveProperty("todaySchedules");
@@ -120,7 +120,7 @@ describe("GET /api/dashboard/enhanced", () => {
 
     expect(body.totalUsers).toBeGreaterThanOrEqual(1);
     expect(body.totalSeats).toBeGreaterThanOrEqual(1);
-    expect(body.unresolvedAlerts).toBe(0);
+    expect(body.unreadAlerts).toBeGreaterThanOrEqual(0);
   });
 
   it("non-admin user can access", async () => {

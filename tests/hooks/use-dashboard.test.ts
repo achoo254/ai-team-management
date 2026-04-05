@@ -8,7 +8,7 @@ const mockDashboard = {
   totalUsers: 10,
   activeUsers: 8,
   totalSeats: 4,
-  unresolvedAlerts: 2,
+  unreadAlerts: 2,
   tokenIssueCount: 0,
   fullSeatCount: 1,
   todaySchedules: 3,
@@ -34,7 +34,7 @@ describe("useDashboardEnhanced", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.totalUsers).toBe(10);
     expect(result.current.data?.activeUsers).toBe(8);
-    expect(result.current.data?.unresolvedAlerts).toBe(2);
+    expect(result.current.data?.unreadAlerts).toBe(2);
   });
 
   it("enters error state when fetch fails", async () => {
