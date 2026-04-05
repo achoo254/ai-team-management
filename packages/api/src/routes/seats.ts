@@ -335,6 +335,14 @@ router.post('/', authenticate, async (req, res) => {
       if (label) updateFields.label = label
       if (profileCache) updateFields.profile = profileCache
 
+      // Read previous members before atomic update clears them
+      const deletedSeat = await Seat.findOne(
+        { _id: restore_seat_id, deleted_at: { $ne: null } }, 'previous_member_ids',
+      ).lean()
+      const previousMembers = deletedSeat?.previous_member_ids ?? []
+
+      updateFields.previous_member_ids = [] // clear after restore
+
       let restored
       try {
         restored = await Seat.findOneAndUpdate(
@@ -353,12 +361,29 @@ router.post('/', authenticate, async (req, res) => {
         res.status(409).json({ error: 'Seat đã được khôi phục hoặc đã bị xóa vĩnh viễn' }); return
       }
 
-      // Re-seed owner's watched_seats
+      // Re-assign previous members + re-seed their watched_seats
+      if (previousMembers.length > 0) {
+        const seatObjId = restored._id
+        await User.updateMany(
+          { _id: { $in: previousMembers }, active: true },
+          {
+            $addToSet: {
+              seat_ids: seatObjId,
+              watched_seats: { seat_id: seatObjId, threshold_5h_pct: 90, threshold_7d_pct: 85 },
+            },
+          },
+        )
+      }
+
+      // Re-seed owner's watched_seats (owner may not be in previous members)
       await User.findByIdAndUpdate(req.user!._id, {
-        $addToSet: { watched_seats: { seat_id: restored._id, threshold_5h_pct: 90, threshold_7d_pct: 85 } },
+        $addToSet: {
+          watched_seats: { seat_id: restored._id, threshold_5h_pct: 90, threshold_7d_pct: 85 },
+        },
       })
 
-      res.json({ restored: true, seat: restored })
+      const restoredMembers = previousMembers.length
+      res.json({ restored: true, seat: restored, restored_members: restoredMembers })
       return
     }
 
@@ -493,6 +518,10 @@ router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAd
       res.status(404).json({ error: 'Seat not found' })
       return
     }
+
+    // Capture current members before removing — used by restore flow
+    const members = await User.find({ seat_ids: id, active: true }, '_id').lean()
+    seat.previous_member_ids = members.map((m) => m._id)
 
     // Remove this seat from all users' seat_ids AND watched_seats
     await User.updateMany(

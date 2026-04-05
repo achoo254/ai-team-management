@@ -31,6 +31,8 @@ export interface ISeat extends Document {
     has_claude_pro: boolean
     fetched_at: Date | null
   } | null
+  /** Member IDs captured at soft-delete time — used to restore members on undelete */
+  previous_member_ids: Types.ObjectId[]
   created_at: Date
   deleted_at: Date | null
   /** When true, seat is included in admin overview / BLD metrics. Toggle by admin or seat owner. */
@@ -75,6 +77,7 @@ const seatSchema = new Schema<ISeat>(
       },
       default: null,
     },
+    previous_member_ids: { type: [Schema.Types.ObjectId], default: [] },
     deleted_at: { type: Date, default: null, index: true },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } },

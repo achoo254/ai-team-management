@@ -6,7 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useEfficiency, formatRangeDate, type DashboardRange } from "@/hooks/use-dashboard";
 import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
 import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
-import { QuotaForecastBar } from "@/components/quota-forecast-bar";
 import { Quota7dForecast } from "@/components/quota-7d-forecast";
 import { Sparkline5hCycles } from "@/components/sparkline-5h-cycles";
 
@@ -311,10 +310,6 @@ export function DashboardEfficiency({ range, seatIds }: { range: DashboardRange;
               <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-pulse" />
               Thời gian thực 5h
             </h3>
-
-            {data?.quota_forecast?.five_hour && (
-              <QuotaForecastBar type="5h" data={data.quota_forecast.five_hour} />
-            )}
 
             {data?.activeSessions && data.activeSessions.length > 0 && (
               <div>
