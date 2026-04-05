@@ -7,7 +7,6 @@ import { useEfficiency, formatRangeDate, type DashboardRange } from "@/hooks/use
 import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
 import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
 import { Quota7dForecast } from "@/components/quota-7d-forecast";
-import { Sparkline5hCycles } from "@/components/sparkline-5h-cycles";
 
 function StatBox({ label, value, suffix, warn, tooltip }: { label: string; value: string | number; suffix?: string; warn?: boolean; tooltip?: string }) {
   return (
@@ -360,15 +359,7 @@ export function DashboardEfficiency({ range, seatIds }: { range: DashboardRange;
           </div>
         </div>
 
-        {/* ═══ BOTTOM: Sparkline (full width) ═══ */}
-        {data?.sparkline && data.sparkline.length >= 2 && (
-          <div className="pt-2 border-t border-border/30">
-            <div className="flex items-baseline justify-between gap-2 mb-1">
-              <p className="text-[10px] font-medium text-muted-foreground">Biến động 5h peak</p>
-            </div>
-            <Sparkline5hCycles data={data.sparkline} />
-          </div>
-        )}
+
       </CardContent>
     </Card>
   );
