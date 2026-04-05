@@ -18,6 +18,7 @@ export interface UserSettings {
   alert_settings: UserAlertSettings | null;
   push_enabled: boolean;
   dashboard_filter_seat_ids: string[];
+  dashboard_default_range: import("@/hooks/use-dashboard").DashboardRange;
   available_seats: AvailableSeat[];
 }
 
@@ -39,6 +40,7 @@ export function useUpdateUserSettings() {
       alert_settings?: UserAlertSettings;
       push_enabled?: boolean;
       dashboard_filter_seat_ids?: string[];
+      dashboard_default_range?: import("@/hooks/use-dashboard").DashboardRange;
     }) => api.put("/api/user/settings", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["user-settings"] });

@@ -62,10 +62,11 @@ function SeatLeaderboard({ seats, range }: { seats: import("@/hooks/use-dashboar
   const sorted = [...seats].sort((a, b) => b.avg_utilization - a.avg_utilization);
   const maxUtil = Math.max(...sorted.map(s => s.avg_utilization), 1);
   return (
-    <div className="pt-2 border-t border-border/20">
-      <p className="text-[10px] font-medium text-muted-foreground mb-1.5" title="Xếp hạng theo trung bình peak 5h% qua các chu kỳ đã đóng. Nw = số chu kỳ (window) đã đóng.">
+    <div>
+      <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 border-b border-border/30 pb-1.5 mb-2" title="Xếp hạng theo trung bình peak 5h% qua các chu kỳ đã đóng. Nw = số chu kỳ (window) đã đóng.">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
         Xếp hạng tận dụng 5h TB · {RANGE_LABEL[range]}
-      </p>
+      </h3>
       <div className="space-y-1">
         {sorted.map((seat, i) => {
           const barW = Math.max(2, (seat.avg_utilization / maxUtil) * 100);
@@ -350,15 +351,13 @@ export function DashboardEfficiency({ range, seatIds }: { range: DashboardRange;
             {data?.quota_forecast && (
               <Quota7dForecast seats={data.quota_forecast.seven_day_seats ?? []} />
             )}
-
-            {/* Ranking inline (no extra section header) */}
-            {/* Seat leaderboard — single ranked list */}
-            {data?.perSeat && data.perSeat.length > 0 && (
-              <SeatLeaderboard seats={data.perSeat} range={range} />
-            )}
           </div>
         </div>
 
+        {/* ═══ BOTTOM: Xếp hạng tận dụng 5h (separate section) ═══ */}
+        {data?.perSeat && data.perSeat.length > 0 && (
+          <SeatLeaderboard seats={data.perSeat} range={range} />
+        )}
 
       </CardContent>
     </Card>

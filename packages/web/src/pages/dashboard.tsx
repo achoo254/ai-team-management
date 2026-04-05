@@ -25,7 +25,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 type TabValue = "detail" | "overview";
 
 export default function DashboardPage() {
-  const [range, setRange] = useState<DashboardRange>("month");
+  const [range, setRange] = useState<DashboardRange>("day");
   const [seatIds, setSeatIds] = useState<string[]>([]);
   const { user } = useAuth();
   const { data } = useDashboardEnhanced(range, seatIds);
@@ -34,11 +34,12 @@ export default function DashboardPage() {
   const updateSettings = useUpdateUserSettings();
   const initialized = useRef(false);
 
-  // Load persisted filter once on mount
+  // Load persisted filters once on mount
   useEffect(() => {
     if (userSettings && !initialized.current) {
       const saved = userSettings.dashboard_filter_seat_ids ?? [];
       if (saved.length > 0) setSeatIds(saved);
+      if (userSettings.dashboard_default_range) setRange(userSettings.dashboard_default_range);
       initialized.current = true;
     }
   }, [userSettings]);
@@ -51,6 +52,19 @@ export default function DashboardPage() {
       clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
         updateSettings.mutate({ dashboard_filter_seat_ids: ids });
+      }, 1000);
+    },
+    [updateSettings],
+  );
+
+  // Persist range change
+  const rangeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const handleRangeChange = useCallback(
+    (r: DashboardRange) => {
+      setRange(r);
+      clearTimeout(rangeTimer.current);
+      rangeTimer.current = setTimeout(() => {
+        updateSettings.mutate({ dashboard_default_range: r });
       }, 1000);
     },
     [updateSettings],
@@ -108,7 +122,7 @@ export default function DashboardPage() {
         <TabsContent value="detail" className="space-y-6 mt-4">
           <div className="flex flex-wrap items-center justify-end gap-2">
             <DashboardSeatFilter value={seatIds} onChange={handleSeatFilterChange} />
-            <DashboardRangeFilter value={range} onChange={setRange} />
+            <DashboardRangeFilter value={range} onChange={handleRangeChange} />
           </div>
 
           {/* Row 1: Key metrics */}

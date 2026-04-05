@@ -37,6 +37,7 @@ export interface IUser extends Document {
   notification_settings?: INotificationSettings
   alert_settings?: IAlertSettings
   dashboard_filter_seat_ids?: Types.ObjectId[]
+  dashboard_default_range?: 'day' | 'week' | 'month' | '3month' | '6month'
   fcm_tokens: string[]
   push_enabled: boolean
   created_at: Date
@@ -78,6 +79,7 @@ const userSchema = new Schema<IUser>(
       fleet_util_threshold_days: { type: Number, default: null },
     },
     dashboard_filter_seat_ids: [{ type: Schema.Types.ObjectId, ref: 'Seat' }],
+    dashboard_default_range: { type: String, enum: ['day', 'week', 'month', '3month', '6month'], default: 'day' },
     fcm_tokens: { type: [String], default: [] },
     push_enabled: { type: Boolean, default: false },
   },
