@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CredentialPathGuide } from "@/components/credential-path-guide";
 import { parseCredentialJson, type ParsedCredential } from "@repo/shared/credential-parser";
 import { usePreviewSeatToken, type PreviewTokenResponse, type CreateSeatPayload, type Seat } from "@/hooks/use-seats";
+import { SeatRestoreBanner } from "@/components/seat-restore-banner";
 
 export type SeatFormSubmit =
   | { mode: "create"; data: CreateSeatPayload }
@@ -80,10 +81,10 @@ function EditMode({ open, onClose, onSubmit, loading, initial }: Props & { initi
             />
             <div className="grid gap-0.5">
               <label htmlFor="edit-include-in-overview" className="text-sm font-medium cursor-pointer">
-                Đưa vào báo cáo tổng quan
+                Tính vào thống kê đội seat
               </label>
               <p className="text-xs text-muted-foreground">
-                Seat này sẽ xuất hiện trong tab Tổng quan của Dashboard
+                Dữ liệu seat sẽ được tính vào mức sử dụng, lãng phí, và báo cáo tuần
               </p>
             </div>
           </div>
@@ -113,6 +114,8 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
   const [manualEmail, setManualEmail] = useState("");
   const [labelOverride, setLabelOverride] = useState("");
   const [maxUsers, setMaxUsers] = useState(2);
+  const [includeInOverview, setIncludeInOverview] = useState(true);
+  const [restorableSeat, setRestorableSeat] = useState<PreviewTokenResponse['restorable_seat']>(null);
 
   const preview = usePreviewSeatToken();
 
@@ -122,6 +125,7 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
       setRawJson(""); setParsed(null); setParseInvalid(false);
       setProfile(null); setProfileError(null);
       setManualMode(false); setManualEmail(""); setLabelOverride(""); setMaxUsers(2);
+      setIncludeInOverview(true); setRestorableSeat(null);
     }
   }, [open]);
 
@@ -139,8 +143,8 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
     setProfileError(null);
     const t = setTimeout(() => {
       preview.mutate(rawJson.trim(), {
-        onSuccess: (data) => { setProfile(data); setProfileError(null); },
-        onError: (e: Error) => { setProfile(null); setProfileError(e.message || "Không lấy được profile"); },
+        onSuccess: (data) => { setProfile(data); setProfileError(null); setRestorableSeat(data.restorable_seat ?? null); },
+        onError: (e: Error) => { setProfile(null); setProfileError(e.message || "Không lấy được profile"); setRestorableSeat(null); },
       });
     }, PROFILE_DEBOUNCE_MS);
     return () => clearTimeout(t);
@@ -160,7 +164,7 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
   const effectiveEmail = manualMode ? manualEmail : profile?.account.email;
   const effectiveLabelDefault = manualMode ? labelOverride : profile?.account.full_name ?? "";
   const canSubmit =
-    parsed && !duplicate && !preview.isPending && !loading && maxUsers >= 1 && (
+    parsed && !duplicate && !restorableSeat && !preview.isPending && !loading && maxUsers >= 1 && (
       manualMode ? !!manualEmail.trim() && !!labelOverride.trim() : !!profile
     );
 
@@ -169,6 +173,7 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
     const payload: CreateSeatPayload = {
       credential_json: rawJson.trim(),
       max_users: maxUsers,
+      include_in_overview: includeInOverview,
       ...(labelOverride ? { label: labelOverride } : {}),
       ...(manualMode ? { manual_mode: true, email: manualEmail } : {}),
     };
@@ -177,7 +182,7 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Thêm Seat</DialogTitle></DialogHeader>
 
         <div className="space-y-4">
@@ -245,6 +250,40 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
             </div>
           )}
 
+          {/* Restore banner — shown when soft-deleted seat matches */}
+          {restorableSeat && !duplicate && (
+            <SeatRestoreBanner
+              seat={restorableSeat}
+              loading={loading}
+              onRestore={() => {
+                if (!parsed) return;
+                onSubmit({
+                  mode: "create",
+                  data: {
+                    credential_json: rawJson.trim(),
+                    max_users: maxUsers,
+                    include_in_overview: includeInOverview,
+                    ...(labelOverride ? { label: labelOverride } : {}),
+                    restore_seat_id: restorableSeat._id,
+                  },
+                });
+              }}
+              onCreateNew={() => {
+                if (!parsed) return;
+                onSubmit({
+                  mode: "create",
+                  data: {
+                    credential_json: rawJson.trim(),
+                    max_users: maxUsers,
+                    include_in_overview: includeInOverview,
+                    ...(labelOverride ? { label: labelOverride } : {}),
+                    force_new: true,
+                  },
+                });
+              }}
+            />
+          )}
+
           {/* Manual mode fields */}
           {manualMode && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-3">
@@ -282,6 +321,23 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
                   Seat sẽ được tạo với email: <code>{effectiveEmail}</code>
                 </div>
               )}
+              <div className="flex items-start gap-3 rounded-md border p-3">
+                <input
+                  id="create-include-in-overview"
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+                  checked={includeInOverview}
+                  onChange={e => setIncludeInOverview(e.target.checked)}
+                />
+                <div className="grid gap-0.5">
+                  <label htmlFor="create-include-in-overview" className="text-sm font-medium cursor-pointer">
+                    Đưa vào báo cáo tổng quan
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Seat này sẽ xuất hiện trong tab Tổng quan của Dashboard
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -7,6 +7,26 @@ export interface OAuthCredentialMeta {
   rate_limit_tier: string | null
 }
 
+export interface SeatProfile {
+  account_name: string | null
+  display_name: string | null
+  org_name: string | null
+  org_type: string | null
+  billing_type: string | null
+  rate_limit_tier: string | null
+  subscription_status: string | null
+  has_claude_max: boolean
+  has_claude_pro: boolean
+  fetched_at: string | null  // ISO string on wire
+}
+
+export interface RestorableSeat {
+  _id: string
+  label: string
+  deleted_at: string
+  has_history: boolean  // true if usage_snapshots exist
+}
+
 export interface Seat {
   _id: string
   email: string
@@ -22,6 +42,7 @@ export interface Seat {
   last_fetched_at?: string | null
   last_fetch_error?: string | null
   last_refreshed_at?: string | null
+  profile?: SeatProfile | null
   created_at: string
 }
 

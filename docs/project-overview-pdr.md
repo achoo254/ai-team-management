@@ -14,9 +14,14 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 ### 1. Seat Management
 - Create/update/delete Claude Teams seats
+- Soft-delete with restore capability (restore_seat_id)
+- Admin force-new mode: cascade-delete old seat + create fresh (force_new)
+- Auto-populate seat profile on token setup (account_name, org_name, rate_limit_tier, subscription status)
+- Get/refresh cached profile (6h staleness threshold)
 - Assign seats to dev or mkt team
 - Track seat capacity (max users per seat)
 - View seat status and current users
+- Admin overview toggle (include_in_overview) for BLD metrics
 
 ### 2. Scheduling (Hourly)
 - Define hourly time slots (start_hour to end_hour per day)
@@ -123,6 +128,10 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 ### Current State (Done)
 - Seat CRUD + team assignment + ownership model
+- Seat soft-delete with restore capability (restore_seat_id, force_new)
+- Seat profile cache (account_name, org_name, rate_limit_tier, subscription_status)
+- Profile auto-refresh on token updates + manual refresh endpoint (6h staleness)
+- Seat preview API (POST /preview-token) for credential validation + duplicate detection
 - User management (create, update, delete, active status)
 - Per-user alert settings and subscriptions (watched_seat_ids)
 - Schedule CRUD with conflict prevention (hourly time slots + budget allocation)
@@ -137,6 +146,7 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Usage snapshots with 90-day TTL
 - Real-time usage metrics dashboard
 - Active session tracking for budget alerts
+- Vietnamese UI for seat restore flow (choice banner)
 
 ### Potential Improvements (Phase 2)
 

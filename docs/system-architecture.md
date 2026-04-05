@@ -92,16 +92,19 @@ Subsequent requests: JWT read from cookie or Authorization header
 **Route Structure** (8 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
-- `routes/seats.ts` — Seat CRUD (owner auto-set), user assignment, token management, credentials export
-  - `POST /seats` — Any auth user (auto-sets owner to req.user._id)
+- `routes/seats.ts` — Seat CRUD (owner auto-set), user assignment, token management, credentials export, profile cache
+  - `POST /seats` — Any auth user (auto-sets owner); supports `restore_seat_id` (undelete) or `force_new` (admin-only, cascade-delete old)
   - `GET /seats` — List all seats with owner + assigned users
   - `GET /seats/available-users` — List active users for assignment
   - `GET /seats/:id/credentials/export` — Export single seat (owner only, no admin bypass)
+  - `GET /seats/:id/profile` — Return cached profile, auto-refresh if stale >6h
+  - `POST /seats/:id/profile/refresh` — Force-refresh profile from Anthropic OAuth endpoint
+  - `POST /seats/preview-token` — Preview credential JSON: parse + fetch profile + check duplicates/restorable
   - `PUT /seats/:id` — Update seat details (owner or admin via requireSeatOwnerOrAdmin)
-  - `DELETE /seats/:id` — Delete seat (owner or admin)
+  - `DELETE /seats/:id` — Soft-delete seat (owner or admin); allow restore via restore_seat_id
   - `POST /seats/:id/assign` — Assign user (owner or admin)
   - `DELETE /seats/:id/unassign/:userId` — Unassign user (owner or admin)
-  - `PUT /seats/:id/token` — Set/update credential (owner or admin)
+  - `PUT /seats/:id/token` — Set/update credential + auto-populate profile (owner or admin)
   - `PUT /seats/:id/transfer` — Transfer ownership to another user (admin only)
 - `routes/admin.ts` — User management, manual alert check trigger
 - `routes/schedules.ts` — Schedule CRUD with conflict prevention, hourly time slots, budget allocation
@@ -129,11 +132,10 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```typescript
 {
   _id: ObjectId,
-  email: String (required, unique),
+  email: String (required, unique per non-deleted seat),
   label: String (required),
   owner_id: ObjectId | null (ref: User, index: true),
   max_users: Number (default: 3),
-  owner_id: ObjectId | null (ref: User, index: true),
   oauth_credential: {
     access_token: String | null (encrypted AES-256-GCM),
     refresh_token: String | null (encrypted),
@@ -142,10 +144,24 @@ Subsequent requests: JWT read from cookie or Authorization header
     subscription_type: String | null,
     rate_limit_tier: String | null
   } | null (select: false),
+  profile: {
+    account_name: String | null,
+    display_name: String | null,
+    org_name: String | null,
+    org_type: String | null,
+    billing_type: String | null,
+    rate_limit_tier: String | null,
+    subscription_status: String | null,
+    has_claude_max: Boolean,
+    has_claude_pro: Boolean,
+    fetched_at: Date | null
+  } | null (auto-populated on token set, stale after 6h),
   token_active: Boolean (default: false),
   last_fetched_at: Date | null,
   last_fetch_error: String | null,
   last_refreshed_at: Date | null,
+  include_in_overview: Boolean (admin/owner toggle for dashboard visibility),
+  deleted_at: Date | null (soft delete for restore flow; indexed),
   created_at: Date
 }
 ```
@@ -436,19 +452,37 @@ User: Resolve alert via PUT /api/alerts/:id/resolve
 
 ### Seat Management Flow
 ```
-Any Auth User: POST /api/seats { email, label, max_users }
+User: POST /api/seats/preview-token { credential_json }
     ↓
-Backend: Validate unique email, create Seat document with owner_id = req.user._id
+Backend: Parse JSON → Fetch OAuth profile → Check for duplicates + soft-deleted seats with same email
+    ↓
+Response: { account, organization, duplicate_seat_id, restorable_seat? }
+    ↓
+User: If restorable_seat exists, show Vietnamese choice banner (restore vs. create new)
+    ↓
+User: POST /api/seats { credential_json, max_users, restore_seat_id? OR force_new? }
+    ↓
+Backend: If restore_seat_id — undelete seat via atomic findOneAndUpdate (set deleted_at: null)
+    ↓
+Backend: If force_new — cascade hard-delete old + create fresh (admin only)
+    ↓
+Backend: Auto-populate profile from OAuth response (account_name, org_name, rate_limit_tier, etc.)
+    ↓
+Response: { _id, email, label, profile, restored?: true }
     ↓
 Owner/Admin: Edit → PUT /api/seats/:id (allowed via requireSeatOwnerOrAdmin)
     ↓
-Owner/Admin: Delete → DELETE /api/seats/:id (cascade-safe, unassigns users, clears schedules)
+Owner/Admin: Soft-Delete → DELETE /api/seats/:id (sets deleted_at; allows restore)
     ↓
 Owner/Admin: Assign → POST /api/seats/:id/assign { userId } (add to seat)
     ↓
 Owner/Admin: Unassign → DELETE /api/seats/:id/unassign/:userId (remove + clear schedules)
     ↓
-Owner/Admin: Credential → PUT /api/seats/:id/token { access_token, ... } (encrypted storage)
+Owner/Admin: Token Update → PUT /api/seats/:id/token { credential_json, ... } (encrypts + auto-refreshes profile)
+    ↓
+Owner/Admin: Refresh Profile → POST /api/seats/:id/profile/refresh (force fetch from Anthropic)
+    ↓
+Owner/Admin: Get Profile → GET /api/seats/:id/profile (cached, auto-refresh if >6h stale)
     ↓
 Owner/Admin: Export Credential → GET /api/seats/:id/credentials/export (audit logged)
     ↓
@@ -562,14 +596,17 @@ canDeleteEntry(entry): bool — Can delete specific entry (user-based)
 
 **Seat Management**:
 ```
-POST   /api/seats                        [authenticate] → Any user can create seat (becomes owner)
-GET    /api/seats                        [authenticate] → All users see all seats
+POST   /api/seats                        [authenticate] → Any user can create/restore seat (becomes owner); force_new requires admin
+POST   /api/seats/preview-token          [authenticate] → Check credential validity + duplicates/restorable
+GET    /api/seats                        [authenticate] → All users see all seats (non-deleted)
+GET    /api/seats/:id/profile            [authenticate, requireSeatOwnerOrAdmin] → Get cached profile
+POST   /api/seats/:id/profile/refresh    [authenticate, requireSeatOwnerOrAdmin] → Force-refresh from Anthropic
 GET    /api/seats/:id/credentials/export [authenticate, requireSeatOwner] → OWNER ONLY (strict)
 PUT    /api/seats/:id                    [authenticate, requireSeatOwnerOrAdmin]
-DELETE /api/seats/:id                    [authenticate, requireSeatOwnerOrAdmin]
+DELETE /api/seats/:id                    [authenticate, requireSeatOwnerOrAdmin] → Soft-delete
 POST   /api/seats/:id/assign            [authenticate, requireSeatOwnerOrAdmin]
 DELETE /api/seats/:id/unassign/:userId   [authenticate, requireSeatOwnerOrAdmin]
-PUT    /api/seats/:id/token              [authenticate, requireSeatOwnerOrAdmin]
+PUT    /api/seats/:id/token              [authenticate, requireSeatOwnerOrAdmin] → Updates + auto-refresh profile
 DELETE /api/seats/:id/token              [authenticate, requireSeatOwnerOrAdmin]
 PUT    /api/seats/:id/transfer           [authenticate, requireAdmin] → Admin only
 ```

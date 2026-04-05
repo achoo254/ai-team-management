@@ -6,7 +6,9 @@ import { encrypt, decrypt } from '../lib/encryption.js'
 import { User } from '../models/user.js'
 import { Schedule } from '../models/schedule.js'
 import { parseCredentialJson, type ParsedCredential } from '@repo/shared/credential-parser'
-import { fetchOAuthProfile, OAuthProfileError, type OAuthProfile } from '../services/anthropic-service.js'
+import { fetchOAuthProfile, OAuthProfileError, toProfileCache, type OAuthProfile } from '../services/anthropic-service.js'
+import { UsageSnapshot } from '../models/usage-snapshot.js'
+import { cascadeHardDelete } from '../services/seat-cascade-delete.js'
 
 const router = Router()
 
@@ -153,6 +155,65 @@ router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requ
   }
 })
 
+const PROFILE_STALE_MS = 6 * 60 * 60 * 1000 // 6 hours
+
+// GET /api/seats/:id/profile — return cached profile, auto-refresh if stale >6h
+router.get('/:id/profile', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
+  const seat = await Seat.findById(req.params.id).select('+oauth_credential').lean()
+  if (!seat) { res.status(404).json({ error: 'Seat not found' }); return }
+
+  const isStale = !seat.profile?.fetched_at ||
+    Date.now() - new Date(seat.profile.fetched_at).getTime() > PROFILE_STALE_MS
+
+  if (!isStale && seat.profile) {
+    res.json({ profile: seat.profile })
+    return
+  }
+
+  // Auto-refresh if token active
+  if (!seat.token_active || !seat.oauth_credential?.access_token) {
+    res.json({ profile: seat.profile ?? null, stale: true })
+    return
+  }
+
+  try {
+    const token = decrypt(seat.oauth_credential.access_token)
+    const oauthProfile = await fetchOAuthProfile(token)
+    const fresh = toProfileCache(oauthProfile)
+    await Seat.findByIdAndUpdate(req.params.id, { profile: fresh })
+    res.json({ profile: fresh })
+  } catch {
+    // Refresh failed — return cached profile as stale fallback
+    res.json({ profile: seat.profile ?? null, stale: true, refresh_error: true })
+  }
+})
+
+// POST /api/seats/:id/profile/refresh — force-refresh profile from Anthropic
+router.post('/:id/profile/refresh', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin(), async (req, res) => {
+  try {
+    const seat = await Seat.findById(req.params.id).select('+oauth_credential')
+    if (!seat) { res.status(404).json({ error: 'Seat not found' }); return }
+    if (!seat.token_active || !seat.oauth_credential?.access_token) {
+      res.status(422).json({ error: 'No active token — cannot refresh profile' })
+      return
+    }
+
+    const token = decrypt(seat.oauth_credential.access_token)
+    const oauthProfile = await fetchOAuthProfile(token)
+    const fresh = toProfileCache(oauthProfile)
+    seat.profile = fresh as any
+    await seat.save()
+    res.json({ profile: fresh })
+  } catch (error) {
+    if (error instanceof OAuthProfileError && error.status === 401) {
+      res.status(422).json({ error: 'Token invalid or expired' })
+      return
+    }
+    const message = error instanceof Error ? error.message : 'Profile refresh failed'
+    res.status(502).json({ error: message })
+  }
+})
+
 // POST /api/seats/preview-token — preview credential: parse + fetch profile + check duplicate.
 // Does NOT persist; used by FE before showing the create button.
 router.post('/preview-token', authenticate, async (req, res) => {
@@ -181,6 +242,24 @@ router.post('/preview-token', authenticate, async (req, res) => {
     }
 
     const duplicate = await Seat.findOne({ email: profile.account.email }).select('_id').lean()
+
+    // Check for soft-deleted seat with matching email
+    const softDeleted = await Seat.findOne(
+      { email: profile.account.email, deleted_at: { $ne: null } },
+      '_id label deleted_at',
+    ).lean()
+
+    let restorable_seat = null
+    if (softDeleted) {
+      const snapCount = await UsageSnapshot.countDocuments({ seat_id: softDeleted._id })
+      restorable_seat = {
+        _id: String(softDeleted._id),
+        label: softDeleted.label,
+        deleted_at: softDeleted.deleted_at!.toISOString(),
+        has_history: snapCount > 0,
+      }
+    }
+
     res.json({
       account: {
         email: profile.account.email,
@@ -195,6 +274,7 @@ router.post('/preview-token', authenticate, async (req, res) => {
         subscription_status: profile.organization.subscription_status,
       },
       duplicate_seat_id: duplicate ? String(duplicate._id) : null,
+      restorable_seat,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -205,14 +285,15 @@ router.post('/preview-token', authenticate, async (req, res) => {
 // POST /api/seats — create seat token-first (any authenticated user becomes owner).
 // Required: credential_json + max_users. Auto-fetches profile to fill email + default label.
 // manual_mode=true skips profile API and requires email+label in body.
+// restore_seat_id: restore a soft-deleted seat instead of creating new.
+// force_new: cascade-delete soft-deleted seat with same email, then create fresh.
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { credential_json, max_users, label, manual_mode, email: bodyEmail } = req.body as {
-      credential_json?: string
-      max_users?: number
-      label?: string
-      manual_mode?: boolean
-      email?: string
+    const { credential_json, max_users, label, manual_mode, email: bodyEmail,
+            include_in_overview, restore_seat_id, force_new } = req.body as {
+      credential_json?: string; max_users?: number; label?: string
+      manual_mode?: boolean; email?: string; include_in_overview?: boolean
+      restore_seat_id?: string; force_new?: boolean
     }
 
     if (!credential_json || typeof credential_json !== 'string') {
@@ -230,8 +311,60 @@ router.post('/', authenticate, async (req, res) => {
       return
     }
 
+    // ── CASE B: Restore existing soft-deleted seat (atomic to prevent race) ──
+    if (restore_seat_id) {
+      if (!mongoose.Types.ObjectId.isValid(restore_seat_id)) {
+        res.status(400).json({ error: 'Invalid restore_seat_id' }); return
+      }
+
+      // Best-effort profile fetch before atomic update
+      let profileCache: ReturnType<typeof toProfileCache> | null = null
+      try {
+        const oauthProfile = await fetchOAuthProfile(parsed.accessToken)
+        profileCache = toProfileCache(oauthProfile)
+      } catch { /* keep existing profile if any */ }
+
+      const updateFields: Record<string, unknown> = {
+        deleted_at: null,
+        oauth_credential: toCredentialDoc(parsed),
+        owner_id: req.user!._id,
+        token_active: true,
+        max_users,
+        last_fetch_error: null,
+      }
+      if (label) updateFields.label = label
+      if (profileCache) updateFields.profile = profileCache
+
+      let restored
+      try {
+        restored = await Seat.findOneAndUpdate(
+          { _id: restore_seat_id, deleted_at: { $ne: null } },
+          { $set: updateFields },
+          { new: true },
+        )
+      } catch (err: any) {
+        // E11000 = active seat with same email already exists
+        if (err?.code === 11000) {
+          res.status(409).json({ error: 'Seat với email này đã tồn tại' }); return
+        }
+        throw err
+      }
+      if (!restored) {
+        res.status(409).json({ error: 'Seat đã được khôi phục hoặc đã bị xóa vĩnh viễn' }); return
+      }
+
+      // Re-seed owner's watched_seats
+      await User.findByIdAndUpdate(req.user!._id, {
+        $addToSet: { watched_seats: { seat_id: restored._id, threshold_5h_pct: 90, threshold_7d_pct: 85 } },
+      })
+
+      res.json({ restored: true, seat: restored })
+      return
+    }
+
     let email: string
     let defaultLabel: string
+    let profileCache: ReturnType<typeof toProfileCache> | null = null
 
     if (manual_mode === true) {
       if (!bodyEmail || !label) {
@@ -242,9 +375,10 @@ router.post('/', authenticate, async (req, res) => {
       defaultLabel = label
     } else {
       try {
-        const profile = await fetchOAuthProfile(parsed.accessToken)
-        email = profile.account.email
-        defaultLabel = profile.account.full_name
+        const oauthProfile = await fetchOAuthProfile(parsed.accessToken)
+        email = oauthProfile.account.email
+        defaultLabel = oauthProfile.account.full_name
+        profileCache = toProfileCache(oauthProfile)
       } catch (e) {
         if (e instanceof OAuthProfileError && e.status === 401) {
           res.status(422).json({ error: 'Token invalid or expired' })
@@ -255,6 +389,7 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
 
+    // Check active duplicate
     const existing = await Seat.findOne({ email }).select('_id').lean()
     if (existing) {
       res.status(409).json({
@@ -264,6 +399,44 @@ router.post('/', authenticate, async (req, res) => {
       return
     }
 
+    // ── CASE C: Force-new — hard-delete soft-deleted seat first (admin only) ──
+    if (force_new) {
+      if (req.user!.role !== 'admin') {
+        res.status(403).json({ error: 'Chỉ admin mới được tạo mới (xóa vĩnh viễn seat cũ)' }); return
+      }
+      const softDeleted = await Seat.findOne(
+        { email, deleted_at: { $ne: null } }, '_id',
+      ).lean()
+      if (softDeleted) {
+        // Clean up user references before cascade delete
+        await User.updateMany(
+          { $or: [{ seat_ids: softDeleted._id }, { 'watched_seats.seat_id': softDeleted._id }] },
+          { $pull: { seat_ids: softDeleted._id, watched_seats: { seat_id: softDeleted._id } } },
+        )
+        await cascadeHardDelete([softDeleted._id])
+      }
+    } else {
+      // ── CASE A: Check for restorable seat ──
+      const softDeleted = await Seat.findOne(
+        { email, deleted_at: { $ne: null } },
+        '_id label deleted_at',
+      ).lean()
+      if (softDeleted) {
+        const snapCount = await UsageSnapshot.countDocuments({ seat_id: softDeleted._id })
+        res.json({
+          restorable: true,
+          deleted_seat: {
+            _id: String(softDeleted._id),
+            label: softDeleted.label,
+            deleted_at: softDeleted.deleted_at!.toISOString(),
+            has_history: snapCount > 0,
+          },
+        })
+        return
+      }
+    }
+
+    // ── Normal create ──
     const seat = await Seat.create({
       email,
       label: label || defaultLabel,
@@ -271,6 +444,8 @@ router.post('/', authenticate, async (req, res) => {
       owner_id: req.user!._id,
       oauth_credential: toCredentialDoc(parsed),
       token_active: true,
+      include_in_overview: include_in_overview ?? true,
+      profile: profileCache,
     })
     // Auto-seed owner's watched_seats so alerts appear in their feed
     await User.findByIdAndUpdate(req.user!._id, {
@@ -451,6 +626,12 @@ router.put('/:id/token', authenticate, validateObjectId('id'), requireSeatOwnerO
       res.status(404).json({ error: 'Seat not found' })
       return
     }
+
+    // Best-effort profile update — don't fail the token update
+    try {
+      const oauthProfile = await fetchOAuthProfile(cred.access_token)
+      await Seat.findByIdAndUpdate(id, { profile: toProfileCache(oauthProfile) })
+    } catch { /* profile will be fetched lazily */ }
 
     res.json({ message: 'Credential updated', seat })
   } catch (error) {

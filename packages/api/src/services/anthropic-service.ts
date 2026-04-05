@@ -77,6 +77,22 @@ export class OAuthProfileError extends Error {
   }
 }
 
+/** Map OAuthProfile API response → flat profile cache object for Seat.profile */
+export function toProfileCache(p: OAuthProfile) {
+  return {
+    account_name: p.account.full_name,
+    display_name: p.account.display_name,
+    org_name: p.organization.name,
+    org_type: p.organization.organization_type,
+    billing_type: p.organization.billing_type,
+    rate_limit_tier: p.organization.rate_limit_tier,
+    subscription_status: p.organization.subscription_status,
+    has_claude_max: p.account.has_claude_max,
+    has_claude_pro: p.account.has_claude_pro,
+    fetched_at: new Date(),
+  }
+}
+
 /** Fetch OAuth profile from Anthropic for a given access token (user OAuth, not admin key). */
 export async function fetchOAuthProfile(accessToken: string): Promise<OAuthProfile> {
   const res = await fetch('https://api.anthropic.com/api/oauth/profile', {

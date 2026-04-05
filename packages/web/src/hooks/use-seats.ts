@@ -27,22 +27,36 @@ export function useSeats() {
 export interface CreateSeatPayload {
   credential_json: string;
   max_users: number;
+  include_in_overview?: boolean;
   label?: string;
   manual_mode?: boolean;
   email?: string;
+  restore_seat_id?: string;
+  force_new?: boolean;
 }
 
 export interface PreviewTokenResponse {
   account: { email: string; full_name: string; has_claude_max: boolean; has_claude_pro: boolean };
   organization: { name: string; organization_type: string; rate_limit_tier: string; subscription_status: string };
   duplicate_seat_id: string | null;
+  restorable_seat?: {
+    _id: string;
+    label: string;
+    deleted_at: string;
+    has_history: boolean;
+  } | null;
 }
 
 export function useCreateSeat() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateSeatPayload) => api.post("/api/seats", body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Tạo seat thành công"); },
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: KEY });
+      // Don't toast for restorable response — UI handles it
+      if (data?.restorable) return;
+      toast.success(data?.restored ? "Khôi phục seat thành công" : "Tạo seat thành công");
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 }

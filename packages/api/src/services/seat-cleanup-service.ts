@@ -1,8 +1,5 @@
 import { Seat } from '../models/seat.js'
-import { UsageSnapshot } from '../models/usage-snapshot.js'
-import { UsageWindow } from '../models/usage-window.js'
-import { Alert } from '../models/alert.js'
-import { SessionMetric } from '../models/session-metric.js'
+import { cascadeHardDelete } from './seat-cascade-delete.js'
 
 const RETENTION_DAYS = 30
 const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000
@@ -25,16 +22,7 @@ export async function cleanupExpiredDeletedSeats(): Promise<void> {
   const ids = expired.map((s) => s._id)
   console.log(`[SeatCleanup] Purging ${expired.length} seat(s) deleted before ${cutoff.toISOString()}`)
 
-  const [snapshots, windows, alerts, metrics, seats] = await Promise.all([
-    UsageSnapshot.deleteMany({ seat_id: { $in: ids } }),
-    UsageWindow.deleteMany({ seat_id: { $in: ids } }),
-    Alert.deleteMany({ seat_id: { $in: ids } }),
-    SessionMetric.deleteMany({ seat_id: { $in: ids } }),
-    Seat.deleteMany({ _id: { $in: ids }, deleted_at: { $ne: null } }),
-  ])
+  await cascadeHardDelete(ids)
 
-  console.log(
-    `[SeatCleanup] Purged — seats: ${seats.deletedCount}, snapshots: ${snapshots.deletedCount}, ` +
-    `windows: ${windows.deletedCount}, alerts: ${alerts.deletedCount}, session_metrics: ${metrics.deletedCount}`,
-  )
+  console.log(`[SeatCleanup] Purged ${expired.length} seat(s) and related data`)
 }

@@ -19,6 +19,18 @@ export interface ISeat extends Document {
   last_fetched_at: Date | null
   last_fetch_error: string | null
   last_refreshed_at: Date | null
+  profile: {
+    account_name: string | null
+    display_name: string | null
+    org_name: string | null
+    org_type: string | null
+    billing_type: string | null
+    rate_limit_tier: string | null
+    subscription_status: string | null
+    has_claude_max: boolean
+    has_claude_pro: boolean
+    fetched_at: Date | null
+  } | null
   created_at: Date
   deleted_at: Date | null
   /** When true, seat is included in admin overview / BLD metrics. Toggle by admin or seat owner. */
@@ -48,6 +60,21 @@ const seatSchema = new Schema<ISeat>(
     last_fetched_at: { type: Date, default: null },
     last_fetch_error: { type: String, default: null },
     last_refreshed_at: { type: Date, default: null },
+    profile: {
+      type: {
+        account_name: { type: String, default: null },
+        display_name: { type: String, default: null },
+        org_name: { type: String, default: null },
+        org_type: { type: String, default: null },
+        billing_type: { type: String, default: null },
+        rate_limit_tier: { type: String, default: null },
+        subscription_status: { type: String, default: null },
+        has_claude_max: { type: Boolean, default: false },
+        has_claude_pro: { type: Boolean, default: false },
+        fetched_at: { type: Date, default: null },
+      },
+      default: null,
+    },
     deleted_at: { type: Date, default: null, index: true },
   },
   { timestamps: { createdAt: 'created_at', updatedAt: false } },

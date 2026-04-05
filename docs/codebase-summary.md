@@ -31,7 +31,9 @@ quan-ly-team-claude/
 │   │   │   │   ├── alert-service.ts
 │   │   │   │   ├── telegram-service.ts
 │   │   │   │   ├── crypto-service.ts  # AES-256-GCM encryption/decryption
-│   │   │   │   └── usage-collector-service.ts # Collect usage from Anthropic API
+│   │   │   │   ├── usage-collector-service.ts # Collect usage from Anthropic API
+│   │   │   │   ├── anthropic-service.ts # OAuth profile fetch & cache
+│   │   │   │   └── seat-cascade-delete.ts # Hard-delete + cleanup
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── dist/                    # Compiled output (gitignored)
@@ -51,6 +53,8 @@ quan-ly-team-claude/
 │   │   │   ├── components/          # Reusable React components
 │   │   │   │   ├── auth-provider.tsx
 │   │   │   │   ├── seat-card.tsx
+│   │   │   │   ├── seat-form-dialog.tsx # Create/restore seat flow
+│   │   │   │   ├── seat-restore-banner.tsx # Vietnamese restore choice UI
 │   │   │   │   ├── schedule-grid.tsx
 │   │   │   │   ├── dashboard-shell.tsx
 │   │   │   │   └── ...
@@ -133,10 +137,24 @@ quan-ly-team-claude/
     subscription_type: String | null,
     rate_limit_tier: String | null
   } | null (select: false),
+  profile: {
+    account_name: String | null,
+    display_name: String | null,
+    org_name: String | null,
+    org_type: String | null,
+    billing_type: String | null,
+    rate_limit_tier: String | null,
+    subscription_status: String | null,
+    has_claude_max: Boolean,
+    has_claude_pro: Boolean,
+    fetched_at: Date | null
+  } | null (auto-populated, stale after 6h),
   token_active: Boolean (default: false),
   last_fetched_at: Date | null,
   last_fetch_error: String | null,
   last_refreshed_at: Date | null,
+  include_in_overview: Boolean (default: false),
+  deleted_at: Date | null (soft delete, indexed),
   created_at: Date (auto)
 }
 ```
@@ -257,9 +275,12 @@ quan-ly-team-claude/
 - `GET /api/seats` — List all seats with owner + assigned users
 - `GET /api/seats/available-users` — List active users for assignment
 - `GET /api/seats/:id/credentials/export` — Export single seat credentials (owner or admin)
-- `POST /api/seats` — Create seat (auto-sets owner to current user)
+- `GET /api/seats/:id/profile` — Get cached profile, auto-refresh if stale >6h (owner or admin)
+- `POST /api/seats/:id/profile/refresh` — Force-refresh profile from Anthropic (owner or admin)
+- `POST /api/seats` — Create seat (auto-sets owner to current user; supports restore_seat_id or force_new)
+- `POST /api/seats/preview-token` — Preview credential: parse JSON + fetch profile + check duplicates/restorable
 - `PUT /api/seats/:id` — Update seat (owner or admin)
-- `DELETE /api/seats/:id` — Delete seat (owner or admin)
+- `DELETE /api/seats/:id` — Delete seat (soft-delete; owner or admin)
 - `POST /api/seats/:id/assign` — Assign user to seat (owner or admin)
 - `DELETE /api/seats/:id/unassign/:userId` — Unassign user (owner or admin)
 - `PUT /api/seats/:id/token` — Set/update access token (owner or admin)
