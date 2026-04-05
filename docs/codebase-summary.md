@@ -121,6 +121,8 @@ quan-ly-team-claude/
 
 ### Mongoose Models (packages/api/src/models/*.ts)
 
+**Collections (7 total)**: seats, users, schedules, alerts, usage_snapshots, seat_activity_logs, usage_windows
+
 #### Seat
 ```typescript
 {
@@ -188,18 +190,33 @@ quan-ly-team-claude/
 }
 ```
 
-#### Schedule
+#### Schedule (Auto-Generated Activity Patterns)
 ```typescript
 {
   _id: ObjectId (auto),
   seat_id: ObjectId (reference to Seat),
-  user_id: ObjectId (reference to User),
-  day_of_week: Number (0-6),
+  day_of_week: Number (0-6, Sunday=0, Saturday=6),
   start_hour: Number (0-23, inclusive),
   end_hour: Number (0-23, exclusive),
-  usage_budget_pct: Number | null (1-100, null = auto-divide),
+  source: String (enum: 'auto' | 'legacy', default: 'legacy'),
   created_at: Date (auto),
-  // Compound index: (seat_id, day_of_week)
+  // Indexes: (seat_id, day_of_week), (seat_id, source)
+  // Note: Derived from seat activity logs; read-only heatmap display
+}
+```
+
+#### SeatActivityLog (Hourly Activity Tracking)
+```typescript
+{
+  _id: ObjectId (auto),
+  seat_id: ObjectId (reference to Seat),
+  date: Date (start of day in Asia/Ho_Chi_Minh timezone),
+  hour: Number (0-23),
+  is_active: Boolean (true if any usage delta > 0),
+  delta_5h_pct: Number (accumulated 5h usage increase this hour),
+  snapshot_count: Number (count of snapshots with activity),
+  created_at: Date (auto),
+  // Unique index: (seat_id, date, hour) — one record per seat/date/hour
 }
 ```
 
@@ -220,15 +237,16 @@ quan-ly-team-claude/
 ```typescript
 {
   _id: ObjectId (auto),
+  user_id: ObjectId | null (reference to User, dedup key),
   seat_id: ObjectId (reference to Seat),
-  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk']),
+  type: String (enum: ['rate_limit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk']),
+  window: String | null (enum: ['5h', '7d', null], usage window for rate_limit alerts),
   message: String,
-  metadata: Object (optional: session, pct, credits_used, error, delta, budget, user_id, user_name),
-  resolved: Boolean (default: false),
-  resolved_by: String | null,
-  resolved_at: String | null,
+  metadata: Object (context: pct, error, delta, budget, user_id, user_name, etc.),
+  read_by: [ObjectId] (users who marked as read),
+  notified_at: Date | null (when notification was sent, prevents re-notify),
   created_at: Date (auto),
-  // Compound index: (seat_id, type, resolved)
+  // Indexes: (user_id, seat_id, type, window), (seat_id, type, created_at), (read_by), (created_at)
 }
 ```
 
@@ -293,13 +311,13 @@ quan-ly-team-claude/
 - `PUT /api/admin/users/:id` — Update user (admin only)
 - `DELETE /api/admin/users/:id` — Delete user (admin only)
 
-### Schedules (Permission-Based Access Control)
-- `GET /api/schedules` — List schedules with optional ?seatId= filter (filtered by membership + ownership)
-- `GET /api/schedules/today` — Today's schedules (filtered by membership + ownership)
-- `POST /api/schedules/entry` — Create schedule entry (uses permission: canCreate + canCreateForOthers for others)
-- `PUT /api/schedules/entry/:id` — Update entry (uses permission: canEditEntry)
-- `PATCH /api/schedules/swap` — Swap or move entries (uses permission: canSwap)
-- `DELETE /api/schedules/entry/:id` — Delete entry (uses permission: canDeleteEntry)
+### Schedules (Auto-Generated Activity Patterns - Read-Only Heatmap)
+- `GET /api/schedules` — List auto-generated recurring patterns by seat (read-only, filtered by membership + ownership)
+- `GET /api/schedules/today` — Today's patterns for all visible seats (read-only)
+- `GET /api/schedules/heatmap/:seatId` — Aggregated activity heatmap data for N weeks (activity_rate, avg_delta, max_delta per day/hour)
+- `GET /api/schedules/activity-logs` — Raw hourly activity logs with date range filter, pagination
+- `GET /api/schedules/realtime` — Current hour activity status per seat (is_active, current_delta, last_snapshot_at)
+- `POST /api/schedules/regenerate` — Force regenerate all activity patterns (admin only)
 
 ### Usage Snapshots
 - `GET /api/usage-snapshots` — Query snapshots (filter by seatId, date range, limit, offset)
@@ -337,12 +355,12 @@ quan-ly-team-claude/
 6. UI updates via React hooks (useState, useEffect)
 
 ### View Components
-- **Dashboard**: Stats, alerts, quick info
+- **Dashboard**: Stats, alerts, quick info, fleet KPIs, per-seat overview with activity patterns
 - **Seats**: List, create, edit, delete seats + assign users
-- **Schedules**: Assign users to time slots
+- **Schedules**: Auto-generated activity heatmap (read-only), visualized as 7x24 grid per seat, realtime activity status
 - **Usage Metrics**: View real-time usage snapshots + manage tokens
 - **Admin**: User CRUD, system config, alert threshold settings
-- **Alerts**: View, resolve alerts
+- **Alerts**: View, resolve alerts, filter by type/window/seat
 
 ## Authentication Flow
 
@@ -356,12 +374,18 @@ quan-ly-team-claude/
 
 ## Cron Jobs
 
-### Every 5 minutes (Usage Collection & Alert Check)
+### Every 5 minutes (Usage Collection & Activity Tracking)
 - Collects usage metrics from Anthropic API for all seats with active tokens
 - Called via `collectAllUsage()` in usage-collector-service.ts
 - Stores snapshots in usage_snapshots collection (TTL: 90 days)
-- Chains `checkSnapshotAlerts()` to evaluate snapshot-based alerts (rate_limit, extra_credit, token_failure)
-- Chains `checkBudgetAlerts()` to evaluate per-user session budgets (usage_exceeded)
+- Detects hourly activity and updates SeatActivityLog via `detectSeatActivity()` in seat-activity-detector.ts
+- Chains `checkSnapshotAlerts()` to evaluate snapshot-based alerts (rate_limit, token_failure)
+
+### Daily 04:00 Asia/Saigon (Activity Pattern Generation)
+- Analyzes historical activity in SeatActivityLog
+- Generates weekly recurring patterns for each seat via `generateAllPatterns()` in activity-pattern-service.ts
+- Updates Schedule collection with `source='auto'` entries
+- Detects anomalies (unusual activity spikes) via `detectActivityAnomalies()` in activity-anomaly-service.ts
 
 ### Every hour (`0 * * * *`) — Per-User Notification Schedule
 - Checks all users with `notification_settings.report_enabled = true`

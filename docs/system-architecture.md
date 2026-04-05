@@ -34,9 +34,9 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
 - **Connection**: Mongoose 9.3.1 ODM
-- **Collections**: 7 (seats, users, schedules, alerts, usage_snapshots, active_sessions, session_metrics)
-- **Indexing**: Compound indexes on (seat_id, day_of_week), (seat_id, type, resolved), and (seat_id, fetched_at)
-- **TTL**: usage_snapshots collection auto-expires after 90 days
+- **Collections**: 7 (seats, users, schedules, alerts, usage_snapshots, seat_activity_logs, usage_windows)
+- **Indexing**: Compound indexes on (seat_id, day_of_week), (user_id, seat_id, type, window), and (seat_id, fetched_at)
+- **TTL**: usage_snapshots collection auto-expires after 90 days; seat_activity_logs kept for pattern analysis
 
 ### Monorepo & Shared (`packages/shared`)
 - **Package Manager**: pnpm workspaces
@@ -107,17 +107,19 @@ Subsequent requests: JWT read from cookie or Authorization header
   - `PUT /seats/:id/token` — Set/update credential + auto-populate profile (owner or admin)
   - `PUT /seats/:id/transfer` — Transfer ownership to another user (admin only)
 - `routes/admin.ts` — User management, manual alert check trigger
-- `routes/schedules.ts` — Schedule CRUD with conflict prevention, hourly time slots, budget allocation
+- `routes/schedules.ts` — Auto-generated activity patterns (read-only), heatmap aggregation, activity logs, realtime status
 - `routes/alerts.ts` — Alert creation, resolution, listing
 - `routes/usage-snapshots.ts` — Query snapshots, trigger collection
 - `routes/user-settings.ts` — Per-user alert settings, Telegram bot config, notification schedule, test notifications
 
-**Service Layer** (5 files):
-- `services/alert-service.ts` — Alert generation, budget violation checking, session tracking
+**Service Layer**:
+- `services/alert-service.ts` — Alert generation, snapshot-based threshold checking
 - `services/telegram-service.ts` — Telegram message formatting, personal + system bot notifications
-- `services/crypto-service.ts` — AES-256-GCM encryption/decryption for access tokens
 - `services/usage-collector-service.ts` — Fetch usage data from Anthropic API, concurrent collection
-- `services/anthropic-service.ts` — Future Anthropic API integration
+- `services/seat-activity-detector.ts` — Detect hourly activity from usage snapshot deltas, populate SeatActivityLog
+- `services/activity-pattern-service.ts` — Analyze historical activity, generate weekly recurring patterns, update Schedule collection
+- `services/activity-anomaly-service.ts` — Detect unusual activity spikes for anomaly alerts
+- `services/anthropic-service.ts` — Anthropic OAuth profile fetch & caching
 
 **Utility Libraries**:
 - `lib/encryption.ts` — AES-256-GCM encrypt/decrypt for Telegram bot tokens
@@ -195,19 +197,34 @@ Subsequent requests: JWT read from cookie or Authorization header
 }
 ```
 
-#### Schedules
+#### Schedules (Auto-Generated Activity Patterns)
 ```typescript
 {
   _id: ObjectId,
   seat_id: ObjectId (ref: Seat),
-  user_id: ObjectId (ref: User),
   day_of_week: Number (0=Sunday, 6=Saturday),
   start_hour: Number (0-23, inclusive),
   end_hour: Number (0-23, exclusive),
-  usage_budget_pct: Number | null (1-100, auto-divided if null),
+  source: String (enum: 'auto' | 'legacy', auto-generated vs. legacy entries),
   created_at: Date,
-  // Index: (seat_id, day_of_week) compound for efficient queries
-  // Note: Overlaps allowed, detected in application logic
+  // Index: (seat_id, day_of_week), (seat_id, source)
+  // Auto-patterns generated daily by pattern analyzer from seat activity logs
+}
+```
+
+#### SeatActivityLog (Hourly Activity Tracking)
+```typescript
+{
+  _id: ObjectId,
+  seat_id: ObjectId (ref: Seat),
+  date: Date (start of day in Asia/Ho_Chi_Minh),
+  hour: Number (0-23),
+  is_active: Boolean (true if any usage delta > 0),
+  delta_5h_pct: Number (accumulated 5h usage % increase),
+  snapshot_count: Number (snapshots with activity this hour),
+  created_at: Date,
+  // Index: (seat_id, date, hour) unique per seat/day/hour
+  // Populated by 5-min cron, analyzed daily for pattern detection
 }
 ```
 
@@ -215,25 +232,25 @@ Subsequent requests: JWT read from cookie or Authorization header
 ```typescript
 {
   _id: ObjectId,
+  user_id: ObjectId | null (ref: User, primary dedup key),
   seat_id: ObjectId (ref: Seat),
-  type: String (enum: ['rate_limit', 'extra_credit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk']),
+  type: String (enum: ['rate_limit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk']),
+  window: String | null (enum: ['5h', '7d'], for rate_limit alerts),
   message: String,
   metadata: {
-    session?: String ('5h' | '7d' | '7d_sonnet' | '7d_opus'),
     pct?: Number,
-    credits_used?: Number,
-    credits_limit?: Number,
     error?: String,
-    delta?: Number (usage increase during session),
-    budget?: Number (allocated budget %),
-    user_id?: String (user who exceeded budget),
-    user_name?: String (for display)
+    delta?: Number,
+    budget?: Number,
+    user_id?: String,
+    user_name?: String
   },
-  resolved: Boolean,
-  resolved_by: String | null,
-  resolved_at: String | null,
+  read_by: [ObjectId] (users who marked as read),
+  notified_at: Date | null (when notification sent, prevents re-notify),
   created_at: Date,
-  // Index: (seat_id, type, resolved) compound for dedup
+  // Index: (user_id, seat_id, type, window, created_at) primary dedup
+  // Index: (seat_id, type, created_at) for feed queries
+  // Index: (read_by) for user unread queries
 }
 ```
 
@@ -308,13 +325,13 @@ API calls via React Query (TanStack Query)
 - `components/dashboard-shell.tsx` — Main layout shell with sidebar
 
 **Page Components**:
-1. `pages/dashboard.tsx` — Overview stats, recent alerts, summary cards
-2. `pages/usage-log.tsx` — Log weekly usage, view history
-3. `pages/seats.tsx` — List, create, edit, delete seats
-4. `pages/schedules.tsx` — Schedule assignments (day + morning/afternoon)
-5. `pages/alerts.tsx` — View and resolve alerts
+1. `pages/dashboard.tsx` — Overview stats, recent alerts, summary cards, fleet KPIs
+2. `pages/usage-log.tsx` — Usage snapshots & historical metrics with date filtering
+3. `pages/seats.tsx` — List, create, edit, delete seats + assign users
+4. `pages/schedule.tsx` — Auto-generated activity heatmap (7x24 grid), activity logs, realtime status per seat
+5. `pages/alerts.tsx` — View and resolve alerts, filter by type/window/seat
 6. `pages/admin.tsx` — User CRUD, system admin panel
-8. `pages/login.tsx` — Login page with Google sign-in
+7. `pages/login.tsx` — Login page with Google sign-in
 
 **State Management**:
 - React Context for global auth state
@@ -326,28 +343,33 @@ API calls via React Query (TanStack Query)
 
 **Jobs** (via node-cron in `packages/api/src/index.ts`):
 
-1. **Every 5 minutes** — `collectAllUsage()` → `checkSnapshotAlerts()` → `checkBudgetAlerts()`
+1. **Every 5 minutes** — `collectAllUsage()` → `detectSeatActivity()` → `checkSnapshotAlerts()`
    - **collectAllUsage()** from usage-collector-service.ts:
      - Fetches usage metrics from Anthropic API for all seats with active tokens
      - Decrypts stored access tokens (AES-256-GCM)
      - Stores snapshots in usage_snapshots collection with 90-day TTL
      - Logs completion stats and errors per seat
      - Mutex guard prevents overlapping runs
-   - **checkSnapshotAlerts()** from alert-service.ts (chained after collection):
+   - **detectSeatActivity()** from seat-activity-detector.ts (chained after collection):
+     - Analyzes usage snapshot deltas to detect hourly activity
+     - For each seat: calculates is_active, delta_5h_pct for current hour
+     - Upserts SeatActivityLog record (unique: seat_id, date, hour)
+     - Feeds pattern analyzer with activity data
+   - **checkSnapshotAlerts()** from alert-service.ts (chained after activity detection):
      - Evaluates latest UsageSnapshot for each seat
      - For each user watching that seat: checks against user's alert_settings thresholds
-     - Creates alerts for: rate_limit (5h, 7d, 7d_sonnet, 7d_opus), extra_credit, token_failure
-     - Deduplicates: max 1 unresolved alert per (seat_id, type)
+     - Creates alerts for: rate_limit (5h, 7d windows), token_failure
+     - Deduplicates: max 1 unresolved alert per (user_id, seat_id, type, window)
      - Sends Telegram notification to subscribed user via personal bot
-     - Returns count of alerts created
-   - **checkBudgetAlerts()** from alert-service.ts (chained after snapshot alerts):
-     - Finds active schedules (matching current day/hour)
-     - Tracks per-user usage delta during session via ActiveSession baseline snapshot
-     - When delta >= user's usage_budget_pct: creates usage_exceeded alert + sends Telegram
-     - Auto-resolves usage_exceeded when session ends or next user starts
-     - Manages ActiveSession lifecycle (create, update, delete)
 
-2. **Every hour (`0 * * * *)** — `checkAndSendScheduledReports()` from telegram-service.ts
+2. **Daily 04:00 Asia/Saigon** — `generateAllPatterns()` from activity-pattern-service.ts
+   - Analyzes historical activity in SeatActivityLog (past 2-4 weeks)
+   - For each seat: detects recurring weekly patterns (7x24 grid)
+   - Generates Schedule entries with source='auto' (replaces previous auto entries)
+   - Calls `detectActivityAnomalies()` to identify unusual spikes
+   - Returns stats: patterns_generated, anomalies_detected
+
+3. **Every hour (`0 * * * *)** — `checkAndSendScheduledReports()` from telegram-service.ts
    - Finds all users with enabled notification schedule matching current day/hour
    - Generates per-user usage report filtered by seat ownership
    - Admin users see all seats; regular users see only owned/assigned seats
@@ -360,11 +382,13 @@ API calls via React Query (TanStack Query)
    - Sends formatted report to Telegram (system bot)
 
 **Configuration**:
-- `packages/api/src/index.ts` — Cron schedule setup
-- `packages/api/src/services/alert-service.ts` — Alert generation
+- `packages/api/src/index.ts` — Cron schedule setup (5-min, daily, hourly, weekly)
+- `packages/api/src/services/alert-service.ts` — Snapshot-based alert generation
+- `packages/api/src/services/seat-activity-detector.ts` — Hourly activity detection & logging
+- `packages/api/src/services/activity-pattern-service.ts` — Daily pattern generation & anomaly detection
 - `packages/api/src/services/telegram-service.ts` — Message formatting, dual-bot support (system + per-user)
 - Requires `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (system bot)
-- Requires `ENCRYPTION_KEY` (64-char hex string = 32 bytes) for token encryption/decryption
+- Requires `ENCRYPTION_KEY` (64-char hex string = 32 bytes) for AES-256-GCM encryption
 
 ### 6. Configuration & Environment
 

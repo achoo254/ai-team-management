@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import mongoose from 'mongoose'
 import { authenticate } from '../middleware.js'
 import { User } from '../models/user.js'
 import { Seat } from '../models/seat.js'
@@ -14,7 +15,7 @@ router.get('/settings', async (req, res) => {
   try {
     const user = await User.findById(
       req.user!._id,
-      'telegram_chat_id telegram_topic_id telegram_bot_token watched_seats notification_settings alert_settings seat_ids push_enabled',
+      'telegram_chat_id telegram_topic_id telegram_bot_token watched_seats notification_settings alert_settings seat_ids push_enabled dashboard_filter_seat_ids',
     )
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
 
@@ -57,6 +58,7 @@ router.get('/settings', async (req, res) => {
       notification_settings: user.notification_settings ?? null,
       alert_settings: user.alert_settings ?? null,
       push_enabled: user.push_enabled ?? false,
+      dashboard_filter_seat_ids: (user.dashboard_filter_seat_ids ?? []).map(String),
       available_seats: availableSeats,
     })
   } catch (error) {
@@ -68,7 +70,7 @@ router.get('/settings', async (req, res) => {
 // PUT /api/user/settings — update bot config
 router.put('/settings', async (req, res) => {
   try {
-    const { telegram_bot_token, telegram_chat_id, telegram_topic_id, notification_settings, alert_settings, push_enabled } = req.body
+    const { telegram_bot_token, telegram_chat_id, telegram_topic_id, notification_settings, alert_settings, push_enabled, dashboard_filter_seat_ids } = req.body
 
     if (telegram_bot_token !== undefined && !isEncryptionConfigured()) {
       res.status(503).json({ error: 'Encryption not configured. Set ENCRYPTION_KEY env var.' })
@@ -144,6 +146,13 @@ router.put('/settings', async (req, res) => {
       }
     }
 
+    // Update dashboard seat filter (per-user persistent filter)
+    if (Array.isArray(dashboard_filter_seat_ids)) {
+      user.dashboard_filter_seat_ids = dashboard_filter_seat_ids
+        .filter((id: unknown) => typeof id === 'string' && mongoose.Types.ObjectId.isValid(id as string))
+        .map((id: string) => new mongoose.Types.ObjectId(id))
+    }
+
     await user.save()
     res.json({
       telegram_chat_id: user.telegram_chat_id,
@@ -152,6 +161,7 @@ router.put('/settings', async (req, res) => {
       notification_settings: user.notification_settings ?? null,
       alert_settings: user.alert_settings ?? null,
       push_enabled: user.push_enabled ?? false,
+      dashboard_filter_seat_ids: (user.dashboard_filter_seat_ids ?? []).map(String),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

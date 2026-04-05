@@ -528,10 +528,10 @@ router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAd
       { $or: [{ seat_ids: id }, { 'watched_seats.seat_id': id }] },
       { $pull: { seat_ids: id, watched_seats: { seat_id: id } } },
     )
-    // Clear schedules + active_sessions (runtime state — must stop firing for deleted seat)
-    const { ActiveSession } = await import('../models/active-session.js')
+    // Clear schedules + activity logs (runtime state — must stop for deleted seat)
     await Schedule.deleteMany({ seat_id: id })
-    await ActiveSession.deleteMany({ seat_id: id })
+    const { SeatActivityLog } = await import('../models/seat-activity-log.js')
+    await SeatActivityLog.deleteMany({ seat_id: id })
     // Soft delete the seat — cleanup cron will cascade-delete usage/alerts after 30 days
     seat.deleted_at = new Date()
     seat.token_active = false
@@ -615,8 +615,6 @@ router.delete('/:id/unassign/:userId', authenticate, validateObjectId('id'), req
       return
     }
 
-    // Clear user's schedules for this seat
-    await Schedule.deleteMany({ seat_id: id, user_id: userId })
     // Remove seat from user's seat_ids
     await User.findByIdAndUpdate(userId, { $pull: { seat_ids: new mongoose.Types.ObjectId(id) } })
 

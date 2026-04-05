@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
 import type { DashboardRange } from "@/hooks/use-dashboard";
 import { useDashboardEnhanced } from "@/hooks/use-dashboard";
 import { useAuth } from "@/hooks/use-auth";
+import { useUserSettings, useUpdateUserSettings } from "@/hooks/use-user-settings";
 import { DashboardRangeFilter } from "@/components/dashboard-range-filter";
 import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
 import { DashboardStatOverview } from "@/components/dashboard-stat-overview";
@@ -29,6 +30,31 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { data } = useDashboardEnhanced(range, seatIds);
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: userSettings } = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
+  const initialized = useRef(false);
+
+  // Load persisted filter once on mount
+  useEffect(() => {
+    if (userSettings && !initialized.current) {
+      const saved = userSettings.dashboard_filter_seat_ids ?? [];
+      if (saved.length > 0) setSeatIds(saved);
+      initialized.current = true;
+    }
+  }, [userSettings]);
+
+  // Persist filter changes (debounced 1s)
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const handleSeatFilterChange = useCallback(
+    (ids: string[]) => {
+      setSeatIds(ids);
+      clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        updateSettings.mutate({ dashboard_filter_seat_ids: ids });
+      }, 1000);
+    },
+    [updateSettings],
+  );
 
   const activeTab: TabValue =
     searchParams.get("tab") === "overview" ? "overview" : "detail";
@@ -81,7 +107,7 @@ export default function DashboardPage() {
         {/* ── Chi tiết tab ─────────────────────────────────────────────────── */}
         <TabsContent value="detail" className="space-y-6 mt-4">
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <DashboardSeatFilter value={seatIds} onChange={setSeatIds} />
+            <DashboardSeatFilter value={seatIds} onChange={handleSeatFilterChange} />
             <DashboardRangeFilter value={range} onChange={setRange} />
           </div>
 

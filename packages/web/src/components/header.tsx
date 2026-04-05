@@ -7,7 +7,7 @@ import { NotificationBell } from "@/components/notification-bell";
 const pageTitles: Record<string, string> = {
   "/": "Dashboard",
   "/seats": "Seats",
-  "/schedule": "Lịch phân ca",
+  "/schedule": "Hoạt động Seat",
   "/usage": "Usage",
   "/alerts": "Cảnh báo",
   "/admin": "Admin",

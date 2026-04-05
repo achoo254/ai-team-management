@@ -3,6 +3,8 @@ import { Seat } from '../models/seat.js'
 import { User, type IUser } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
+// AlertType imported from shared (same type used by alert-service + fcm-service)
+type AlertType = import('@repo/shared/types').AlertType
 
 /** Escape HTML special chars for Telegram */
 function esc(str: string | number): string {
@@ -206,7 +208,7 @@ export async function checkAndSendScheduledReports() {
 /** Send alert to a specific user via their personal bot */
 export async function sendAlertToUser(
   user: IUser,
-  type: 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk',
+  type: AlertType,
   seatLabel: string,
   metadata: Record<string, unknown>,
 ): Promise<void> {
@@ -259,6 +261,16 @@ export async function sendAlertToUser(
         + `Hiện tại: ${esc(String(metadata.current_7d ?? ''))}%\n`
         + `Dự kiến: ${esc(String(metadata.projected ?? ''))}% (còn ${esc(String(metadata.remaining_sessions ?? ''))} sessions)\n`
         + `→ Cần giảm tải hoặc chuyển sang seat khác`
+      break
+    case 'unexpected_activity':
+      msg = `🟡 <b>Hoạt động ngoài dự kiến</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Seat đang hoạt động ngoài giờ dự kiến`
+      break
+    case 'unexpected_idle':
+      msg = `🟡 <b>Rảnh ngoài dự kiến</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Seat không hoạt động trong giờ dự kiến`
       break
   }
 

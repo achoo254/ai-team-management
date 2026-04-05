@@ -25,7 +25,7 @@ import { useAuth } from "@/hooks/use-auth";
 const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Seats", href: "/seats", icon: Monitor },
-  { label: "Lịch phân ca", href: "/schedule", icon: Calendar },
+  { label: "Hoạt động Seat", href: "/schedule", icon: Calendar },
   { label: "Usage", href: "/usage", icon: Activity },
   { label: "Cảnh báo", href: "/alerts", icon: AlertTriangle },
   { label: "Cài đặt", href: "/settings", icon: Bot },

@@ -98,13 +98,20 @@ export function requireSeatOwnerOrAdmin(paramName = 'id') {
   }
 }
 
-/** Get seat IDs user owns or is assigned to. Admin gets all non-deleted seats. */
-export async function getAllowedSeatIds(user: JwtPayload): Promise<mongoose.Types.ObjectId[]> {
+/**
+ * Get seat IDs user can access.
+ * - Admin: all non-deleted seats (or only include_in_overview=true when overviewOnly)
+ * - Non-admin: seats assigned + owned (overviewOnly ignored — user sees their own seats)
+ * @param overviewOnly When true, admin scope filters to include_in_overview=true only.
+ *                     Used by dashboard routes to match "Tổng quan" scope.
+ */
+export async function getAllowedSeatIds(
+  user: JwtPayload,
+  overviewOnly = false,
+): Promise<mongoose.Types.ObjectId[]> {
   if (user.role === 'admin') {
-    // Admin sees all non-deleted seats. Pre-find middleware on Seat auto-filters deleted_at:null.
-    // Returning concrete list (instead of null) ensures downstream queries on UsageWindow/
-    // snapshots/etc. naturally exclude data tied to soft-deleted seats.
-    const seats = await Seat.find({}, '_id').lean()
+    const filter = overviewOnly ? { include_in_overview: true } : {}
+    const seats = await Seat.find(filter, '_id').lean()
     return seats.map((s) => new mongoose.Types.ObjectId(String(s._id)))
   }
   const [dbUser, ownedSeats] = await Promise.all([

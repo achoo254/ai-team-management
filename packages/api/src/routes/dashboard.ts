@@ -37,7 +37,7 @@ router.use(authenticate)
 // GET /api/dashboard/summary — basic stats (scoped to user's seats)
 router.get('/summary', async (req, res) => {
   try {
-    const allowed = await getAllowedSeatIds(req.user!)
+    const allowed = await getAllowedSeatIds(req.user!, true)
     const seatFilter = allowed ? { seat_id: { $in: allowed } } : {}
 
     const latestSnapshots = await UsageSnapshot.aggregate([
@@ -97,7 +97,7 @@ router.get('/enhanced', async (req, res) => {
     const range = typeof req.query.range === 'string' && RANGE_MS[req.query.range]
       ? req.query.range
       : 'month'
-    const allowed = await getAllowedSeatIds(req.user!)
+    const allowed = await getAllowedSeatIds(req.user!, true)
     const querySeatIds = parseSeatIds(req.query.seatIds)
     // Intersect query filter with allowed seats for non-admin
     const effectiveIds = allowed
@@ -122,7 +122,6 @@ router.get('/enhanced', async (req, res) => {
       ? { day_of_week: dayOfWeek, seat_id: { $in: effectiveIds } }
       : { day_of_week: dayOfWeek }
     const schedules = await Schedule.find(scheduleFilter)
-      .populate('user_id', 'name')
       .populate('seat_id', 'label')
       .sort({ seat_id: 1, start_hour: 1 })
       .lean()
@@ -130,8 +129,7 @@ router.get('/enhanced', async (req, res) => {
     const todaySchedules = schedules.map((sc) => ({
       start_hour: sc.start_hour,
       end_hour: sc.end_hour,
-      usage_budget_pct: sc.usage_budget_pct,
-      name: (sc.user_id as { name?: string } | null)?.name,
+      source: sc.source,
       seat_label: (sc.seat_id as { label?: string } | null)?.label,
     }))
 
@@ -301,7 +299,7 @@ router.get('/enhanced', async (req, res) => {
 // GET /api/dashboard/usage/by-seat — per-seat usage with user names (scoped)
 router.get('/usage/by-seat', async (req, res) => {
   try {
-    const allowed = await getAllowedSeatIds(req.user!)
+    const allowed = await getAllowedSeatIds(req.user!, true)
     const latestSnapshots = await UsageSnapshot.aggregate([
       ...(allowed ? [{ $match: { seat_id: { $in: allowed } } }] : []),
       { $sort: { fetched_at: -1 } },
@@ -356,7 +354,7 @@ router.get('/efficiency', async (req, res) => {
   try {
     const rangeMs = RANGE_MS[typeof req.query.range === 'string' ? req.query.range : 'month'] ?? RANGE_MS.month
     const rangeStart = new Date(Date.now() - rangeMs)
-    const allowed = await getAllowedSeatIds(req.user!)
+    const allowed = await getAllowedSeatIds(req.user!, true)
     const querySeatIds = parseSeatIds(req.query.seatIds)
     const effectiveIds = allowed
       ? (querySeatIds ? querySeatIds.filter((id) => allowed.some((a) => String(a) === String(id))) : allowed)
@@ -603,7 +601,7 @@ router.get('/peak-hours', async (req, res) => {
   try {
     const rangeMs = RANGE_MS[typeof req.query.range === 'string' ? req.query.range : 'month'] ?? RANGE_MS.month
     const rangeStart = new Date(Date.now() - rangeMs)
-    const allowed = await getAllowedSeatIds(req.user!)
+    const allowed = await getAllowedSeatIds(req.user!, true)
     const querySeatIds = parseSeatIds(req.query.seatIds)
     const effectiveIds = allowed
       ? (querySeatIds ? querySeatIds.filter((id) => allowed.some((a) => String(a) === String(id))) : allowed)
@@ -647,8 +645,16 @@ router.get('/personal', async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(userId)
     const todayDow = new Date().getDay() // 0=Sunday … 6=Saturday
 
-    // 1. Today's schedules for this user with seat label
-    const rawSchedules = await Schedule.find({ user_id: userId, day_of_week: todayDow })
+    // 1. Today's activity patterns for user's seats
+    const userRecord0 = await User.findById(userId, 'seat_ids').lean()
+    const userSeatIds = (userRecord0?.seat_ids ?? []).map(String)
+    const ownedSeats0 = await Seat.find({ owner_id: userId }, '_id').lean()
+    const allUserSeatIds = [...new Set([...userSeatIds, ...ownedSeats0.map(s => String(s._id))])]
+
+    const rawSchedules = await Schedule.find({
+      seat_id: { $in: allUserSeatIds },
+      day_of_week: todayDow,
+    })
       .populate<{ seat_id: { _id: unknown; label: string } }>('seat_id', 'label')
       .sort({ start_hour: 1 })
       .lean()
@@ -657,7 +663,7 @@ router.get('/personal', async (req, res) => {
       seat_label: (sc.seat_id as { label?: string } | null)?.label ?? '',
       start_hour: sc.start_hour,
       end_hour: sc.end_hour,
-      usage_budget_pct: sc.usage_budget_pct,
+      source: sc.source,
     }))
 
     // 2. Seats this user owns + seats they are assigned to (role distinction)

@@ -14,21 +14,8 @@ export function resolveSchedulePermissions(ctx: PermissionContext): SchedulePerm
   const isOwner = ctx.seatOwnerId != null && ctx.seatOwnerId === ctx.userId
   const isMember = ctx.userSeatIds.includes(ctx.seatId)
 
-  if (!isAdmin && !isOwner && !isMember) {
-    return {
-      canView: false, canCreate: false, canCreateForOthers: false,
-      canSwap: false, canClearAll: false,
-      canEditEntry: () => false, canDeleteEntry: () => false,
-    }
-  }
-
   return {
-    canView: true,
-    canCreate: true,
-    canCreateForOthers: isAdmin || isOwner,
-    canSwap: isAdmin || isOwner,
-    canClearAll: isAdmin,
-    canEditEntry: (entry) => isAdmin || isOwner || entry.user_id === ctx.userId,
-    canDeleteEntry: (entry) => isAdmin || isOwner || entry.user_id === ctx.userId,
+    canView: isAdmin || isOwner || isMember,
+    canManage: isAdmin,
   }
 }

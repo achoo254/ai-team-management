@@ -6,6 +6,102 @@ All notable changes to the Claude Teams Management Dashboard project are documen
 
 ---
 
+## [2026-04-06] Auto Seat Activity Schedule (Heatmap-Based Pattern Generation)
+
+### Major Changes
+
+**Schedule Module Refactored: Manual Assignment → Auto-Detected Patterns**
+- Removed user-assignment model: no more `user_id`, `usage_budget_pct` fields from Schedule
+- Added `source` field: enum `'auto' | 'legacy'` to distinguish generated vs. legacy entries
+- Removed CRUD endpoints: No more POST/PUT/PATCH/DELETE on schedules
+- Added read-only pattern queries: GET `/schedules`, `/schedules/today`, `/schedules/heatmap/:seatId`
+- Migration: Existing schedule entries marked as `source='legacy'`, deprecated fields removed
+
+**New SeatActivityLog Collection (Hourly Activity Tracking)**
+- Stores hourly activity data per seat (one record per seat/date/hour)
+- Fields: is_active (bool), delta_5h_pct (usage %), snapshot_count (metrics count)
+- Populated by 5-min cron via `detectSeatActivity()` service (analyzes usage snapshot deltas)
+- Unique index: (seat_id, date, hour) — prevents duplicates
+- Used as source for daily pattern generation
+
+**New Activity Pattern Generation (Daily 04:00 ASI/Saigon)**
+- Cron job via `generateAllPatterns()` analyzes 2-4 weeks of SeatActivityLog
+- Detects recurring weekly patterns per seat (7x24 grid, day_of_week x start_hour)
+- Generates Schedule entries with `source='auto'` (replaces previous auto entries)
+- Exports stats: patterns_generated, anomalies_detected
+- Called via `POST /api/schedules/regenerate` endpoint (admin-only manual trigger)
+
+**New Activity Pattern Services**
+- `seat-activity-detector.ts` — Detects hourly activity from usage snapshot deltas
+- `activity-pattern-service.ts` — Analyzes historical activity, generates weekly patterns
+- `activity-anomaly-service.ts` — Identifies unusual activity spikes for anomaly alerts
+
+**New Schedule API Endpoints**
+- `GET /api/schedules` — List auto-generated patterns (read-only), ?seatId= filter
+- `GET /api/schedules/today` — Today's patterns for visible seats (read-only)
+- `GET /api/schedules/heatmap/:seatId` — Aggregated heatmap for N weeks (activity_rate, avg_delta per day/hour)
+- `GET /api/schedules/activity-logs` — Raw hourly logs with date range filters, pagination
+- `GET /api/schedules/realtime` — Current hour activity status per seat (is_active, current_delta, last_snapshot_at)
+- `POST /api/schedules/regenerate` — Force regenerate all patterns (admin only)
+
+**Removed Schedule Endpoints (All CRUD)**
+- `POST /api/schedules/entry` — Create entry (no longer applicable)
+- `PUT /api/schedules/entry/:id` — Update entry
+- `PATCH /api/schedules/swap` — Swap entries
+- `DELETE /api/schedules/entry/:id` — Delete entry
+
+**Frontend Changes**
+- New component: `activity-heatmap.tsx` — 7x24 grid visualization of activity patterns
+- Updated page: `schedule.tsx` — Heatmap display with week selector, seat tabs, realtime status
+- New hooks: `use-activity-schedule.ts` — Queries heatmap, patterns, realtime status
+- Removed components: schedule-grid.tsx, schedule-cell.tsx, day-tab-view.tsx, member-sidebar.tsx
+- Removed dependency: dnd-kit (drag-drop no longer needed)
+
+**Alert Model Simplified**
+- Removed: `extra_credit` alert type (no longer used)
+- Updated: `user_id` field now part of primary dedup key (user_id, seat_id, type, window)
+- Added: `window` field for rate_limit alerts (values: '5h', '7d', null)
+- Added: `notified_at` field to prevent duplicate notifications for same condition
+- Added: `read_by` array to track which users marked alert as read
+- Removed fields: `resolved`, `resolved_by`, `resolved_at` (replaced by read_by tracking)
+
+**Data Model Breaking Changes**
+
+Schedule schema:
+- Removed: `user_id`, `usage_budget_pct`, `slot`
+- Added: `source` ('auto' | 'legacy')
+- Index change: (seat_id, day_of_week, slot) → (seat_id, day_of_week), (seat_id, source)
+
+Alert schema:
+- Removed: `resolved`, `resolved_by`, `resolved_at`
+- Added: `window` ('5h' | '7d' | null), `notified_at`, `read_by[]`
+- Reordered dedup key: (user_id, seat_id, type, window) [was seat-centric]
+
+**Rationale**
+- Manual assignment had low adoption; auto-detection from usage is more accurate & automated
+- Heatmap visualization clearer than manual time slot grid
+- Removes CRUD complexity while keeping insights accessible
+- Enables anomaly detection on unusual activity patterns (future enhancement)
+
+### Data Migration
+
+Schedule entries migrated automatically on app startup:
+- All existing records without `source` field set to `source='legacy'`
+- Old fields (user_id, usage_budget_pct, slot) removed via $unset
+
+Alert deduplication improved:
+- Alerts now keyed by (user_id, seat_id, type, window) instead of seat-only
+- Allows per-user alerts for same seat simultaneously
+- Previous unresolved alerts continue to work; new alerts use read_by model
+
+### Performance Impact
+- SeatActivityLog (one per 5-min interval per seat) adds minimal overhead
+- Pattern generation runs once daily (04:00) on historical data; no impact on request path
+- Heatmap aggregation query optimized with indexes on (seat_id, date, hour)
+- New realtime endpoint hits UsageSnapshot (already indexed)
+
+---
+
 ## [2026-04-05] Remove Teams Model + Dashboard Enrichment
 
 ### Major Changes

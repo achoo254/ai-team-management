@@ -36,6 +36,7 @@ export interface IUser extends Document {
   watched_seats?: IWatchedSeat[]
   notification_settings?: INotificationSettings
   alert_settings?: IAlertSettings
+  dashboard_filter_seat_ids?: Types.ObjectId[]
   fcm_tokens: string[]
   push_enabled: boolean
   created_at: Date
@@ -76,6 +77,7 @@ const userSchema = new Schema<IUser>(
       fleet_util_threshold_pct: { type: Number, default: null },
       fleet_util_threshold_days: { type: Number, default: null },
     },
+    dashboard_filter_seat_ids: [{ type: Schema.Types.ObjectId, ref: 'Seat' }],
     fcm_tokens: { type: [String], default: [] },
     push_enabled: { type: Boolean, default: false },
   },

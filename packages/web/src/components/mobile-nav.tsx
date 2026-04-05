@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 const bottomItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Lịch", href: "/schedule", icon: Calendar },
+  { label: "Hoạt động", href: "/schedule", icon: Calendar },
   { label: "Usage", href: "/usage", icon: BarChart3 },
 ];
 

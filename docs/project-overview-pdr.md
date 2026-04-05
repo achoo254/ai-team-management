@@ -23,18 +23,21 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - View seat status and current users
 - Admin overview toggle (include_in_overview) for BLD metrics
 
-### 2. Scheduling (Hourly)
-- Define hourly time slots (start_hour to end_hour per day)
-- Assign users to day-of-week + hour range (e.g., Mon 8-12, Wed 14-18)
-- Prevent double-booking on same seat
-- Budget allocation per schedule (% of seat's usage budget)
+### 2. Activity Patterns (Auto-Generated Heatmap - Read-Only)
+- Real-time activity tracking: 5-min cron detects usage deltas, populates SeatActivityLog (hourly resolution)
+- Daily pattern generation (04:00 ASI/Saigon): Analyzes 2-4 weeks of activity, generates recurring 7x24 grids
+- Activity heatmap visualization: Aggregated by day/hour, shows activity_rate (% of days active), avg/max usage delta
+- Realtime activity status: Current hour activity indicator + snapshot staleness warnings
 
-### 3. Alerts (Real-time)
-- **Rate Limit**: Trigger when seat usage exceeds configurable threshold (default 80%) across 5h, 7d, 7d_sonnet, 7d_opus windows
-- **Extra Credit**: Trigger when extra credit utilization exceeds threshold (default 80%)
+### 3. Alerts (Real-time, Per-User-Per-Seat)
+- **Rate Limit**: Trigger when seat usage exceeds threshold (default 80%) for 5h or 7d windows
 - **Token Failure**: Trigger for seats with active tokens but failed API fetch
-- Alert resolution with audit trail (who, when, timestamp)
-- Alert history and deduplication
+- **Usage Exceeded**: Reserved for future per-user session tracking (current: not actively used)
+- **Session Waste**: Reserved for anomaly detection on unusual activity patterns
+- **7d Risk**: Reserved for predictive alerts on trending usage
+- Per-user deduplication: max 1 unresolved alert per (user, seat, type, window)
+- Notification tracking: notified_at field prevents re-sending for same condition
+- Audit trail: read_by array tracks which users marked alert as read
 
 ### 4. Telegram Notifications
 - **Weekly Report** (Friday 17:00 Asia/Saigon): Usage summary from snapshots, alerts, inactive users
@@ -127,25 +130,26 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 ## Product Roadmap (Phase 1 Complete)
 
 ### Current State (Done)
-- Seat CRUD + team assignment + ownership model
-- Seat soft-delete with restore capability (restore_seat_id, force_new)
-- Seat profile cache (account_name, org_name, rate_limit_tier, subscription_status)
-- Profile auto-refresh on token updates + manual refresh endpoint (6h staleness)
-- Seat preview API (POST /preview-token) for credential validation + duplicate detection
+- Seat CRUD + ownership model (soft-delete with restore capability)
+- Seat profile cache with auto-refresh on token updates (6h staleness threshold)
+- Seat preview API for credential validation + duplicate/restorable detection
 - User management (create, update, delete, active status)
-- Per-user alert settings and subscriptions (watched_seat_ids)
-- Schedule CRUD with conflict prevention (hourly time slots + budget allocation)
-- Real-time alert system (rate_limit, extra_credit, token_failure, usage_exceeded, session_waste, 7d_risk)
-- Per-user alert thresholds (rate_limit_pct, extra_credit_pct)
+- Per-user alert settings (rate_limit_pct, extra_credit_pct) and watched_seat_ids subscriptions
+- Auto-generated activity patterns (read-only heatmap, daily 04:00 regeneration)
+- Real-time activity tracking: 5-min cron detects hourly usage deltas, populates SeatActivityLog
+- Activity heatmap visualization (7x24 grid, activity_rate, avg/max delta, configurable week range)
+- Realtime activity status endpoint (current hour indicator, snapshot staleness)
+- Activity logs API with date range filtering and pagination
+- Pattern regeneration endpoint (admin-only manual trigger)
+- Real-time alert system (rate_limit, token_failure, usage_exceeded, session_waste, 7d_risk)
+- Per-user per-seat alert deduplication with notification tracking (notified_at, read_by)
 - Telegram weekly reports + per-user hourly reports
-- SPA dashboard with all views
+- SPA dashboard with fleet KPIs, per-seat overview, activity patterns
 - Google sign-in + JWT auth
 - Usage metrics collection (5-min cron)
 - Anthropic API token management (encrypted AES-256-GCM)
 - Personal Telegram bot integration (per-user encrypted tokens)
 - Usage snapshots with 90-day TTL
-- Real-time usage metrics dashboard
-- Active session tracking for budget alerts
 - Vietnamese UI for seat restore flow (choice banner)
 
 ### Potential Improvements (Phase 2)
