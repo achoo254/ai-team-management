@@ -72,6 +72,33 @@ function avg(values: number[]): number {
   return values.reduce((s, v) => s + v, 0) / values.length
 }
 
+/**
+ * Compute average peak 5h per seat for a given day (Asia/Ho_Chi_Minh timezone).
+ * Each seat contributes its max five_hour_pct from that day.
+ * Returns fleet-wide average of those per-seat peaks, or null if no data.
+ */
+async function dailyFleetIntensity(seatIds: string[], date: Date): Promise<number | null> {
+  if (seatIds.length === 0) return null
+  // Build day boundaries in UTC (server stores fetched_at in UTC)
+  const dayStart = new Date(date)
+  dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date(date)
+  dayEnd.setHours(23, 59, 59, 999)
+
+  const results = await UsageSnapshot.aggregate([
+    {
+      $match: {
+        seat_id: { $in: seatIds.map(id => new mongoose.Types.ObjectId(id)) },
+        five_hour_pct: { $ne: null },
+        fetched_at: { $gte: dayStart, $lte: dayEnd },
+      },
+    },
+    { $group: { _id: '$seat_id', peak: { $max: '$five_hour_pct' } } },
+  ])
+  if (results.length === 0) return null
+  return avg(results.map(r => r.peak ?? 0))
+}
+
 /** Compute fleet avg 7d_pct for the given seat IDs using snapshots taken up to `before` date. */
 async function historicalFleetUtil(seatIds: string[], before: Date): Promise<number> {
   if (seatIds.length === 0) return 0
@@ -102,7 +129,7 @@ export async function computeFleetKpis(scope: MetricsScope = { type: 'admin' }):
     return {
       utilPct: 0, wasteUsd: 0, totalCostUsd: 0,
       monthlyCostUsd: MONTHLY_COST_USD, billableCount: 0,
-      wwDelta: 0, worstForecast: null,
+      wwDelta: 0, ddDelta: null, worstForecast: null,
     }
   }
 
@@ -112,16 +139,27 @@ export async function computeFleetKpis(scope: MetricsScope = { type: 'admin' }):
   const wasteUsd = totalCostUsd * (1 - utilPct / 100)
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600_000)
-  const lastWeekUtil = await historicalFleetUtil(seatIds, sevenDaysAgo)
-  const wwDelta = utilPct - lastWeekUtil
+  const today = new Date()
+  const yesterday = new Date(Date.now() - 24 * 3600_000)
 
-  const forecasts = await computeAllSeatForecasts(seatIds)
+  const [lastWeekUtil, todayIntensity, yesterdayIntensity, forecasts] = await Promise.all([
+    historicalFleetUtil(seatIds, sevenDaysAgo),
+    dailyFleetIntensity(seatIds, today),
+    dailyFleetIntensity(seatIds, yesterday),
+    computeAllSeatForecasts(seatIds),
+  ])
+
+  const wwDelta = utilPct - lastWeekUtil
+  const ddDelta = todayIntensity != null && yesterdayIntensity != null
+    ? todayIntensity - yesterdayIntensity
+    : null
+
   const worstForecast = forecasts.find(f => f.hours_to_full != null) ?? null
 
   return {
     utilPct, wasteUsd, totalCostUsd,
     monthlyCostUsd: MONTHLY_COST_USD,
-    billableCount, wwDelta,
+    billableCount, wwDelta, ddDelta,
     worstForecast: worstForecast
       ? {
           seat_id: worstForecast.seat_id,
@@ -159,6 +197,51 @@ export async function computeWwHistory(scope: MetricsScope = { type: 'admin' }, 
   }
 
   return result
+}
+
+// ── D/D history ──────────────────────────────────────────────────────────────
+
+export async function computeDdHistory(scope: MetricsScope = { type: 'admin' }, days = 14): Promise<Array<{ date: string; avgPeak5h: number }>> {
+  const seats = await getSeatsInScope(scope)
+  if (seats.length === 0) return []
+
+  const seatIds = seats.map(s => new mongoose.Types.ObjectId(String(s._id)))
+  const startDate = new Date()
+  startDate.setDate(startDate.getDate() - days)
+  startDate.setHours(0, 0, 0, 0)
+
+  // Aggregate: per seat per day → max five_hour_pct, then avg across seats per day
+  const pipeline = [
+    {
+      $match: {
+        seat_id: { $in: seatIds },
+        five_hour_pct: { $ne: null },
+        fetched_at: { $gte: startDate },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          seat_id: '$seat_id',
+          day: { $dateToString: { format: '%Y-%m-%d', date: '$fetched_at', timezone: 'Asia/Ho_Chi_Minh' } },
+        },
+        peak: { $max: '$five_hour_pct' },
+      },
+    },
+    {
+      $group: {
+        _id: '$_id.day',
+        avgPeak5h: { $avg: '$peak' },
+      },
+    },
+    { $sort: { _id: 1 as const } },
+  ]
+
+  const results = await UsageSnapshot.aggregate(pipeline)
+  return results.map(r => ({
+    date: r._id,
+    avgPeak5h: Number((r.avgPeak5h ?? 0).toFixed(1)),
+  }))
 }
 
 // ── Rebalance suggestions ─────────────────────────────────────────────────────

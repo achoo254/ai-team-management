@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useFleetKpis, useSeatStats, useRebalanceSuggestions } from "@/hooks/use-bld-metrics";
 import { BldFleetKpiCards } from "@/components/bld-fleet-kpi-cards";
 import { BldWwComparisonChart } from "@/components/bld-ww-comparison-chart";
+import { BldDdComparisonChart } from "@/components/bld-dd-comparison-chart";
 import { BldSeatStatsPanel } from "@/components/bld-seat-stats-panel";
 import { BldActionsPanel } from "@/components/bld-actions-panel";
 import { Button } from "@/components/ui/button";
@@ -60,7 +61,7 @@ export function OverviewTabContent() {
         <div>
           <p className="text-sm text-muted-foreground">
             {isAdmin
-              ? "Tổng quan đội seat — chỉ tính seat công ty"
+              ? "Tổng quan đội seat — chỉ tính seat active"
               : "Tổng quan các seat của bạn"}
           </p>
         </div>
@@ -113,7 +114,10 @@ export function OverviewTabContent() {
           ) : (
             <>
               <BldFleetKpiCards kpis={fleetQuery.data.kpis} />
-              <BldWwComparisonChart data={fleetQuery.data.wwHistory} />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <BldWwComparisonChart data={fleetQuery.data.wwHistory} />
+                <BldDdComparisonChart data={fleetQuery.data.ddHistory} />
+              </div>
               {seatStatsQuery.data && (
                 <BldSeatStatsPanel data={seatStatsQuery.data} />
               )}

@@ -14,6 +14,7 @@ import { User } from '../models/user.js'
 import {
   computeFleetKpis,
   computeWwHistory,
+  computeDdHistory,
   computeRebalanceSuggestions,
   type MetricsScope,
 } from '../services/bld-metrics-service.js'
@@ -76,12 +77,13 @@ router.get('/fleet-kpis', authenticate, async (req, res, next) => {
       return
     }
 
-    const [kpis, wwHistory] = await Promise.all([
+    const [kpis, wwHistory, ddHistory] = await Promise.all([
       computeFleetKpis(scope),
       computeWwHistory(scope, 8),
+      computeDdHistory(scope, 14),
     ])
 
-    const payload = { kpis, wwHistory }
+    const payload = { kpis, wwHistory, ddHistory }
     setCache(cacheKey, payload)
     res.json(payload)
   } catch (err) {

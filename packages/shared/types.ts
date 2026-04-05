@@ -66,15 +66,41 @@ export interface User {
 export interface Schedule {
   _id: string
   seat_id: string
-  user_id: string
   day_of_week: number
   start_hour: number         // 0-23
   end_hour: number           // 0-23 (exclusive)
-  usage_budget_pct?: number | null  // 1-100, null = auto-divide
+  source: 'auto' | 'legacy'
   created_at: string
 }
 
-export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
+export interface SeatActivityLog {
+  _id: string
+  seat_id: string
+  date: string               // ISO date string (start of day VN time)
+  hour: number               // 0-23
+  is_active: boolean
+  delta_5h_pct: number
+  snapshot_count: number
+  created_at: string
+}
+
+export interface HeatmapCell {
+  day_of_week: number
+  hour: number
+  activity_rate: number      // 0-1 (percentage of weeks active)
+  avg_delta: number
+  max_delta: number
+}
+
+export interface RealtimeStatus {
+  seat_id: string
+  seat_label: string
+  is_active: boolean
+  current_delta: number
+  last_snapshot_at: string | null
+}
+
+export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk' | 'unexpected_activity' | 'unexpected_idle'
 export type AlertWindow = '5h' | '7d' | null
 
 export interface AlertMetadata {
@@ -152,9 +178,8 @@ export interface UsageSnapshot {
 }
 
 // Populated variants
-export interface SchedulePopulated extends Omit<Schedule, 'seat_id' | 'user_id'> {
+export interface SchedulePopulated extends Omit<Schedule, 'seat_id'> {
   seat_id: Seat
-  user_id: User
 }
 
 // API response wrapper
@@ -171,15 +196,10 @@ export interface NotificationSettings {
   report_hour: number        // 0-23
 }
 
-// Schedule permissions
+// Schedule permissions (simplified: auto-detected activity, read-only for most users)
 export interface SchedulePermissions {
   canView: boolean
-  canCreate: boolean
-  canCreateForOthers: boolean
-  canSwap: boolean
-  canClearAll: boolean
-  canEditEntry: (entry: { user_id: string }) => boolean
-  canDeleteEntry: (entry: { user_id: string }) => boolean
+  canManage: boolean  // admin only: force regenerate patterns, etc.
 }
 
 // Quota forecast (7d linear regression)
@@ -258,6 +278,8 @@ export interface FleetKpis {
   monthlyCostUsd: number
   billableCount: number
   wwDelta: number
+  /** Day-over-day delta: avg peak 5h today minus avg peak 5h yesterday (pp) */
+  ddDelta: number | null
   worstForecast: BldWorstForecast | null
 }
 
@@ -267,9 +289,15 @@ export interface WwHistoryPoint {
   wasteUsd: number
 }
 
+export interface DdHistoryPoint {
+  date: string       // ISO date string
+  avgPeak5h: number  // fleet avg of per-seat max five_hour_pct that day
+}
+
 export interface FleetKpisResponse {
   kpis: FleetKpis
   wwHistory: WwHistoryPoint[]
+  ddHistory: DdHistoryPoint[]
 }
 
 // ── Seat-level stats DTOs ─────────────────────────────────────────────────────

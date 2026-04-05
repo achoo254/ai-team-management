@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Clock } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, AlertTriangle, Clock, CalendarClock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { FleetKpis } from "@repo/shared/types";
 
@@ -18,23 +18,23 @@ function utilBgColor(pct: number): string {
   return "bg-red-500";
 }
 
-function wwDeltaIcon(delta: number) {
+function deltaIcon(delta: number) {
   if (delta > 0.5) return <TrendingUp className="h-4 w-4 text-green-600" />;
   if (delta < -0.5) return <TrendingDown className="h-4 w-4 text-red-500" />;
   return <Minus className="h-4 w-4 text-muted-foreground" />;
 }
 
-function wwDeltaColor(delta: number): string {
+function deltaColor(delta: number): string {
   if (delta > 0.5) return "text-green-600";
   if (delta < -0.5) return "text-red-500";
   return "text-muted-foreground";
 }
 
 export function BldFleetKpiCards({ kpis }: Props) {
-  const { utilPct, wasteUsd, wwDelta, totalCostUsd, billableCount, worstForecast } = kpis;
+  const { utilPct, wasteUsd, wwDelta, ddDelta, totalCostUsd, billableCount, worstForecast } = kpis;
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
       {/* Fleet Utilization */}
       <Card>
         <CardHeader className="pb-2 space-y-0.5">
@@ -42,7 +42,7 @@ export function BldFleetKpiCards({ kpis }: Props) {
             Mức sử dụng đội seat
           </CardTitle>
           <p className="text-[11px] text-muted-foreground/70 leading-snug">
-            TB quota 7 ngày của tất cả seat công ty. Càng cao = seat càng khai
+            TB quota 7 ngày của tất cả seat active. Càng cao = seat càng khai
             thác hiệu quả
           </p>
         </CardHeader>
@@ -57,7 +57,7 @@ export function BldFleetKpiCards({ kpis }: Props) {
             />
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {billableCount} seat công ty · 70%+ khoẻ · dưới 50% là kém
+            {billableCount} seat active · 70%+ khoẻ · dưới 50% là kém
           </p>
         </CardContent>
       </Card>
@@ -97,9 +97,9 @@ export function BldFleetKpiCards({ kpis }: Props) {
         </CardHeader>
         <CardContent>
           <div
-            className={`flex items-center gap-1 text-3xl font-bold ${wwDeltaColor(wwDelta)}`}
+            className={`flex items-center gap-1 text-3xl font-bold ${deltaColor(wwDelta)}`}
           >
-            {wwDeltaIcon(wwDelta)}
+            {deltaIcon(wwDelta)}
             <span>
               {wwDelta >= 0 ? "+" : ""}
               {wwDelta.toFixed(1)}%
@@ -112,6 +112,45 @@ export function BldFleetKpiCards({ kpis }: Props) {
                 ? "Đội đang dùng ít hơn tuần trước"
                 : "Mức sử dụng ổn định"}
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Day/Day Delta */}
+      <Card>
+        <CardHeader className="pb-2 space-y-0.5">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Thay đổi ngày
+          </CardTitle>
+          <p className="text-[11px] text-muted-foreground/70 leading-snug">
+            So sánh peak 5h trung bình hôm nay với hôm qua. Phản ứng nhanh trong ngày
+          </p>
+        </CardHeader>
+        <CardContent>
+          {ddDelta != null ? (
+            <>
+              <div
+                className={`flex items-center gap-1 text-3xl font-bold ${deltaColor(ddDelta)}`}
+              >
+                <CalendarClock className="h-4 w-4" />
+                <span>
+                  {ddDelta >= 0 ? "+" : ""}
+                  {ddDelta.toFixed(1)}%
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {ddDelta > 5
+                  ? "Hôm nay dùng nhiều hơn hẳn"
+                  : ddDelta < -5
+                    ? "Hôm nay nhẹ hơn hôm qua"
+                    : "Tương đương hôm qua"}
+              </p>
+            </>
+          ) : (
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <CalendarClock className="h-5 w-5" />
+              <span className="text-sm font-medium">Chưa đủ dữ liệu</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
