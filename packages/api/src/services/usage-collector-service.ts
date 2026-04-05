@@ -141,13 +141,25 @@ export async function collectAllUsage(): Promise<{
   }
 }
 
-/** Collect usage for a single seat by ID (skips if no active token) */
-export async function collectSeatUsage(seatId: string): Promise<{ skipped?: boolean }> {
+/** Min gap between manual collects for the same seat (protects Claude API quota) */
+const MANUAL_COLLECT_MIN_GAP_MS = 60_000
+
+/** Collect usage for a single seat by ID (skips if no active token or called too recently) */
+export async function collectSeatUsage(seatId: string): Promise<{ skipped?: boolean; reason?: string }> {
   const seat = await Seat.findById(seatId).select('+oauth_credential').lean()
   if (!seat) throw new Error('Seat not found')
   if (!seat.token_active || !seat.oauth_credential?.access_token) {
     console.log(`[Collector] Skipped ${seat.label}: no active token`)
-    return { skipped: true }
+    return { skipped: true, reason: 'no_token' }
+  }
+  // Rate limit: skip if recent snapshot exists
+  if (seat.last_fetched_at) {
+    const sinceMs = Date.now() - new Date(seat.last_fetched_at).getTime()
+    if (sinceMs < MANUAL_COLLECT_MIN_GAP_MS) {
+      const waitSec = Math.ceil((MANUAL_COLLECT_MIN_GAP_MS - sinceMs) / 1000)
+      console.log(`[Collector] Rate-limited ${seat.label}: fetched ${Math.floor(sinceMs / 1000)}s ago`)
+      return { skipped: true, reason: `rate_limited:${waitSec}` }
+    }
   }
   await fetchSeatUsage(seat as any)
   return {}

@@ -66,7 +66,7 @@ Any Google account can log in. Admin role must be granted manually (DB flip).
 
 ## Key Domain Rules
 
-- **Alerts are per-user** (each user configures `alert_settings.rate_limit_pct`, `extra_credit_pct`, `watched_seat_ids`). No global alert config.
+- **Alerts are per-user-per-seat** (each user configures `watched_seats: [{ seat_id, threshold_5h_pct, threshold_7d_pct }]`; channels via `alert_settings: { enabled, telegram_enabled, token_failure_enabled }`). Dedup key: `(user_id, seat_id, type, window)` per 24h.
 - **Seat credentials are encrypted at rest** via `lib/encryption.ts` AES-256-GCM. Same for personal Telegram bot tokens.
 - **User Telegram bots are per-user** (hourly personal reminders on schedule match); system bot is used for Friday 17:00 weekly summary.
 - **Schedule permissions** — always resolve via `@repo/shared/schedule-permissions.resolveSchedulePermissions()`. Rules: admin has all, seat owner can create/swap/edit-for-others, members can self-edit, clearAll is admin-only.

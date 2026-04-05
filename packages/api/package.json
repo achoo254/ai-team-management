@@ -8,7 +8,8 @@
     "build": "tsx build.ts --env=.env",
     "build:staging": "tsx build.ts --env=.env.staging",
     "start": "node dist/index.js",
-    "start:staging": "node dist/index.js"
+    "start:staging": "node dist/index.js",
+    "migrate:alert-thresholds": "tsx --env-file .env.local src/scripts/migrate-alert-per-seat-thresholds.ts"
   },
   "dependencies": {
     "@repo/shared": "workspace:*",
@@ -18,7 +19,8 @@
     "firebase-admin": "^13.7.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.3.1",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "pdfkit": "^0.18.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1",
@@ -27,6 +29,7 @@
     "@types/jsonwebtoken": "^9",
     "@types/node": "^20",
     "@types/node-cron": "^3",
+    "@types/pdfkit": "^0.17.5",
     "esbuild": "^0.25.12",
     "tsx": "^4.19.0",
     "typescript": "^5"

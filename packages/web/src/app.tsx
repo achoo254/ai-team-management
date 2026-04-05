@@ -32,6 +32,7 @@ export default function App() {
             <Route path="usage-metrics" element={<Navigate to="/usage" replace />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="bld" element={<Navigate to="/dashboard?tab=overview" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -21,6 +21,8 @@ export interface ISeat extends Document {
   last_refreshed_at: Date | null
   created_at: Date
   deleted_at: Date | null
+  /** When true, seat is included in admin overview / BLD metrics. Toggle by admin or seat owner. */
+  include_in_overview: boolean
 }
 
 const seatSchema = new Schema<ISeat>(
@@ -42,6 +44,7 @@ const seatSchema = new Schema<ISeat>(
       select: false,
     },
     token_active: { type: Boolean, default: false },
+    include_in_overview: { type: Boolean, default: false },
     last_fetched_at: { type: Date, default: null },
     last_fetch_error: { type: String, default: null },
     last_refreshed_at: { type: Date, default: null },

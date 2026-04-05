@@ -12,6 +12,8 @@ export interface Seat {
   owner_id: string | null;
   owner?: SeatOwner | null;
   has_token?: boolean; token_active?: boolean;
+  /** When true, seat appears in admin overview / BLD metrics tab. */
+  include_in_overview?: boolean;
   last_fetched_at?: string | null; last_fetch_error?: string | null;
 }
 
@@ -22,12 +24,33 @@ export function useSeats() {
   return useQuery<{ seats: Seat[] }>({ queryKey: KEY, queryFn: () => api.get("/api/seats") });
 }
 
+export interface CreateSeatPayload {
+  credential_json: string;
+  max_users: number;
+  label?: string;
+  manual_mode?: boolean;
+  email?: string;
+}
+
+export interface PreviewTokenResponse {
+  account: { email: string; full_name: string; has_claude_max: boolean; has_claude_pro: boolean };
+  organization: { name: string; organization_type: string; rate_limit_tier: string; subscription_status: string };
+  duplicate_seat_id: string | null;
+}
+
 export function useCreateSeat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Omit<Seat, "_id" | "users">) => api.post("/api/seats", body),
+    mutationFn: (body: CreateSeatPayload) => api.post("/api/seats", body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Tạo seat thành công"); },
     onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function usePreviewSeatToken() {
+  return useMutation({
+    mutationFn: (credential_json: string) =>
+      api.post<PreviewTokenResponse>("/api/seats/preview-token", { credential_json }),
   });
 }
 

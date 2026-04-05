@@ -1,7 +1,8 @@
 ---
 name: alert-per-seat-thresholds
-status: pending
+status: completed
 created: 2026-04-05
+completed: 2026-04-05
 slug: alert-per-seat-thresholds
 blockedBy: []
 blocks: []
@@ -42,11 +43,11 @@ Hiện tại user có 1 bộ threshold global (`rate_limit_pct`, `extra_credit_p
 
 | # | Phase | Status |
 |---|---|---|
-| 01 | [Backend Schema + Migration](phase-01-backend-schema-migration.md) | pending |
-| 02 | [Backend Alert Service + API](phase-02-backend-alert-service.md) | pending |
-| 03 | [Frontend Alert Settings (Channels)](phase-03-frontend-alert-settings.md) | pending |
-| 04 | [Frontend Per-Seat Watch Config UI](phase-04-frontend-watch-config-ui.md) | pending |
-| 05 | [Testing + Docs](phase-05-testing.md) | pending |
+| 01 | [Backend Schema + Migration](phase-01-backend-schema-migration.md) | completed |
+| 02 | [Backend Alert Service + API](phase-02-backend-alert-service.md) | completed |
+| 03 | [Frontend Alert Settings (Channels)](phase-03-frontend-alert-settings.md) | completed |
+| 04 | [Frontend Per-Seat Watch Config UI](phase-04-frontend-watch-config-ui.md) | completed |
+| 05 | [Testing + Docs](phase-05-testing.md) | completed |
 
 ## Key Dependencies
 

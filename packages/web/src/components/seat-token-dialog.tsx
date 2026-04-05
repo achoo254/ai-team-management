@@ -8,41 +8,13 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useSetSeatToken, useRemoveSeatToken } from '@/hooks/use-usage-snapshots'
 import { CredentialPathGuide } from '@/components/credential-path-guide'
+import { parseCredentialJson, type ParsedCredential } from '@repo/shared/credential-parser'
 import type { Seat } from '@repo/shared'
 
 interface Props {
   seat: Seat | null
   open: boolean
   onOpenChange: (open: boolean) => void
-}
-
-interface ParsedCredential {
-  accessToken: string
-  refreshToken: string | null
-  expiresAt: number | null
-  scopes: string[]
-  subscriptionType: string | null
-  rateLimitTier: string | null
-}
-
-/** Try to parse raw JSON into credential fields */
-function tryParse(raw: string): ParsedCredential | null {
-  try {
-    const obj = JSON.parse(raw)
-    const cred = obj.claudeAiOauth || obj
-    const accessToken = cred.accessToken || cred.access_token
-    if (!accessToken) return null
-    return {
-      accessToken,
-      refreshToken: cred.refreshToken || cred.refresh_token || null,
-      expiresAt: cred.expiresAt || cred.expires_at || null,
-      scopes: cred.scopes || [],
-      subscriptionType: cred.subscriptionType || cred.subscription_type || null,
-      rateLimitTier: cred.rateLimitTier || cred.rate_limit_tier || null,
-    }
-  } catch {
-    return null
-  }
 }
 
 /** Format expiry as relative countdown */
@@ -75,7 +47,7 @@ export function SeatTokenDialog({ seat, open, onOpenChange }: Props) {
 
   // Re-parse when raw input changes
   useEffect(() => {
-    setParsed(rawJson.trim() ? tryParse(rawJson) : null)
+    setParsed(rawJson.trim() ? parseCredentialJson(rawJson) : null)
   }, [rawJson])
 
   if (!seat) return null

@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
-import { useUserSettings, useUpdateUserSettings } from "@/hooks/use-user-settings";
+import { Loader2, Info } from "lucide-react";
+import { useUserSettings, useUpdateUserSettings, useTestPush } from "@/hooks/use-user-settings";
 import { useEnablePush, useUnregisterFcmToken } from "@/hooks/use-fcm";
 import type { UserAlertSettings } from "@repo/shared/types";
 
 const DEFAULT_SETTINGS: UserAlertSettings = {
   enabled: false,
-  rate_limit_pct: 80,
-  extra_credit_pct: 80,
+  telegram_enabled: true,
   token_failure_enabled: true,
 };
 
@@ -21,11 +21,12 @@ export function AlertSettingsForm() {
   const [as, setAs] = useState<UserAlertSettings>(DEFAULT_SETTINGS);
   const [dirty, setDirty] = useState(false);
 
-  // Sync from server (default token_failure_enabled=true for legacy records)
+  // Sync from server
   useEffect(() => {
     if (settings?.alert_settings) {
       setAs({
-        ...settings.alert_settings,
+        enabled: !!settings.alert_settings.enabled,
+        telegram_enabled: settings.alert_settings.telegram_enabled ?? true,
         token_failure_enabled: settings.alert_settings.token_failure_enabled ?? true,
       });
     }
@@ -37,6 +38,7 @@ export function AlertSettingsForm() {
 
   const enablePush = useEnablePush();
   const unregisterFcm = useUnregisterFcmToken();
+  const testPush = useTestPush();
   const pushSupported = typeof window !== "undefined" && "Notification" in window && "serviceWorker" in navigator;
   const pushDenied = typeof window !== "undefined" && "Notification" in window && Notification.permission === "denied";
   const pushEnabled = settings?.push_enabled ?? false;
@@ -61,23 +63,16 @@ export function AlertSettingsForm() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Cài đặt Alert</CardTitle>
         <CardDescription className="text-xs">
-          Nhận thông báo khi usage vượt ngưỡng qua Telegram bot cá nhân.
+          Nhận thông báo khi có cảnh báo usage.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!hasTelegram && (
-          <p className="text-xs text-amber-600">
-            Cần cấu hình Telegram bot trước khi bật alert.
-          </p>
-        )}
-
-        {/* Enable toggle */}
+        {/* Master enable toggle */}
         <div className="flex items-center gap-3">
           <Label className="text-xs">Bật thông báo alert</Label>
           <Button
             size="sm"
             variant={as.enabled ? "default" : "outline"}
-            disabled={!hasTelegram}
             onClick={() => {
               setDirty(true);
               setAs((prev) => ({ ...prev, enabled: !prev.enabled }));
@@ -87,78 +82,90 @@ export function AlertSettingsForm() {
           </Button>
         </div>
 
-        {/* Desktop push notification */}
-        <div className="flex items-center gap-3">
-          <Label className="text-xs">Desktop Push Notification</Label>
-          {!pushSupported ? (
-            <span className="text-xs text-muted-foreground">Trình duyệt không hỗ trợ</span>
-          ) : pushDenied ? (
-            <span className="text-xs text-amber-600">
-              Đã bị chặn. Vào Settings trình duyệt để bật lại.
-            </span>
-          ) : (
+        {/* Channels section */}
+        <div className="space-y-3 border-t pt-3">
+          <div className="text-xs font-medium text-muted-foreground">Kênh thông báo</div>
+
+          <div className="flex items-center gap-3">
+            <Label className="text-xs">Telegram</Label>
             <Button
               size="sm"
-              variant={pushEnabled ? "default" : "outline"}
-              onClick={handleTogglePush}
-              disabled={enablePush.isPending || unregisterFcm.isPending}
+              variant={as.telegram_enabled ? "default" : "outline"}
+              disabled={!as.enabled || !hasTelegram}
+              onClick={() => {
+                setDirty(true);
+                setAs((prev) => ({ ...prev, telegram_enabled: !prev.telegram_enabled }));
+              }}
             >
-              {(enablePush.isPending || unregisterFcm.isPending) && <Loader2 size={14} className="animate-spin mr-1" />}
-              {pushEnabled ? "Đang bật" : "Bật"}
+              {as.telegram_enabled ? "Đang bật" : "Tắt"}
             </Button>
-          )}
+            {!hasTelegram && (
+              <span className="text-xs text-muted-foreground">Cần cấu hình bot trước</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Label className="text-xs">Desktop Push</Label>
+            {!pushSupported ? (
+              <span className="text-xs text-muted-foreground">Trình duyệt không hỗ trợ</span>
+            ) : pushDenied ? (
+              <span className="text-xs text-amber-600">
+                Đã bị chặn. Vào Settings trình duyệt để bật lại.
+              </span>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant={pushEnabled ? "default" : "outline"}
+                  onClick={handleTogglePush}
+                  disabled={enablePush.isPending || unregisterFcm.isPending}
+                >
+                  {(enablePush.isPending || unregisterFcm.isPending) && <Loader2 size={14} className="animate-spin mr-1" />}
+                  {pushEnabled ? "Đang bật" : "Bật"}
+                </Button>
+                {pushEnabled && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => testPush.mutate()}
+                    disabled={testPush.isPending}
+                  >
+                    {testPush.isPending && <Loader2 size={14} className="animate-spin mr-1" />}
+                    Test
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Token failure alert toggle */}
-        <div className="flex items-center gap-3">
-          <Label className="text-xs">Cảnh báo token invalid</Label>
-          <Button
-            size="sm"
-            variant={as.token_failure_enabled ? "default" : "outline"}
-            disabled={!as.enabled}
-            onClick={() => {
-              setDirty(true);
-              setAs((prev) => ({ ...prev, token_failure_enabled: !prev.token_failure_enabled }));
-            }}
-          >
-            {as.token_failure_enabled ? "Đang bật" : "Tắt"}
-          </Button>
+        {/* Alert types section */}
+        <div className="space-y-3 border-t pt-3">
+          <div className="text-xs font-medium text-muted-foreground">Loại cảnh báo</div>
+          <div className="flex items-center gap-3">
+            <Label className="text-xs">Cảnh báo token invalid</Label>
+            <Button
+              size="sm"
+              variant={as.token_failure_enabled ? "default" : "outline"}
+              disabled={!as.enabled}
+              onClick={() => {
+                setDirty(true);
+                setAs((prev) => ({ ...prev, token_failure_enabled: !prev.token_failure_enabled }));
+              }}
+            >
+              {as.token_failure_enabled ? "Đang bật" : "Tắt"}
+            </Button>
+          </div>
         </div>
 
-        {/* Thresholds */}
-        <div>
-          <Label className="text-xs">Ngưỡng cảnh báo</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
-            <label className="space-y-1">
-              <span className="text-xs text-muted-foreground">Rate limit (%)</span>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={as.rate_limit_pct}
-                disabled={!as.enabled}
-                onChange={(e) => {
-                  setDirty(true);
-                  setAs((prev) => ({ ...prev, rate_limit_pct: Number(e.target.value) || 80 }));
-                }}
-                className="w-full rounded-md border bg-background px-3 py-1.5 text-sm disabled:opacity-50"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-muted-foreground">Extra credit (%)</span>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={as.extra_credit_pct}
-                disabled={!as.enabled}
-                onChange={(e) => {
-                  setDirty(true);
-                  setAs((prev) => ({ ...prev, extra_credit_pct: Number(e.target.value) || 80 }));
-                }}
-                className="w-full rounded-md border bg-background px-3 py-1.5 text-sm disabled:opacity-50"
-              />
-            </label>
+        {/* Info banner */}
+        <div className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          <Info size={14} className="mt-0.5 shrink-0" />
+          <div>
+            Ngưỡng usage được cấu hình riêng cho từng seat.{" "}
+            <Link to="/seats" className="underline text-primary">
+              Xem trang Seats →
+            </Link>
           </div>
         </div>
 

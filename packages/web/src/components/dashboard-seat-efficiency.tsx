@@ -3,6 +3,8 @@ import {
   Cell, LabelList,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
+import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardEnhanced, formatRangeDate, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
 import { cssVar } from "@/lib/chart-colors";
@@ -111,7 +113,8 @@ function EfficiencyLegend() {
 /* ---------- Main component ---------- */
 
 export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
-  const { data, isLoading } = useDashboardEnhanced(range, seatIds);
+  const filter = useCardSeatOverride(seatIds);
+  const { data, isLoading } = useDashboardEnhanced(range, filter.effective);
 
   const chartData = (data?.usagePerSeat ?? [])
     .map(calcEfficiency)
@@ -121,12 +124,13 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <CardTitle className="text-base font-semibold">Hiệu suất Seat — Mức dùng trên mỗi thành viên</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
               Tỷ lệ sử dụng 7 ngày chia đều cho số thành viên · <span className="font-medium">{formatRangeDate(range)}</span>
             </p>
           </div>
+          <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
         </div>
       </CardHeader>
       <CardContent className="pt-0">

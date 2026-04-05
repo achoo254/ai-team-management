@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import type { QuotaForecast, StaleSeatInfo, TokenFailureInfo, UrgentForecastItem } from "@repo/shared/types";
+export type { QuotaForecast, QuotaForecastResult, QuotaForecastStatus, StaleSeatInfo, TokenFailureInfo, UrgentForecastItem } from "@repo/shared/types";
 
 // Per-seat extra usage info
 export interface SeatExtraUsage {
@@ -61,6 +63,10 @@ export interface EnhancedDashboardData {
   usagePerSeat: SeatUsageItem[];
   usageTrend: UsageTrendPoint[];
   overBudgetSeats: OverBudgetSeat[];
+  // Phase 1 data quality fields
+  stale_seats: StaleSeatInfo[];
+  token_failures: TokenFailureInfo[];
+  urgent_forecasts: UrgentForecastItem[];
 }
 
 export type DashboardRange = "day" | "week" | "month" | "3month" | "6month";
@@ -91,15 +97,39 @@ async function fetchJson<T>(url: string): Promise<T> {
 // Efficiency metrics
 export interface EfficiencySummary {
   avg_utilization: number;
-  avg_impact_ratio: number | null;
   avg_delta_5h: number;
   avg_delta_7d: number;
-  avg_delta_7d_sonnet: number;
-  avg_delta_7d_opus: number;
+  avg_sonnet_7d: number;
+  avg_opus_7d: number;
+  peak_max: number;
+  peak_min: number;
+  stddev_util: number;
+  tier_full: number;   // ≥80% utilization
+  tier_good: number;   // 50-80%
+  tier_low: number;    // 10-50%
+  tier_waste: number;  // <10%
   total_sessions: number;
   waste_sessions: number;
   total_resets: number;
   total_hours: number;
+}
+
+export interface SparklinePoint {
+  seat_id: string;
+  seat_label: string;
+  window_start: string;
+  window_end: string;
+  utilization_pct: number;
+  delta_7d_pct: number;
+  duration_hours: number;
+  is_waste: boolean;
+}
+
+export interface EfficiencyRankedSeat {
+  seat_id: string;
+  label: string;
+  avg_utilization: number;
+  session_count: number;
 }
 
 export interface EfficiencyPerSeat {
@@ -108,9 +138,6 @@ export interface EfficiencyPerSeat {
   avg_utilization: number;
   avg_delta_5h: number;
   avg_delta_7d: number;
-  avg_delta_7d_sonnet: number;
-  avg_delta_7d_opus: number;
-  avg_impact_ratio: number | null;
   session_count: number;
   waste_count: number;
 }
@@ -138,21 +165,27 @@ export interface ActiveSessionLive {
   delta_7d: number;
   reset_count: number;
   started_at: string;
+  last_activity_at: string | null;
 }
 
 export interface EfficiencyData {
   summary: EfficiencySummary;
+  sparkline: SparklinePoint[];
   perSeat: EfficiencyPerSeat[];
   perUser: EfficiencyPerUser[];
   dailyTrend: { date: string; avg_utilization: number; avg_delta_5h: number; sessions: number }[];
   activeSessions: ActiveSessionLive[];
+  topSeats: EfficiencyRankedSeat[];
+  bottomSeats: EfficiencyRankedSeat[];
   coverage: EfficiencyCoverage;
+  quota_forecast: QuotaForecast;
 }
 
 export interface PeakHourCell {
   dow: number; // 0=Sun..6=Sat
   hour: number; // 0-23
-  avg_delta_7d: number;
+  avg_util: number; // % of 5h budget used (avg)
+  max_util: number; // % peak
   window_count: number;
 }
 

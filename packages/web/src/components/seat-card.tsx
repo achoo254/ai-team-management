@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2, X, UserPlus, Download, ArrowRightLeft } from "lucide-react";
+import { Pencil, Trash2, X, UserPlus, Download, ArrowRightLeft, BarChart2 } from "lucide-react";
 import { type Seat } from "@/hooks/use-seats";
+import { WatchSeatButton } from "./watch-seat-button";
 
 /** Minimal user shape needed for assign/transfer pickers */
 interface PickerUser { id: string; name: string; email: string; active: boolean; }
@@ -36,7 +37,13 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <CardTitle className="text-base truncate">{seat.label}</CardTitle>
+            <div className="flex items-center gap-1.5">
+              <CardTitle className="text-base truncate">{seat.label}</CardTitle>
+              {/* Subtle indicator: seat is included in overview / BLD metrics */}
+              {seat.include_in_overview && (
+                <BarChart2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" title="Đưa vào báo cáo tổng quan" />
+              )}
+            </div>
             <p className="text-sm text-muted-foreground truncate">{seat.email}</p>
             {/* Owner indicator */}
             {isOwner ? (
@@ -67,9 +74,12 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-2">
-        <p className="text-xs text-muted-foreground">
-          {seat.users.length}/{seat.max_users} members
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            {seat.users.length}/{seat.max_users} members
+          </p>
+          <WatchSeatButton seatId={seat._id} seatLabel={seat.label || seat.email} />
+        </div>
 
         {/* Current members */}
         <div className="flex flex-wrap gap-1">

@@ -4,7 +4,6 @@ import type { AlertType } from '@repo/shared/types'
 
 const ALERT_DISPLAY: Record<AlertType, { title: string }> = {
   rate_limit: { title: 'Rate Limit Warning' },
-  extra_credit: { title: 'Extra Credit Warning' },
   token_failure: { title: 'Token Failure' },
   usage_exceeded: { title: 'Usage Budget Exceeded' },
   session_waste: { title: 'Session lãng phí' },

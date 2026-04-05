@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
-  AlertTriangle, TrendingUp, CreditCard, KeyRound, Clock, ChevronDown,
+  AlertTriangle, TrendingUp, KeyRound, Clock, ChevronDown,
 } from "lucide-react";
 import type { Alert } from "@/hooks/use-alerts";
 
 const TYPE_CONFIG: Record<string, { label: string; variant: "destructive" | "secondary" | "outline"; icon: typeof TrendingUp }> = {
   rate_limit: { label: "Rate Limit", variant: "destructive", icon: TrendingUp },
-  extra_credit: { label: "Extra Credit", variant: "secondary", icon: CreditCard },
   token_failure: { label: "Token Error", variant: "outline", icon: KeyRound },
   usage_exceeded: { label: "Vượt Budget", variant: "destructive", icon: AlertTriangle },
   session_waste: { label: "Lãng phí", variant: "secondary", icon: Clock },
@@ -32,10 +31,15 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
   if (!m) return null;
 
   switch (alert.type) {
-    case "rate_limit":
+    case "rate_limit": {
+      const label = (m.session as string) ?? (alert.window ?? "");
+      const pct = (m.max_pct as number | undefined) ?? m.pct ?? 0;
       return (
         <div className="space-y-1.5 pt-2 border-t border-border/50">
-          {m.session && <UsageBar label={m.session} pct={m.pct ?? 0} />}
+          {label && <UsageBar label={label} pct={pct} />}
+          {(m.threshold as number | undefined) != null && (
+            <p className="text-[11px] text-muted-foreground">Ngưỡng: {m.threshold as number}%</p>
+          )}
           {m.resets_at && (
             <p className="text-[11px] text-muted-foreground">
               Reset: {new Date(m.resets_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
@@ -43,17 +47,7 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
           )}
         </div>
       );
-    case "extra_credit":
-      return (
-        <div className="space-y-1.5 pt-2 border-t border-border/50">
-          {m.pct != null && <UsageBar label="Credits" pct={m.pct} />}
-          {m.credits_used != null && (
-            <p className="text-[11px] text-muted-foreground">
-              ${m.credits_used} / ${m.credits_limit ?? "?"}
-            </p>
-          )}
-        </div>
-      );
+    }
     case "token_failure":
       return m.error ? (
         <div className="pt-2 border-t border-border/50">
@@ -66,7 +60,7 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
         <div className="space-y-1.5 pt-2 border-t border-border/50">
           {m.user_name && <p className="text-xs font-medium">{m.user_name}</p>}
           {m.delta != null && m.budget != null && (
-            <UsageBar label={m.session ?? "Δ"} pct={Math.round((m.delta / m.budget) * 100)} />
+            <UsageBar label={m.session ?? "Phiên"} pct={Math.round((m.delta / m.budget) * 100)} />
           )}
         </div>
       );
@@ -74,7 +68,7 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
       return (
         <div className="pt-2 border-t border-border/50">
           {m.duration != null && <p className="text-[11px] text-muted-foreground">Thời gian: {m.duration}h</p>}
-          {m.delta != null && <p className="text-[11px] text-muted-foreground">Δ5h: {m.delta}%</p>}
+          {m.delta != null && <p className="text-[11px] text-muted-foreground">5h: {m.delta}%</p>}
           <p className="text-[11px] text-amber-600 mt-1">Cân nhắc rút ngắn session</p>
         </div>
       );

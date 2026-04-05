@@ -13,7 +13,6 @@ import type { Alert } from "@repo/shared/types";
 
 const TYPE_LABELS: Record<string, string> = {
   rate_limit: "Rate Limit",
-  extra_credit: "Extra Credit",
   token_failure: "Token Error",
   usage_exceeded: "Vượt Budget",
   session_waste: "Lãng phí",

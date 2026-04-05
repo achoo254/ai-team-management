@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SeatCard } from "@/components/seat-card";
-import { SeatFormDialog } from "@/components/seat-form-dialog";
+import { SeatFormDialog, type SeatFormSubmit } from "@/components/seat-form-dialog";
 import { SeatTokenDialog } from "@/components/seat-token-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
@@ -43,11 +43,11 @@ export default function SeatsPage() {
     }
   };
 
-  const handleSubmit = (body: Omit<Seat, "_id" | "users">) => {
-    const mut = editing
-      ? updateSeat.mutateAsync({ id: editing._id, ...body })
-      : createSeat.mutateAsync(body);
-    mut.then(() => { setFormOpen(false); setEditing(null); });
+  const handleSubmit = (p: SeatFormSubmit) => {
+    const mut = p.mode === "edit" && editing
+      ? updateSeat.mutateAsync({ id: editing._id, ...p.data })
+      : createSeat.mutateAsync(p.data as Parameters<typeof createSeat.mutateAsync>[0]);
+    mut.then(() => { setFormOpen(false); setEditing(null); }).catch(() => {});
   };
 
   const handleEdit = (seat: Seat) => { setEditing(seat); setFormOpen(true); };

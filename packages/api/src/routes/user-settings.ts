@@ -3,6 +3,7 @@ import { authenticate } from '../middleware.js'
 import { User } from '../models/user.js'
 import { Seat } from '../models/seat.js'
 import { encrypt, decrypt, isEncryptionConfigured } from '../lib/encryption.js'
+import { getMessaging } from '../firebase-admin.js'
 
 const router = Router()
 
@@ -13,14 +14,14 @@ router.get('/settings', async (req, res) => {
   try {
     const user = await User.findById(
       req.user!._id,
-      'telegram_chat_id telegram_topic_id telegram_bot_token watched_seat_ids notification_settings alert_settings seat_ids push_enabled',
+      'telegram_chat_id telegram_topic_id telegram_bot_token watched_seats notification_settings alert_settings seat_ids push_enabled',
     )
     if (!user) { res.status(404).json({ error: 'User not found' }); return }
 
-    // Available seats: admin → all, user → owned + assigned
-    let availableSeats
+    // Resolve accessible seats (admin → all, user → owned + assigned)
+    let allAccessibleSeats: Array<{ _id: any; label: string; email: string }>
     if (req.user!.role === 'admin') {
-      availableSeats = await Seat.find({}, '_id label email').lean()
+      allAccessibleSeats = await Seat.find({}, '_id label email').lean() as any
     } else {
       const ownedSeats = await Seat.find({ owner_id: req.user!._id }, '_id label email').lean()
       const assignedSeats = user.seat_ids?.length
@@ -28,14 +29,31 @@ router.get('/settings', async (req, res) => {
         : []
       const seatMap = new Map<string, any>()
       for (const s of [...ownedSeats, ...assignedSeats]) seatMap.set(String(s._id), s)
-      availableSeats = Array.from(seatMap.values())
+      allAccessibleSeats = Array.from(seatMap.values())
     }
+
+    // Populate watched_seats with labels
+    const seatLookup = new Map(allAccessibleSeats.map((s) => [String(s._id), s]))
+    const watchedSeats = (user.watched_seats ?? []).map((ws) => {
+      const s = seatLookup.get(String(ws.seat_id))
+      return {
+        seat_id: String(ws.seat_id),
+        threshold_5h_pct: ws.threshold_5h_pct,
+        threshold_7d_pct: ws.threshold_7d_pct,
+        seat_label: s?.label ?? null,
+        seat_email: s?.email ?? null,
+      }
+    })
+
+    // Available seats = accessible seats not yet watched
+    const watchedIdSet = new Set(watchedSeats.map((w) => w.seat_id))
+    const availableSeats = allAccessibleSeats.filter((s) => !watchedIdSet.has(String(s._id)))
 
     res.json({
       telegram_chat_id: user.telegram_chat_id ?? null,
       telegram_topic_id: user.telegram_topic_id ?? null,
       has_telegram_bot: !!user.telegram_bot_token && !!user.telegram_chat_id,
-      watched_seat_ids: (user.watched_seat_ids ?? []).map(String),
+      watched_seats: watchedSeats,
       notification_settings: user.notification_settings ?? null,
       alert_settings: user.alert_settings ?? null,
       push_enabled: user.push_enabled ?? false,
@@ -50,7 +68,7 @@ router.get('/settings', async (req, res) => {
 // PUT /api/user/settings — update bot config
 router.put('/settings', async (req, res) => {
   try {
-    const { telegram_bot_token, telegram_chat_id, telegram_topic_id, watched_seat_ids, notification_settings, alert_settings, push_enabled } = req.body
+    const { telegram_bot_token, telegram_chat_id, telegram_topic_id, notification_settings, alert_settings, push_enabled } = req.body
 
     if (telegram_bot_token !== undefined && !isEncryptionConfigured()) {
       res.status(503).json({ error: 'Encryption not configured. Set ENCRYPTION_KEY env var.' })
@@ -76,23 +94,6 @@ router.put('/settings', async (req, res) => {
       }
     }
 
-    // Update watched seat IDs
-    if (watched_seat_ids !== undefined) {
-      let validIds: string[] = Array.isArray(watched_seat_ids) ? watched_seat_ids : []
-      const existingSeats = await Seat.find({ _id: { $in: validIds } }, '_id').lean()
-      const existingSet = new Set(existingSeats.map(s => String(s._id)))
-      validIds = validIds.filter((id: string) => existingSet.has(id))
-
-      // Non-admin: restrict to owned/assigned seats
-      if (req.user!.role !== 'admin') {
-        const userSeatIds = new Set((user.seat_ids ?? []).map(String))
-        const ownedSeats = await Seat.find({ owner_id: req.user!._id }, '_id').lean()
-        for (const s of ownedSeats) userSeatIds.add(String(s._id))
-        validIds = validIds.filter((id: string) => userSeatIds.has(id))
-      }
-      user.watched_seat_ids = validIds as any
-    }
-
     // Update notification settings
     if (notification_settings) {
       const ns = notification_settings
@@ -100,7 +101,7 @@ router.put('/settings', async (req, res) => {
         ? [...new Set((ns.report_days as unknown[]).filter((d): d is number => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6))]
         : []
       if (ns.report_enabled && days.length === 0) {
-        res.status(400).json({ error: 'Cần chọn ít nhất 1 ngày gửi báo c��o' })
+        res.status(400).json({ error: 'Cần chọn ít nhất 1 ngày gửi báo cáo' })
         return
       }
       user.notification_settings = {
@@ -115,17 +116,31 @@ router.put('/settings', async (req, res) => {
       user.push_enabled = !!push_enabled
     }
 
-    // Update alert settings
+    // Update alert settings (channels + type toggles + BLD digest config)
     if (alert_settings) {
       const as = alert_settings
-      const rlp = Math.max(1, Math.min(100, Math.floor(Number(as.rate_limit_pct) || 80)))
-      const ecp = Math.max(1, Math.min(100, Math.floor(Number(as.extra_credit_pct) || 80)))
-
       user.alert_settings = {
         enabled: !!as.enabled,
-        rate_limit_pct: rlp,
-        extra_credit_pct: ecp,
+        telegram_enabled: as.telegram_enabled !== false,
         token_failure_enabled: as.token_failure_enabled !== false,
+        bld_digest_enabled: !!as.bld_digest_enabled,
+        bld_digest_days: Array.isArray(as.bld_digest_days)
+          ? as.bld_digest_days
+              .map((d: unknown) => Number(d))
+              .filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)
+          : [5],
+        bld_digest_hour:
+          as.bld_digest_hour == null || as.bld_digest_hour === ''
+            ? 17
+            : Math.max(0, Math.min(23, Number(as.bld_digest_hour))),
+        fleet_util_threshold_pct:
+          as.fleet_util_threshold_pct == null || as.fleet_util_threshold_pct === ''
+            ? null
+            : Number(as.fleet_util_threshold_pct),
+        fleet_util_threshold_days:
+          as.fleet_util_threshold_days == null || as.fleet_util_threshold_days === ''
+            ? null
+            : Number(as.fleet_util_threshold_days),
       }
     }
 
@@ -134,7 +149,6 @@ router.put('/settings', async (req, res) => {
       telegram_chat_id: user.telegram_chat_id,
       telegram_topic_id: user.telegram_topic_id ?? null,
       has_telegram_bot: !!user.telegram_bot_token && !!user.telegram_chat_id,
-      watched_seat_ids: (user.watched_seat_ids ?? []).map(String),
       notification_settings: user.notification_settings ?? null,
       alert_settings: user.alert_settings ?? null,
       push_enabled: user.push_enabled ?? false,
@@ -163,6 +177,73 @@ router.post('/settings/fcm-token', async (req, res) => {
     }
     await User.updateOne({ _id: req.user!._id }, { $addToSet: { fcm_tokens: token } })
     res.json({ success: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// POST /api/user/settings/test-push — send test push notification to user's registered devices
+router.post('/settings/test-push', async (req, res) => {
+  try {
+    const user = await User.findById(req.user!._id, 'fcm_tokens push_enabled')
+    if (!user?.push_enabled) {
+      res.status(400).json({ error: 'Desktop Push chưa được bật' })
+      return
+    }
+    if (!user.fcm_tokens?.length) {
+      res.status(400).json({ error: 'Chưa có thiết bị nào đăng ký push' })
+      return
+    }
+
+    const messaging = getMessaging()
+    const staleTokens: string[] = []
+    const failures: Array<{ code?: string; message?: string }> = []
+    let sent = 0
+
+    await Promise.allSettled(
+      user.fcm_tokens.map(async (token) => {
+        try {
+          await messaging.send({
+            token,
+            notification: {
+              title: 'Test Desktop Push',
+              body: 'Desktop push notification hoạt động bình thường!',
+            },
+            data: { type: 'test', url: '/settings' },
+            webpush: { fcmOptions: { link: '/settings' } },
+          })
+          sent++
+        } catch (err: any) {
+          const code = err?.code
+          const msg = err?.message
+          console.error('[test-push] FCM send failed:', code, msg)
+          if (code === 'messaging/registration-token-not-registered'
+            || code === 'messaging/invalid-registration-token'
+            || code === 'messaging/invalid-argument') {
+            staleTokens.push(token)
+          }
+          failures.push({ code, message: msg?.slice(0, 200) })
+        }
+      }),
+    )
+
+    if (staleTokens.length > 0) {
+      await User.updateOne({ _id: req.user!._id }, { $pull: { fcm_tokens: { $in: staleTokens } } })
+    }
+
+    if (sent === 0) {
+      const first = failures[0]
+      const detail = first ? ` (${first.code ?? 'unknown'}: ${first.message ?? ''})` : ''
+      res.status(400).json({
+        error: `Không gửi được push. Hãy tắt/bật lại Desktop Push.${detail}`,
+        failures,
+        stale_tokens_removed: staleTokens.length,
+      })
+      return
+    }
+
+    res.json({ success: true, sent, stale_tokens_removed: staleTokens.length })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

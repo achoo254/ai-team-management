@@ -23,6 +23,11 @@ router.post('/collect/:seatId', authenticate, validateObjectId('seatId'), requir
     const seatId = req.params.seatId as string
     const result = await collectSeatUsage(seatId)
     if (result.skipped) {
+      if (result.reason?.startsWith('rate_limited')) {
+        const waitSec = result.reason.split(':')[1] ?? '60'
+        res.status(429).json({ error: `Vừa cập nhật rồi. Vui lòng chờ ${waitSec}s.` })
+        return
+      }
       res.json({ message: 'Skipped: no active token' })
       return
     }

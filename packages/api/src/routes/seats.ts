@@ -5,25 +5,37 @@ import { Seat } from '../models/seat.js'
 import { encrypt, decrypt } from '../lib/encryption.js'
 import { User } from '../models/user.js'
 import { Schedule } from '../models/schedule.js'
+import { parseCredentialJson, type ParsedCredential } from '@repo/shared/credential-parser'
+import { fetchOAuthProfile, OAuthProfileError, type OAuthProfile } from '../services/anthropic-service.js'
 
 const router = Router()
 
-/** Parse credential from request body — supports raw JSON and structured fields */
+/** Build structured credential object for DB insert from ParsedCredential. */
+function toCredentialDoc(parsed: ParsedCredential) {
+  return {
+    access_token: encrypt(parsed.accessToken),
+    refresh_token: parsed.refreshToken ? encrypt(parsed.refreshToken) : null,
+    expires_at: parsed.expiresAt ? new Date(parsed.expiresAt) : null,
+    scopes: parsed.scopes,
+    subscription_type: parsed.subscriptionType,
+    rate_limit_tier: parsed.rateLimitTier,
+  }
+}
+
+/** Legacy parser — used by PUT /:id/token (structured fields OR raw JSON). Kept for backward compat. */
 function parseCredential(body: Record<string, unknown>) {
-  // Format A: raw JSON string (from browser cookie/file export)
   if (body.credential_json && typeof body.credential_json === 'string') {
-    const parsed = JSON.parse(body.credential_json)
-    const cred = parsed.claudeAiOauth || parsed
+    const p = parseCredentialJson(body.credential_json)
+    if (!p) throw new SyntaxError('Invalid credential JSON')
     return {
-      access_token: cred.accessToken || cred.access_token,
-      refresh_token: cred.refreshToken || cred.refresh_token || null,
-      expires_at: cred.expiresAt || cred.expires_at || null,
-      scopes: cred.scopes || [],
-      subscription_type: cred.subscriptionType || cred.subscription_type || null,
-      rate_limit_tier: cred.rateLimitTier || cred.rate_limit_tier || null,
+      access_token: p.accessToken,
+      refresh_token: p.refreshToken,
+      expires_at: p.expiresAt,
+      scopes: p.scopes,
+      subscription_type: p.subscriptionType,
+      rate_limit_tier: p.rateLimitTier,
     }
   }
-  // Format B: structured fields
   return {
     access_token: body.access_token as string,
     refresh_token: (body.refresh_token as string) || null,
@@ -141,19 +153,129 @@ router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requ
   }
 })
 
-// POST /api/seats — create seat (any authenticated user becomes owner)
-router.post('/', authenticate, async (req, res) => {
+// POST /api/seats/preview-token — preview credential: parse + fetch profile + check duplicate.
+// Does NOT persist; used by FE before showing the create button.
+router.post('/preview-token', authenticate, async (req, res) => {
   try {
-    const { email, label, max_users } = req.body
-
-    if (!email || !label) {
-      res.status(400).json({ error: 'email and label are required' })
+    const { credential_json } = req.body as { credential_json?: string }
+    if (!credential_json || typeof credential_json !== 'string') {
+      res.status(400).json({ error: 'credential_json is required' })
+      return
+    }
+    const parsed = parseCredentialJson(credential_json)
+    if (!parsed) {
+      res.status(400).json({ error: 'Invalid credential JSON' })
       return
     }
 
-    const seat = await Seat.create({ email, label, max_users, owner_id: req.user!._id })
-    // Auto-seed owner's watched_seat_ids so alerts appear in their feed
-    await User.findByIdAndUpdate(req.user!._id, { $addToSet: { watched_seat_ids: seat._id } })
+    let profile: OAuthProfile
+    try {
+      profile = await fetchOAuthProfile(parsed.accessToken)
+    } catch (e) {
+      if (e instanceof OAuthProfileError && e.status === 401) {
+        res.status(422).json({ error: 'Token invalid or expired' })
+        return
+      }
+      res.status(502).json({ error: 'Profile API unreachable' })
+      return
+    }
+
+    const duplicate = await Seat.findOne({ email: profile.account.email }).select('_id').lean()
+    res.json({
+      account: {
+        email: profile.account.email,
+        full_name: profile.account.full_name,
+        has_claude_max: profile.account.has_claude_max,
+        has_claude_pro: profile.account.has_claude_pro,
+      },
+      organization: {
+        name: profile.organization.name,
+        organization_type: profile.organization.organization_type,
+        rate_limit_tier: profile.organization.rate_limit_tier,
+        subscription_status: profile.organization.subscription_status,
+      },
+      duplicate_seat_id: duplicate ? String(duplicate._id) : null,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// POST /api/seats — create seat token-first (any authenticated user becomes owner).
+// Required: credential_json + max_users. Auto-fetches profile to fill email + default label.
+// manual_mode=true skips profile API and requires email+label in body.
+router.post('/', authenticate, async (req, res) => {
+  try {
+    const { credential_json, max_users, label, manual_mode, email: bodyEmail } = req.body as {
+      credential_json?: string
+      max_users?: number
+      label?: string
+      manual_mode?: boolean
+      email?: string
+    }
+
+    if (!credential_json || typeof credential_json !== 'string') {
+      res.status(400).json({ error: 'credential_json is required' })
+      return
+    }
+    if (typeof max_users !== 'number' || max_users < 1) {
+      res.status(400).json({ error: 'max_users is required' })
+      return
+    }
+
+    const parsed = parseCredentialJson(credential_json)
+    if (!parsed) {
+      res.status(400).json({ error: 'Invalid credential JSON' })
+      return
+    }
+
+    let email: string
+    let defaultLabel: string
+
+    if (manual_mode === true) {
+      if (!bodyEmail || !label) {
+        res.status(400).json({ error: 'email and label required in manual mode' })
+        return
+      }
+      email = bodyEmail
+      defaultLabel = label
+    } else {
+      try {
+        const profile = await fetchOAuthProfile(parsed.accessToken)
+        email = profile.account.email
+        defaultLabel = profile.account.full_name
+      } catch (e) {
+        if (e instanceof OAuthProfileError && e.status === 401) {
+          res.status(422).json({ error: 'Token invalid or expired' })
+          return
+        }
+        res.status(502).json({ error: 'Profile API unreachable' })
+        return
+      }
+    }
+
+    const existing = await Seat.findOne({ email }).select('_id').lean()
+    if (existing) {
+      res.status(409).json({
+        error: 'Seat with this email already exists. Use Update Token to refresh credentials.',
+        duplicate_seat_id: String(existing._id),
+      })
+      return
+    }
+
+    const seat = await Seat.create({
+      email,
+      label: label || defaultLabel,
+      max_users,
+      owner_id: req.user!._id,
+      oauth_credential: toCredentialDoc(parsed),
+      token_active: true,
+    })
+    // Auto-seed owner's watched_seats so alerts appear in their feed
+    await User.findByIdAndUpdate(req.user!._id, {
+      $addToSet: { watched_seats: { seat_id: seat._id, threshold_5h_pct: 90, threshold_7d_pct: 85 } },
+    })
     res.status(201).json(seat)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -166,7 +288,7 @@ router.put('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin
   try {
     const id = req.params.id as string
     // owner_id intentionally excluded — ownership transfer uses PUT /:id/transfer (admin only)
-    const allowed = ['email', 'label', 'max_users']
+    const allowed = ['email', 'label', 'max_users', 'include_in_overview']
     const update: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in req.body) update[key] = req.body[key]
@@ -197,10 +319,10 @@ router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAd
       return
     }
 
-    // Remove this seat from all users' seat_ids AND watched_seat_ids
+    // Remove this seat from all users' seat_ids AND watched_seats
     await User.updateMany(
-      { $or: [{ seat_ids: id }, { watched_seat_ids: id }] },
-      { $pull: { seat_ids: id, watched_seat_ids: id } },
+      { $or: [{ seat_ids: id }, { 'watched_seats.seat_id': id }] },
+      { $pull: { seat_ids: id, watched_seats: { seat_id: id } } },
     )
     // Clear schedules + active_sessions (runtime state — must stop firing for deleted seat)
     const { ActiveSession } = await import('../models/active-session.js')
@@ -251,11 +373,15 @@ router.post('/:id/assign', authenticate, validateObjectId('id'), requireSeatOwne
       return
     }
 
-    // Add seat to user's seat_ids AND watched_seat_ids (avoid duplicates)
+    // Add seat to user's seat_ids AND watched_seats (avoid duplicates)
     const seatObjId = new mongoose.Types.ObjectId(id)
-    await User.findByIdAndUpdate(userId, {
-      $addToSet: { seat_ids: seatObjId, watched_seat_ids: seatObjId },
-    })
+    const targetUser = await User.findById(userId, 'watched_seats').lean()
+    const alreadyWatching = (targetUser?.watched_seats ?? []).some((w: any) => String(w.seat_id) === id)
+    const update: any = { $addToSet: { seat_ids: seatObjId } }
+    if (!alreadyWatching) {
+      update.$push = { watched_seats: { seat_id: seatObjId, threshold_5h_pct: 90, threshold_7d_pct: 85 } }
+    }
+    await User.findByIdAndUpdate(userId, update)
 
     res.json({ message: 'User assigned to seat', user })
   } catch (error) {
@@ -383,10 +509,15 @@ router.put('/:id/transfer', authenticate, requireAdmin, validateObjectId('id'), 
       return
     }
 
-    // Auto-seed new owner's watched_seat_ids
-    await User.findByIdAndUpdate(new_owner_id, {
-      $addToSet: { watched_seat_ids: new mongoose.Types.ObjectId(req.params.id as string) },
-    })
+    // Auto-seed new owner's watched_seats
+    const seatObjId = new mongoose.Types.ObjectId(req.params.id as string)
+    const newOwnerDoc = await User.findById(new_owner_id, 'watched_seats').lean()
+    const already = (newOwnerDoc?.watched_seats ?? []).some((w: any) => String(w.seat_id) === String(seatObjId))
+    if (!already) {
+      await User.findByIdAndUpdate(new_owner_id, {
+        $push: { watched_seats: { seat_id: seatObjId, threshold_5h_pct: 90, threshold_7d_pct: 85 } },
+      })
+    }
 
     res.json({ message: 'Ownership transferred', seat })
   } catch (error) {

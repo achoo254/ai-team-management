@@ -44,11 +44,12 @@ function openW(overrides: Partial<DetectorOpenWindow> = {}): DetectorOpenWindow 
 }
 
 describe('usage-window-detector helpers', () => {
-  it('clampDelta clamps negative to 0', () => {
-    expect(clampDelta(5, 10)).toBe(0)
-    expect(clampDelta(15, 10)).toBe(5)
+  it('clampDelta uses curr when negative (7d reset mid-window)', () => {
+    expect(clampDelta(5, 10)).toBe(5) // diff=-5 → 7d reset → use curr as post-reset contribution
+    expect(clampDelta(15, 10)).toBe(5) // normal positive delta
     expect(clampDelta(null, 5)).toBe(0)
     expect(clampDelta(5, null)).toBe(0)
+    expect(clampDelta(2, 44)).toBe(2) // 7d reset: was 44%, now 2% → 2% accumulated since reset
   })
 
   it('computeImpactRatio returns null when util < 1', () => {
@@ -226,5 +227,42 @@ describe('detectWindowAction', () => {
     expect(action.kind).toBe('update_open')
     if (action.kind !== 'update_open') return
     expect(action.patch.peak_hour_of_day).toBe(16)
+  })
+
+  it('last_activity_at bumps when utilization strictly increases', () => {
+    const reset = new Date('2026-04-05T12:00:00Z')
+    const nowTime = new Date('2026-04-05T09:30:00Z')
+    const now = snap({
+      fetched_at: nowTime,
+      five_hour_resets_at: reset,
+      five_hour_pct: 25, // > open.utilization_pct (10)
+      seven_day_pct: 8,
+    })
+    const open = openW({ window_end: reset, utilization_pct: 10 })
+    const action = detectWindowAction({
+      seat_id: seatId, owner_id: ownerId,
+      snapshotNow: now, snapshotPrev: null, snapshotStart: null, openWindow: open,
+    })
+    expect(action.kind).toBe('update_open')
+    if (action.kind !== 'update_open') return
+    expect(action.patch.last_activity_at).toEqual(nowTime)
+  })
+
+  it('last_activity_at unchanged when utilization stays flat (idle)', () => {
+    const reset = new Date('2026-04-05T12:00:00Z')
+    const now = snap({
+      fetched_at: new Date('2026-04-05T09:30:00Z'),
+      five_hour_resets_at: reset,
+      five_hour_pct: 10, // == open.utilization_pct, not strictly greater
+      seven_day_pct: 8,
+    })
+    const open = openW({ window_end: reset, utilization_pct: 10 })
+    const action = detectWindowAction({
+      seat_id: seatId, owner_id: ownerId,
+      snapshotNow: now, snapshotPrev: null, snapshotStart: null, openWindow: open,
+    })
+    expect(action.kind).toBe('update_open')
+    if (action.kind !== 'update_open') return
+    expect(action.patch.last_activity_at).toBeUndefined() // not touched → preserves DB value
   })
 })

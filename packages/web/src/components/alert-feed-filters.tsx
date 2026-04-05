@@ -3,7 +3,6 @@ import type { AvailableSeat } from "@/hooks/use-user-settings";
 const ALERT_TYPES = [
   { value: "", label: "Tất cả loại" },
   { value: "rate_limit", label: "Rate Limit" },
-  { value: "extra_credit", label: "Extra Credit" },
   { value: "token_failure", label: "Token Error" },
   { value: "usage_exceeded", label: "Vượt Budget" },
   { value: "session_waste", label: "Lãng phí" },

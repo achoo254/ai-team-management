@@ -45,3 +45,52 @@ export async function getClaudeCodeUsage(date: string) {
 export async function getMembers() {
   return fetchAllPages('/v1/organizations/users')
 }
+
+export interface OAuthProfile {
+  account: {
+    uuid: string
+    email: string
+    full_name: string
+    display_name: string
+    has_claude_max: boolean
+    has_claude_pro: boolean
+    created_at: string
+  }
+  organization: {
+    uuid: string
+    name: string
+    organization_type: string
+    billing_type: string
+    rate_limit_tier: string
+    has_extra_usage_enabled: boolean
+    subscription_status: string
+    subscription_created_at: string
+  }
+  application: { uuid: string; name: string; slug: string }
+}
+
+/** Error thrown by fetchOAuthProfile — preserves HTTP status + body for caller handling. */
+export class OAuthProfileError extends Error {
+  constructor(public status: number, public body: string) {
+    super(`OAuth profile fetch failed: ${status} ${body}`)
+    this.name = 'OAuthProfileError'
+  }
+}
+
+/** Fetch OAuth profile from Anthropic for a given access token (user OAuth, not admin key). */
+export async function fetchOAuthProfile(accessToken: string): Promise<OAuthProfile> {
+  const res = await fetch('https://api.anthropic.com/api/oauth/profile', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'anthropic-beta': 'oauth-2025-04-20',
+      'content-type': 'application/json',
+    },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new OAuthProfileError(res.status, body)
+  }
+  return await res.json() as OAuthProfile
+}

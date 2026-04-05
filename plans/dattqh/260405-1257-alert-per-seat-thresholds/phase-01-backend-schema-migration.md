@@ -1,6 +1,6 @@
 # Phase 01 — Backend Schema + Migration
 
-**Priority:** P0 | **Status:** pending
+**Priority:** P0 | **Status:** completed
 
 ## Context
 

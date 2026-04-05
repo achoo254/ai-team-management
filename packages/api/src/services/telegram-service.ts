@@ -144,10 +144,10 @@ function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
 export async function sendUserReport(userId: string) {
   if (!isEncryptionConfigured()) return
 
-  const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id telegram_topic_id watched_seat_ids name seat_ids')
+  const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id telegram_topic_id watched_seats name seat_ids')
   if (!user?.telegram_bot_token || !user?.telegram_chat_id) return
 
-  const watchedIds = (user.watched_seat_ids ?? []).map(String)
+  const watchedIds = (user.watched_seats ?? []).map((w) => String(w.seat_id))
   let seats
   if (watchedIds.length > 0) {
     seats = await Seat.find({ _id: { $in: watchedIds } }).sort({ label: 1 }).lean()
@@ -206,7 +206,7 @@ export async function checkAndSendScheduledReports() {
 /** Send alert to a specific user via their personal bot */
 export async function sendAlertToUser(
   user: IUser,
-  type: 'rate_limit' | 'extra_credit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk',
+  type: 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk',
   seatLabel: string,
   metadata: Record<string, unknown>,
 ): Promise<void> {
@@ -215,33 +215,17 @@ export async function sendAlertToUser(
   let msg: string
   switch (type) {
     case 'rate_limit': {
-      const sessions = (metadata.sessions as Array<{ key: string; pct: number; resets_at?: string | null }>) ?? []
-      if (sessions.length > 0) {
-        // Combined message with all exceeded sessions
-        const lines = sessions.map((s) => {
-          const resetStr = s.resets_at
-            ? ` (reset ${new Date(s.resets_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })})`
-            : ''
-          return `  • ${esc(s.key)}: <b>${esc(String(s.pct))}%</b>${resetStr}`
-        }).join('\n')
-        msg = `🔴 <b>Rate Limit Warning</b>\n`
-          + `Seat: <b>${esc(seatLabel)}</b>\n`
-          + lines
-      } else {
-        // Fallback for legacy single-session format
-        const resetsAt = metadata.resets_at ? new Date(metadata.resets_at as string).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
-        msg = `🔴 <b>Rate Limit Warning</b>\n`
-          + `Seat: <b>${esc(seatLabel)}</b>\n`
-          + `Session: ${esc(String(metadata.session ?? ''))} | Usage: ${esc(String(metadata.pct ?? ''))}%`
-          + (resetsAt ? `\nReset: ${esc(resetsAt)}` : '')
-      }
+      const win = String(metadata.window ?? metadata.session ?? '')
+      const pct = metadata.max_pct ?? metadata.pct
+      const threshold = metadata.threshold
+      const resetsAt = metadata.resets_at ? new Date(metadata.resets_at as string).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
+      msg = `🔴 <b>Rate Limit Warning</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Window: ${esc(win)} | Usage: <b>${esc(String(pct ?? ''))}%</b>`
+        + (threshold != null ? ` (ngưỡng ${esc(String(threshold))}%)` : '')
+        + (resetsAt ? `\nReset: ${esc(resetsAt)}` : '')
       break
     }
-    case 'extra_credit':
-      msg = `💳 <b>Extra Credit Warning</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Credits: $${esc(String(metadata.credits_used ?? ''))}/$${esc(String(metadata.credits_limit ?? ''))} (${esc(String(metadata.pct ?? ''))}%)`
-      break
     case 'token_failure':
       msg = `⚠️ <b>Token Failure</b>\n`
         + `Seat: <b>${esc(seatLabel)}</b>\n`
@@ -305,6 +289,80 @@ async function sendMessageWithBot(botToken: string, chatId: string, text: string
     console.error('[Telegram] Send failed:', res.status, errText)
     throw new Error(`Gửi Telegram thất bại (${res.status}): ${errText}`)
   }
+}
+
+/** Resolve current day-of-week (0=Sun..6=Sat) and hour (0-23) in Asia/Ho_Chi_Minh. */
+function currentVnDayHour(now: Date): { day: number; hour: number } {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: 'numeric', hour12: false,
+    weekday: 'short',
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(now).map(p => [p.type, p.value]))
+  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  return {
+    day: dayMap[parts.weekday] ?? now.getDay(),
+    hour: Number(parts.hour),
+  }
+}
+
+/**
+ * Find admins whose BLD digest schedule matches the current day/hour.
+ * Returns empty array if encryption not configured or no matches.
+ */
+export async function findBldDigestRecipientsForCurrentHour(): Promise<
+  Array<{ name: string; telegram_bot_token: string; telegram_chat_id: string; telegram_topic_id?: string | null }>
+> {
+  if (!isEncryptionConfigured()) return []
+  const { day, hour } = currentVnDayHour(new Date())
+
+  const admins = await User.find(
+    {
+      role: 'admin',
+      'alert_settings.bld_digest_enabled': true,
+      'alert_settings.bld_digest_days': day,
+      'alert_settings.bld_digest_hour': hour,
+      telegram_bot_token: { $ne: null },
+      telegram_chat_id: { $ne: null },
+    },
+    'telegram_bot_token telegram_chat_id telegram_topic_id name',
+  ).lean()
+
+  return admins.map(a => ({
+    name: a.name,
+    telegram_bot_token: a.telegram_bot_token as string,
+    telegram_chat_id: a.telegram_chat_id as string,
+    telegram_topic_id: a.telegram_topic_id ?? null,
+  }))
+}
+
+/** Send the BLD digest PDF link to a pre-resolved list of admins via their personal bots. */
+export async function sendBldDigestToAdminList(
+  link: string,
+  admins: Array<{ name: string; telegram_bot_token: string; telegram_chat_id: string; telegram_topic_id?: string | null }>,
+): Promise<number> {
+  if (admins.length === 0) return 0
+  const msg =
+    `📄 <b>BLD Weekly Digest</b>\n` +
+    `Bao cao hang tuan da san sang.\n` +
+    `<a href="${link}">Tai xuat PDF</a> (het han sau 7 ngay)`
+
+  let sent = 0
+  for (const admin of admins) {
+    try {
+      const botToken = decrypt(admin.telegram_bot_token)
+      await sendMessageWithBot(
+        botToken,
+        admin.telegram_chat_id,
+        msg,
+        admin.telegram_topic_id ?? undefined,
+      )
+      sent++
+    } catch (err) {
+      console.error(`[BLD Digest] Failed to send to admin ${admin.name}:`, err)
+    }
+  }
+  return sent
 }
 
 /** Send notification to a specific user via their personal bot */

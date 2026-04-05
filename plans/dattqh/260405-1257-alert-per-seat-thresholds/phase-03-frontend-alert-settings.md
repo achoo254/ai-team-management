@@ -1,6 +1,6 @@
 # Phase 03 — Frontend Alert Settings (Channels Only)
 
-**Priority:** P0 | **Status:** pending | **Depends on:** Phase 02
+**Priority:** P0 | **Status:** completed | **Depends on:** Phase 02
 
 ## Context
 

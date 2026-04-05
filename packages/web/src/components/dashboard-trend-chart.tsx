@@ -4,6 +4,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardEnhanced, formatRangeDate, type DashboardRange } from "@/hooks/use-dashboard";
+import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
+import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
 import { cssVar } from "@/lib/chart-colors";
 
 const RANGE_LABELS: Record<DashboardRange, string> = {
@@ -84,7 +86,8 @@ function ActiveDot(props: any) {
 /* ---------- Main component ---------- */
 
 export function DashboardTrendChart({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
-  const { data, isLoading } = useDashboardEnhanced(range, seatIds);
+  const filter = useCardSeatOverride(seatIds);
+  const { data, isLoading } = useDashboardEnhanced(range, filter.effective);
 
   const chartData = (data?.usageTrend ?? []).map((row) => ({
     ...row,
@@ -94,10 +97,15 @@ export function DashboardTrendChart({ range, seatIds }: { range: DashboardRange;
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">Xu hướng sử dụng — {RANGE_LABELS[range]}</CardTitle>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Biến động mức dùng trung bình của tất cả seat theo thời gian · <span className="font-medium">{formatRangeDate(range)}</span>
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-base font-semibold">Xu hướng sử dụng — {RANGE_LABELS[range]}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Biến động mức dùng trung bình của tất cả seat theo thời gian · <span className="font-medium">{formatRangeDate(range)}</span>
+            </p>
+          </div>
+          <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
+        </div>
       </CardHeader>
       <CardContent className="pt-0">
         {isLoading ? (

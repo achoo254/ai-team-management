@@ -10,11 +10,6 @@ export function UsageSnapshotList() {
   const { data: seatsData } = useSeats()
   const isAdmin = user?.role === 'admin'
 
-  // Map seats by ID for lookup
-  const seatsById = new Map(
-    (seatsData?.seats ?? []).map(s => [s._id, s]),
-  )
-
   if (isLoading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -26,26 +21,41 @@ export function UsageSnapshotList() {
   }
 
   const snapshots = data?.snapshots ?? []
+  // Latest snapshot per seat_id (snapshots assumed sorted newest-first)
+  const snapshotBySeatId = new Map<string, typeof snapshots[number]>()
+  for (const s of snapshots) {
+    if (!snapshotBySeatId.has(s.seat_id)) snapshotBySeatId.set(s.seat_id, s)
+  }
+
+  const seats = seatsData?.seats ?? []
+
+  if (seats.length === 0) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Usage mới nhất</h2>
+        <p className="text-sm text-muted-foreground">
+          Chưa có seat nào. {isAdmin ? 'Hãy tạo seat để bắt đầu.' : ''}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Usage mới nhất</h2>
-
-      {snapshots.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Chưa có dữ liệu usage. {isAdmin ? 'Hãy cấu hình token cho seat rồi bấm thu thập.' : ''}
-        </p>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {snapshots.map((s) => (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {seats.map((seat) => {
+          const snap = snapshotBySeatId.get(seat._id)
+          return (
             <UsageSnapshotCard
-              key={s._id}
-              snapshot={s}
-              seat={seatsById.get(s.seat_id)}
+              key={seat._id}
+              seatId={seat._id}
+              snapshot={snap}
+              seat={seat}
             />
-          ))}
-        </div>
-      )}
+          )
+        })}
+      </div>
     </div>
   )
 }

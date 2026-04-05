@@ -44,7 +44,16 @@ export function useForegroundMessages() {
     unsubRef.current = onForegroundMessage((payload) => {
       const { title, body } = payload.notification ?? {}
       if (title) {
+        // In-app toast
         toast.info(title, { description: body })
+        // Native desktop notification (parity with background — foreground onMessage doesn't auto-show)
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          try {
+            new Notification(title, { body: body ?? '', icon: '/favicon.ico' })
+          } catch {
+            // Some browsers restrict new Notification() — ignore
+          }
+        }
       }
       qc.invalidateQueries({ queryKey: ['alerts'] })
     })

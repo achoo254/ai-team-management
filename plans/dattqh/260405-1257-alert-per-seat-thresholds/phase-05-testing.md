@@ -1,6 +1,6 @@
 # Phase 05 — Testing + Docs
 
-**Priority:** P1 | **Status:** pending | **Depends on:** Phases 01-04
+**Priority:** P1 | **Status:** completed | **Depends on:** Phases 01-04
 
 ## Context
 

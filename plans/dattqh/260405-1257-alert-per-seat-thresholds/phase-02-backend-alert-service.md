@@ -1,6 +1,6 @@
 # Phase 02 — Backend Alert Service + API
 
-**Priority:** P0 | **Status:** pending | **Depends on:** Phase 01
+**Priority:** P0 | **Status:** completed | **Depends on:** Phase 01
 
 ## Context
 

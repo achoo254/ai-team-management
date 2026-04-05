@@ -4,6 +4,18 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardEnhanced, type DashboardRange } from "@/hooks/use-dashboard";
 import { useAuth } from "@/hooks/use-auth";
+import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
+import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
+import { formatResetTime } from "@/lib/format-reset";
+
+function soonestIso(values: (string | null)[]): string | null {
+  const times = values
+    .filter((v): v is string => !!v)
+    .map((v) => new Date(v).getTime())
+    .filter((t) => !Number.isNaN(t));
+  if (times.length === 0) return null;
+  return new Date(Math.min(...times)).toISOString();
+}
 
 interface MiniStatProps {
   label: string;
@@ -45,13 +57,19 @@ function StatSkeleton() {
 }
 
 export function DashboardStatOverview({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
-  const { data, isLoading } = useDashboardEnhanced(range, seatIds);
+  const filter = useCardSeatOverride(seatIds);
+  const { data, isLoading } = useDashboardEnhanced(range, filter.effective);
   const { user } = useAuth();
 
   if (isLoading) {
     return (
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => <StatSkeleton key={i} />)}
+      <div className="space-y-2">
+        <div className="flex items-center justify-end">
+          <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
+        </div>
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => <StatSkeleton key={i} />)}
+        </div>
       </div>
     );
   }
@@ -61,6 +79,10 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
   const valid5h = seats.filter((s) => s.five_hour_pct !== null);
   const avg7d = valid7d.length ? Math.round(valid7d.reduce((a, s) => a + (s.seven_day_pct ?? 0), 0) / valid7d.length) : 0;
   const avg5h = valid5h.length ? Math.round(valid5h.reduce((a, s) => a + (s.five_hour_pct ?? 0), 0) / valid5h.length) : 0;
+  const soonest5h = soonestIso(seats.map((s) => s.five_hour_resets_at));
+  const soonest7d = soonestIso(seats.map((s) => s.seven_day_resets_at));
+  const sub5h = soonest5h ? `Reset sớm nhất: ${formatResetTime(soonest5h).label}` : "chu kỳ cuốn chiếu 5 giờ";
+  const sub7d = soonest7d ? `Reset sớm nhất: ${formatResetTime(soonest7d).label}` : "chu kỳ cuốn chiếu 7 ngày";
   const totalOccupancy = seats.reduce((a, s) => a + s.user_count, 0);
   const totalCapacity = seats.reduce((a, s) => a + s.max_users, 0);
 
@@ -83,13 +105,16 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
           <span className="text-xs text-muted-foreground">Kiểm tra lại OAuth credentials</span>
         </div>
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Tổng quan hiện tại
         </h2>
-        <span className="text-[10px] text-muted-foreground/70 italic">
-          Không chịu ảnh hưởng bởi filter thời gian
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground/70 italic hidden sm:inline">
+            Không chịu ảnh hưởng bởi filter thời gian
+          </span>
+          <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
+        </div>
       </div>
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <MiniStat
@@ -109,16 +134,16 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
       <MiniStat
         label="TB sử dụng 5h"
         value={`${avg5h}%`}
-        sub="phiên cuốn chiếu 5 giờ"
+        sub={sub5h}
         icon={Zap}
-        accent={avg5h >= 80 ? "bg-error-surface text-error-text" : avg5h >= 50 ? "bg-warning-surface text-warning-text" : "bg-success-surface text-success-text"}
+        accent={avg5h >= 80 ? "bg-success-surface text-success-text" : avg5h >= 50 ? "bg-info-surface text-info-text" : avg5h >= 20 ? "bg-warning-surface text-warning-text" : "bg-error-surface text-error-text"}
       />
       <MiniStat
         label="TB sử dụng 7 ngày"
         value={`${avg7d}%`}
-        sub="phiên cuốn chiếu 7 ngày"
+        sub={sub7d}
         icon={TrendingUp}
-        accent={avg7d >= 80 ? "bg-error-surface text-error-text" : avg7d >= 50 ? "bg-warning-surface text-warning-text" : "bg-success-surface text-success-text"}
+        accent={avg7d >= 80 ? "bg-warning-surface text-warning-text" : avg7d >= 50 ? "bg-info-surface text-info-text" : "bg-success-surface text-success-text"}
       />
       <MiniStat
         label="Cảnh báo"

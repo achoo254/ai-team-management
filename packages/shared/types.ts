@@ -16,6 +16,8 @@ export interface Seat {
   owner?: { _id: string; name: string; email: string } | null
   has_token?: boolean
   token_active?: boolean
+  /** When true, seat appears in admin overview / BLD metrics tab. */
+  include_in_overview?: boolean
   oauth_credential?: OAuthCredentialMeta | null
   last_fetched_at?: string | null
   last_fetch_error?: string | null
@@ -33,7 +35,7 @@ export interface User {
   telegram_chat_id?: string | null
   telegram_topic_id?: string | null
   has_telegram_bot?: boolean
-  watched_seat_ids?: string[]
+  watched_seats?: WatchedSeat[]
   notification_settings?: NotificationSettings
   alert_settings?: UserAlertSettings
   push_enabled?: boolean
@@ -51,7 +53,8 @@ export interface Schedule {
   created_at: string
 }
 
-export type AlertType = 'rate_limit' | 'extra_credit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
+export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
+export type AlertWindow = '5h' | '7d' | null
 
 export interface AlertMetadata {
   session?: '5h' | '7d' | '7d_sonnet' | '7d_opus'
@@ -69,12 +72,17 @@ export interface AlertMetadata {
   duration?: number
   resets_at?: string
   next_user?: boolean
+  max_pct?: number
+  breakdown?: { seven_day_pct?: number | null; seven_day_sonnet_pct?: number | null; seven_day_opus_pct?: number | null }
+  threshold?: number
 }
 
 export interface Alert {
   _id: string
+  user_id?: string | null
   seat_id: string | { _id: string; email: string; label: string }
   type: AlertType
+  window?: AlertWindow
   message: string
   metadata?: AlertMetadata
   read_by?: string[]
@@ -83,9 +91,22 @@ export interface Alert {
 
 export interface UserAlertSettings {
   enabled: boolean
-  rate_limit_pct: number        // 1-100, default 80
-  extra_credit_pct: number      // 1-100, default 80
+  telegram_enabled: boolean       // send via Telegram channel
   token_failure_enabled: boolean  // receive token invalid/failure alerts, default true
+  // BLD-specific settings (admin only, ignored for regular users)
+  bld_digest_enabled?: boolean
+  bld_digest_days?: number[]   // 0=Sun..6=Sat, default [5]
+  bld_digest_hour?: number     // 0-23, Asia/Ho_Chi_Minh, default 17
+  fleet_util_threshold_pct?: number | null
+  fleet_util_threshold_days?: number | null
+}
+
+export interface WatchedSeat {
+  seat_id: string
+  threshold_5h_pct: number
+  threshold_7d_pct: number
+  seat_label?: string
+  seat_email?: string
 }
 
 export interface UsageSnapshot {
@@ -140,6 +161,32 @@ export interface SchedulePermissions {
   canDeleteEntry: (entry: { user_id: string }) => boolean
 }
 
+// Quota forecast (7d linear regression)
+export type QuotaForecastStatus =
+  | 'safe' | 'watch' | 'warning' | 'critical' | 'imminent'
+  | 'safe_decreasing' | 'collecting' | 'reset_first'
+
+export interface QuotaForecastResult {
+  seat_id: string
+  seat_label: string
+  current_pct: number
+  slope_per_hour: number
+  hours_to_full: number | null
+  forecast_at: string | null
+  status: QuotaForecastStatus
+  resets_at: string | null
+}
+
+export interface QuotaForecast {
+  seven_day: QuotaForecastResult | null
+  seven_day_seats: QuotaForecastResult[]
+  five_hour: {
+    current_pct: number
+    status: 'safe' | 'warning' | 'critical'
+    resets_at: string | null
+  } | null
+}
+
 // Auth
 export interface AuthUser {
   _id: string
@@ -147,3 +194,115 @@ export interface AuthUser {
   email: string
   role: 'admin' | 'user'
 }
+
+// Dashboard data quality DTOs (Phase 1)
+
+export interface StaleSeatInfo {
+  seat_id: string
+  label: string
+  hours_since_fetch: number
+}
+
+export interface TokenFailureInfo {
+  seat_id: string
+  label: string
+  /** Sanitized error message (no tokens/paths/keys) */
+  error_message: string
+  last_fetched_at: string | null
+}
+
+export interface UrgentForecastItem {
+  seat_id: string
+  seat_label: string
+  current_pct: number
+  hours_to_full: number | null
+  forecast_at: string | null
+  status: QuotaForecastStatus
+}
+
+// ── BLD (Executive Dashboard) DTOs ───────────────────────────────────────────
+
+export interface BldWorstForecast {
+  seat_id: string
+  seat_label: string
+  hours_to_full: number | null
+  forecast_at: string | null
+  status: QuotaForecastStatus
+}
+
+export interface FleetKpis {
+  utilPct: number
+  wasteUsd: number
+  totalCostUsd: number
+  monthlyCostUsd: number
+  billableCount: number
+  wwDelta: number
+  worstForecast: BldWorstForecast | null
+}
+
+export interface WwHistoryPoint {
+  week_start: string
+  utilPct: number
+  wasteUsd: number
+}
+
+export interface FleetKpisResponse {
+  kpis: FleetKpis
+  wwHistory: WwHistoryPoint[]
+}
+
+// ── Seat-level stats DTOs ─────────────────────────────────────────────────────
+
+export interface SeatWasteEntry {
+  seatId: string
+  seatLabel: string
+  utilPct: number
+  wasteUsd: number
+  wastePct: number
+}
+
+export interface BurndownSeat {
+  seatId: string
+  seatLabel: string
+  consecutiveDays: number
+  latestUtilPct: number
+}
+
+export interface DegradationSeat {
+  seatId: string
+  seatLabel: string
+  currentUtilPct: number
+  lastWeekUtilPct: number
+  dropPp: number
+}
+
+export interface SeatStatsResponse {
+  topWaste: SeatWasteEntry[]
+  burndownRisk: BurndownSeat[]
+  degradationWatch: DegradationSeat[]
+}
+
+// ── Rebalance suggestions ─────────────────────────────────────────────────────
+
+export type RebalanceSuggestion =
+  | {
+      type: 'move_member'
+      fromSeatId: string
+      fromSeatLabel: string
+      toSeatId: string
+      toSeatLabel: string
+      reason: string
+    }
+  | {
+      type: 'add_seat'
+      reason: string
+      estimatedMonthlyCost: number
+    }
+  | {
+      type: 'rebalance_seat'
+      overloadedSeatId: string
+      overloadedSeatLabel: string
+      underusedSeatId: string
+      underusedSeatLabel: string
+      reason: string
+    }

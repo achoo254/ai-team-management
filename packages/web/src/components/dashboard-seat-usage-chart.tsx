@@ -3,9 +3,12 @@ import {
   Legend, ReferenceLine, CartesianGrid, LabelList, Cell,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
+import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardEnhanced, formatRangeDate, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
+import { useDashboardEnhanced, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
 import { cssVar } from "@/lib/chart-colors";
+import { formatResetTime } from "@/lib/format-reset";
 
 /* ---------- Color helpers ---------- */
 
@@ -29,8 +32,8 @@ function CustomTooltip({ active, payload, label }: any) {
     >
       <p className="font-semibold text-foreground mb-2">{label}</p>
       <div className="space-y-1.5 text-xs">
-        <TooltipRow label="5h" value={seat?.five_hour_pct} color={cssVar("--chart-1")} />
-        <TooltipRow label="7d" value={seat?.seven_day_pct} color={usage7dColor(seat?.seven_day_pct ?? null)} />
+        <TooltipRow label="5h" value={seat?.five_hour_pct} color={cssVar("--chart-1")} resetsAt={seat?.five_hour_resets_at ?? null} />
+        <TooltipRow label="7d" value={seat?.seven_day_pct} color={usage7dColor(seat?.seven_day_pct ?? null)} resetsAt={seat?.seven_day_resets_at ?? null} />
         <TooltipRow label="Sonnet 7d" value={seat?.seven_day_sonnet_pct} color={cssVar("--muted-foreground")} />
         <TooltipRow label="Opus 7d" value={seat?.seven_day_opus_pct} color={cssVar("--muted-foreground")} />
         <div className="border-t border-border/40 pt-1.5 mt-2">
@@ -44,16 +47,23 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-function TooltipRow({ label, value, color }: { label: string; value: number | null | undefined; color: string }) {
+function TooltipRow({ label, value, color, resetsAt }: { label: string; value: number | null | undefined; color: string; resetsAt?: string | null }) {
   return (
-    <div className="flex justify-between gap-6">
-      <div className="flex items-center gap-1.5">
-        <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-        <span className="text-muted-foreground">{label}</span>
+    <div>
+      <div className="flex justify-between gap-6">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+          <span className="text-muted-foreground">{label}</span>
+        </div>
+        <span className="font-semibold tabular-nums" style={{ color }}>
+          {value != null ? `${value}%` : "—"}
+        </span>
       </div>
-      <span className="font-semibold tabular-nums" style={{ color }}>
-        {value != null ? `${value}%` : "—"}
-      </span>
+      {resetsAt != null && (
+        <div className="ml-3.5 text-[10px] text-muted-foreground/80">
+          ↻ {formatResetTime(resetsAt).label}
+        </div>
+      )}
     </div>
   );
 }
@@ -158,16 +168,43 @@ function YAxisTick({ x, y, payload }: any) {
 
 /* ---------- Main component ---------- */
 
+/** Format the most recent fetched_at across seats as HH:MM (Asia/Ho_Chi_Minh) */
+function formatLatestFetch(seats: SeatUsageItem[] | undefined): string | null {
+  if (!seats?.length) return null;
+  const timestamps = seats
+    .map((s) => s.last_fetched_at)
+    .filter((t): t is string => !!t)
+    .map((t) => new Date(t).getTime());
+  if (timestamps.length === 0) return null;
+  const latest = new Date(Math.max(...timestamps));
+  return latest.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
+}
+
 export function DashboardSeatUsageChart({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
-  const { data, isLoading } = useDashboardEnhanced(range, seatIds);
+  const filter = useCardSeatOverride(seatIds);
+  const { data, isLoading } = useDashboardEnhanced(range, filter.effective);
+  const latestFetchTime = formatLatestFetch(data?.usagePerSeat);
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">Mức dùng theo Seat — 5h vs 7d</CardTitle>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          So sánh % sử dụng giữa phiên 5 giờ gần nhất và trung bình 7 ngày · <span className="font-medium">{formatRangeDate(range)}</span>
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-base font-semibold">Mức dùng theo Seat — 5h vs 7d</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              So sánh % sử dụng chu kỳ 5 giờ gần nhất và trung bình 7 ngày ·{" "}
+              <span className="font-medium">
+                Realtime{latestFetchTime ? ` (cập nhật ${latestFetchTime})` : ""}
+              </span>
+              <span className="ml-1 text-muted-foreground/70">— không phụ thuộc bộ lọc thời gian</span>
+            </p>
+          </div>
+          <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
+        </div>
       </CardHeader>
       <CardContent className="pt-0">
         {isLoading ? (

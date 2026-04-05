@@ -53,6 +53,7 @@ export type WindowPayload = {
   impact_ratio: number | null
   is_waste: boolean
   peak_hour_of_day: number | null
+  last_activity_at: Date | null
   snapshot_start_id: Types.ObjectId | null
   snapshot_end_id: Types.ObjectId | null
 }
@@ -78,9 +79,16 @@ function roundToHour(d: Date): Date {
   return new Date(Math.round(d.getTime() / HOUR_MS) * HOUR_MS)
 }
 
+/**
+ * Compute delta between current and start quota %.
+ * When diff < 0, a quota reset happened mid-window (7d counter dropped).
+ * Use curr as approximation: after reset, current value ≈ usage accumulated since reset.
+ * Better than clamping to 0 which loses all contribution data.
+ */
 export function clampDelta(curr: number | null, start: number | null): number {
   if (curr == null || start == null) return 0
-  return Math.max(0, curr - start)
+  const diff = curr - start
+  return diff >= 0 ? diff : curr
 }
 
 export function computeImpactRatio(delta_7d: number, utilization: number): number | null {
@@ -140,6 +148,7 @@ export function detectWindowAction(input: DetectorInput): DetectorAction {
         impact_ratio: computeImpactRatio(0, nowFiveHrPct),
         is_waste: false,
         peak_hour_of_day: getPeakHourVN(snapshotNow.fetched_at),
+        last_activity_at: nowFiveHrPct > 0 ? snapshotNow.fetched_at : null,
         snapshot_start_id: snapshotNow._id,
         snapshot_end_id: snapshotNow._id,
       }
@@ -167,6 +176,9 @@ export function detectWindowAction(input: DetectorInput): DetectorAction {
       impact_ratio: computeImpactRatio(delta7d, util),
       is_waste: computeIsWaste(duration, util),
       peak_hour_of_day: getPeakHourVN(snapshotNow.fetched_at),
+      last_activity_at: util > 0
+        ? (nowFiveHrPct >= (snapshotPrev.five_hour_pct ?? 0) ? snapshotNow.fetched_at : snapshotPrev.fetched_at)
+        : null,
       snapshot_start_id: snapshotPrev._id,
       snapshot_end_id: snapshotNow._id,
     }
@@ -206,6 +218,7 @@ export function detectWindowAction(input: DetectorInput): DetectorAction {
       impact_ratio: computeImpactRatio(0, nowFiveHrPct),
       is_waste: false,
       peak_hour_of_day: getPeakHourVN(snapshotNow.fetched_at),
+      last_activity_at: nowFiveHrPct > 0 ? snapshotNow.fetched_at : null,
       snapshot_start_id: snapshotNow._id,
       snapshot_end_id: snapshotNow._id,
     }
@@ -236,6 +249,10 @@ export function detectWindowAction(input: DetectorInput): DetectorAction {
     is_waste: computeIsWaste(duration, util),
     peak_hour_of_day: peakHour,
     snapshot_end_id: snapshotNow._id,
+  }
+  // Only bump last_activity_at when utilization strictly increased (real new activity)
+  if (nowFiveHrPct > openWindow.utilization_pct) {
+    patch.last_activity_at = snapshotNow.fetched_at
   }
   return { kind: 'update_open', windowId: openWindow._id, patch }
 }

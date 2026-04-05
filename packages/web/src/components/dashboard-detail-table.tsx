@@ -1,18 +1,29 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
+import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDashboardEnhanced, formatRangeDate, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
+import { formatResetTime } from "@/lib/format-reset";
 
 type SortKey = "label" | "five_hour_pct" | "seven_day_pct" | "seven_day_sonnet_pct" | "seven_day_opus_pct" | "user_count";
 
-function pctCell(pct: number | null) {
+function pctCell(pct: number | null, resetsAt?: string | null) {
   if (pct === null) return <span className="text-muted-foreground">—</span>;
   const color = pct >= 80 ? "text-error-text font-semibold" : pct >= 50 ? "text-warning-text font-semibold" : "text-success-text";
-  return <span className={color}>{pct}%</span>;
+  const inner = <span className={color}>{pct}%</span>;
+  if (resetsAt === undefined) return inner;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="cursor-help">{inner}</span>} />
+      <TooltipContent>Reset: {formatResetTime(resetsAt).label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function occupancyBadge(count: number, max: number) {
@@ -41,7 +52,8 @@ function sortSeats(seats: SeatUsageItem[], key: SortKey, asc: boolean): SeatUsag
 }
 
 export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
-  const { data, isLoading } = useDashboardEnhanced(range, seatIds);
+  const filter = useCardSeatOverride(seatIds);
+  const { data, isLoading } = useDashboardEnhanced(range, filter.effective);
   const [sortKey, setSortKey] = useState<SortKey>("seven_day_pct");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -60,10 +72,15 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Chi tiết sử dụng — Tất cả Seat</CardTitle>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Bảng tổng hợp mức dùng 5 giờ, 7 ngày, và phân tách theo model · <span className="font-medium">{formatRangeDate(range)}</span>
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-base">Chi tiết sử dụng — Tất cả Seat</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Bảng tổng hợp mức dùng 5 giờ, 7 ngày, và phân tách theo model · <span className="font-medium">{formatRangeDate(range)}</span>
+            </p>
+          </div>
+          <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
+        </div>
       </CardHeader>
       <CardContent className="p-0 overflow-x-auto">
         {isLoading ? (
@@ -124,8 +141,8 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
                     )}
                   </TableCell>
                   <TableCell>{occupancyBadge(s.user_count, s.max_users)}</TableCell>
-                  <TableCell className="text-right">{pctCell(s.five_hour_pct)}</TableCell>
-                  <TableCell className="text-right">{pctCell(s.seven_day_pct)}</TableCell>
+                  <TableCell className="text-right">{pctCell(s.five_hour_pct, s.five_hour_resets_at)}</TableCell>
+                  <TableCell className="text-right">{pctCell(s.seven_day_pct, s.seven_day_resets_at)}</TableCell>
                   <TableCell className="text-right">{pctCell(s.seven_day_sonnet_pct)}</TableCell>
                   <TableCell className="text-right">{pctCell(s.seven_day_opus_pct)}</TableCell>
                   <TableCell className="text-right text-xs">

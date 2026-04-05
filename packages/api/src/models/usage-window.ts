@@ -15,6 +15,7 @@ export interface IUsageWindow extends Document {
   impact_ratio: number | null // delta_7d_pct / utilization_pct (null if util < 1)
   is_waste: boolean
   peak_hour_of_day: number | null // 0-23 Asia/Ho_Chi_Minh
+  last_activity_at: Date | null // timestamp when utilization_pct last increased (idle detection)
   snapshot_start_id: Types.ObjectId | null
   snapshot_end_id: Types.ObjectId | null
   created_at: Date
@@ -37,6 +38,7 @@ const usageWindowSchema = new Schema<IUsageWindow>(
     impact_ratio: { type: Number, default: null },
     is_waste: { type: Boolean, default: false },
     peak_hour_of_day: { type: Number, default: null },
+    last_activity_at: { type: Date, default: null },
     snapshot_start_id: { type: Schema.Types.ObjectId, ref: 'UsageSnapshot', default: null },
     snapshot_end_id: { type: Schema.Types.ObjectId, ref: 'UsageSnapshot', default: null },
   },

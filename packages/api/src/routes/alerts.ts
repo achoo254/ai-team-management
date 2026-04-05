@@ -5,6 +5,22 @@ import { User } from '../models/user.js'
 
 const router = Router()
 
+/** Resolve current user's watched seat IDs. */
+async function getWatchedSeatIds(userId: string): Promise<string[]> {
+  const user = await User.findById(userId, 'watched_seats').lean()
+  return (user?.watched_seats ?? []).map((w) => String(w.seat_id))
+}
+
+/** Build scope filter: personal alerts + seat-wide alerts for watched seats. */
+function buildScopeFilter(userId: string, watchedIds: string[]): Record<string, unknown> {
+  return {
+    $or: [
+      { user_id: userId },
+      { user_id: null, seat_id: { $in: watchedIds } },
+    ],
+  }
+}
+
 // GET /api/alerts — feed-style with scope filtering
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -13,23 +29,19 @@ router.get('/', authenticate, async (req, res) => {
 
     const filter: Record<string, unknown> = {}
     if (type) filter.type = type
-    if (seat) filter.seat_id = seat
     if (before) filter.created_at = { $lt: new Date(before) }
 
-    // Member scope: only watched seats
-    if (req.user!.role !== 'admin') {
-      const user = await User.findById(req.user!._id, 'watched_seat_ids')
-      const watchedIds = (user?.watched_seat_ids ?? []).map(String)
-      if (watchedIds.length === 0) {
-        res.json({ alerts: [], has_more: false })
-        return
-      }
-      // Validate seat param against watched seats
-      if (seat && !watchedIds.includes(seat)) {
-        res.json({ alerts: [], has_more: false })
-        return
-      }
-      filter.seat_id = seat ? seat : { $in: watchedIds }
+    const userId = String(req.user!._id)
+    const watchedIds = await getWatchedSeatIds(userId)
+    const scope = buildScopeFilter(userId, watchedIds)
+    Object.assign(filter, scope)
+
+    // Narrow by seat if requested
+    if (seat) {
+      // Keep the OR scope but require seat match
+      filter.$and = [
+        { seat_id: seat },
+      ]
     }
 
     const alerts = await Alert.find(filter)
@@ -55,20 +67,12 @@ router.post('/mark-read', authenticate, async (req, res) => {
       return
     }
 
-    // Scope check: non-admin can only mark alerts for watched seats
-    let scopeFilter: Record<string, unknown> = { _id: { $in: alert_ids } }
-    if (req.user!.role !== 'admin') {
-      const user = await User.findById(req.user!._id, 'watched_seat_ids')
-      const watchedIds = (user?.watched_seat_ids ?? []).map(String)
-      if (watchedIds.length === 0) {
-        res.json({ updated: 0 })
-        return
-      }
-      scopeFilter.seat_id = { $in: watchedIds }
-    }
+    const userId = String(req.user!._id)
+    const watchedIds = await getWatchedSeatIds(userId)
+    const scope = buildScopeFilter(userId, watchedIds)
 
     const result = await Alert.updateMany(
-      scopeFilter,
+      { _id: { $in: alert_ids }, ...scope },
       { $addToSet: { read_by: req.user!._id } },
     )
     res.json({ updated: result.modifiedCount })
@@ -81,22 +85,14 @@ router.post('/mark-read', authenticate, async (req, res) => {
 // GET /api/alerts/unread-count — unread count for bell badge
 router.get('/unread-count', authenticate, async (req, res) => {
   try {
-    const filter: Record<string, unknown> = {
+    const userId = String(req.user!._id)
+    const watchedIds = await getWatchedSeatIds(userId)
+    const scope = buildScopeFilter(userId, watchedIds)
+
+    const count = await Alert.countDocuments({
       read_by: { $ne: req.user!._id },
-    }
-
-    // Member scope: only watched seats
-    if (req.user!.role !== 'admin') {
-      const user = await User.findById(req.user!._id, 'watched_seat_ids')
-      const watchedIds = (user?.watched_seat_ids ?? []).map(String)
-      if (watchedIds.length === 0) {
-        res.json({ count: 0 })
-        return
-      }
-      filter.seat_id = { $in: watchedIds }
-    }
-
-    const count = await Alert.countDocuments(filter)
+      ...scope,
+    })
     res.json({ count })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

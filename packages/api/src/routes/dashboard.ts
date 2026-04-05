@@ -7,8 +7,30 @@ import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Alert } from '../models/alert.js'
 import { Schedule } from '../models/schedule.js'
 import { UsageWindow } from '../models/usage-window.js'
+import { computeAllSeatForecasts } from '../services/quota-forecast-service.js'
 
 const router = Router()
+
+/**
+ * Strip sensitive data from fetch error messages before sending to client.
+ * Removes: OAuth tokens, file paths, API keys (long hex/base64 sequences).
+ */
+function sanitizeErrorMessage(msg: string): string {
+  return msg
+    // Remove bearer/access tokens
+    .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer [REDACTED]')
+    // Remove OAuth tokens (ya29.xxx patterns)
+    .replace(/ya29\.[A-Za-z0-9._\-]+/g, '[REDACTED_TOKEN]')
+    // Remove long hex strings (API keys, secrets ≥32 chars)
+    .replace(/[A-Fa-f0-9]{32,}/g, '[REDACTED]')
+    // Remove long base64-like strings ≥40 chars
+    .replace(/[A-Za-z0-9+/]{40,}={0,2}/g, '[REDACTED]')
+    // Remove absolute file paths
+    .replace(/\/[^\s"']+|[A-Z]:\\[^\s"']+/g, '[PATH]')
+    .trim()
+    // Truncate to 200 chars to prevent huge payloads
+    .slice(0, 200)
+}
 
 router.use(authenticate)
 
@@ -38,10 +60,21 @@ router.get('/summary', async (req, res) => {
   }
 })
 
-/** Parse comma-separated seatIds query param into ObjectId array (ignores invalid ids) */
+/** FE sentinel: "unselect all" → filter must return no data (distinct from empty=all). */
+const SEAT_FILTER_NONE_SENTINEL = '__NONE__'
+
+/**
+ * Parse comma-separated seatIds query param into ObjectId array.
+ * - Missing/empty → null (no filter, all seats)
+ * - Contains __NONE__ sentinel → empty array (matches no seats)
+ * - Valid ObjectIds → array of parsed ids
+ * - All invalid → null (no filter)
+ */
 function parseSeatIds(raw: unknown): mongoose.Types.ObjectId[] | null {
   if (typeof raw !== 'string' || !raw.trim()) return null
   const ids = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  // Sentinel → explicitly empty filter (matches nothing)
+  if (ids.includes(SEAT_FILTER_NONE_SENTINEL)) return []
   const objectIds = ids
     .filter((id) => mongoose.Types.ObjectId.isValid(id))
     .map((id) => new mongoose.Types.ObjectId(id))
@@ -205,6 +238,45 @@ router.get('/enhanced', async (req, res) => {
       }},
     ])
 
+    // Data quality: stale seats (last_fetched_at older than 6h)
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000
+    const now = Date.now()
+    const staleSeats = seats
+      .filter((s) => s.last_fetched_at != null && now - new Date(s.last_fetched_at).getTime() > SIX_HOURS_MS)
+      .map((s) => ({
+        seat_id: String(s._id),
+        label: s.label,
+        hours_since_fetch: Math.floor((now - new Date(s.last_fetched_at!).getTime()) / (60 * 60 * 1000)),
+      }))
+
+    // Data quality: seats with token fetch errors (sanitize sensitive data)
+    const tokenFailures = seats
+      .filter((s) => !!s.last_fetch_error)
+      .map((s) => ({
+        seat_id: String(s._id),
+        label: s.label,
+        error_message: sanitizeErrorMessage(s.last_fetch_error!),
+        last_fetched_at: s.last_fetched_at ? new Date(s.last_fetched_at).toISOString() : null,
+      }))
+
+    // Urgent forecasts: top 3 warning/critical/imminent seats
+    const forecastSeatIdsEnhanced = effectiveIds
+      ? effectiveIds.map(String)
+      : seats.map((s) => String(s._id))
+    const allForecasts = await computeAllSeatForecasts(forecastSeatIdsEnhanced)
+    const urgentStatuses = new Set(['warning', 'critical', 'imminent'])
+    const urgentForecasts = allForecasts
+      .filter((f) => urgentStatuses.has(f.status))
+      .slice(0, 3)
+      .map((f) => ({
+        seat_id: f.seat_id,
+        seat_label: f.seat_label,
+        current_pct: f.current_pct,
+        hours_to_full: f.hours_to_full,
+        forecast_at: f.forecast_at,
+        status: f.status,
+      }))
+
     res.json({
       totalUsers,
       activeUsers,
@@ -216,6 +288,9 @@ router.get('/enhanced', async (req, res) => {
       usagePerSeat,
       usageTrend,
       overBudgetSeats,
+      stale_seats: staleSeats,
+      token_failures: tokenFailures,
+      urgent_forecasts: urgentForecasts,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -303,17 +378,51 @@ router.get('/efficiency', async (req, res) => {
       { $group: {
         _id: null,
         avg_utilization: { $avg: '$utilization_pct' },
-        avg_impact_ratio: { $avg: '$impact_ratio' },
         avg_delta_5h: { $avg: '$utilization_pct' }, // legacy alias
         avg_delta_7d: { $avg: '$delta_7d_pct' },
-        avg_delta_7d_sonnet: { $avg: '$delta_7d_sonnet_pct' },
-        avg_delta_7d_opus: { $avg: '$delta_7d_opus_pct' },
+        avg_sonnet_7d: { $avg: '$delta_7d_sonnet_pct' },
+        avg_opus_7d: { $avg: '$delta_7d_opus_pct' },
+        peak_max: { $max: '$utilization_pct' },
+        peak_min: { $min: '$utilization_pct' },
+        stddev_util: { $stdDevPop: '$utilization_pct' },
+        // Utilization tier counts (≥80% = đầy, 50-80 = khá, 10-50 = thấp, <10 = lãng phí)
+        tier_full: { $sum: { $cond: [{ $gte: ['$utilization_pct', 80] }, 1, 0] } },
+        tier_good: { $sum: { $cond: [{ $and: [{ $gte: ['$utilization_pct', 50] }, { $lt: ['$utilization_pct', 80] }] }, 1, 0] } },
+        tier_low: { $sum: { $cond: [{ $and: [{ $gte: ['$utilization_pct', 10] }, { $lt: ['$utilization_pct', 50] }] }, 1, 0] } },
+        tier_waste: { $sum: { $cond: [{ $lt: ['$utilization_pct', 10] }, 1, 0] } },
         total_sessions: { $sum: 1 },
-        waste_sessions: { $sum: { $cond: ['$is_waste', 1, 0] } },
+        waste_sessions: { $sum: { $cond: ['$is_waste', 1, 0] } }, // stale window (keep for compat)
         total_resets: { $sum: 1 }, // each window = 1 cycle
         total_hours: { $sum: '$duration_hours' },
       }},
     ])
+
+    // 1b. Sparkline: last 7 days of closed windows (time-bounded, not count-bounded)
+    // Use the more restrictive of [rangeStart, now-7d] so we never exceed range context
+    const sparkline7dStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const sparklineWindowStart = sparkline7dStart > rangeStart ? sparkline7dStart : rangeStart
+    const sparklineMatch = { ...seatFilter, is_closed: true, window_end: { $gte: sparklineWindowStart } }
+    const sparklineRaw = await UsageWindow.aggregate([
+      { $match: sparklineMatch },
+      { $sort: { window_end: 1 } }, // chronological for chart
+      { $project: { _id: 0, seat_id: 1, window_start: 1, window_end: 1, utilization_pct: 1, delta_7d_pct: 1, duration_hours: 1, is_waste: 1 } },
+    ])
+    // Batch-resolve seat labels
+    const sparkSeatIds = [...new Set(sparklineRaw.map((w) => String(w.seat_id)))]
+    const sparkSeats = sparkSeatIds.length > 0
+      ? await Seat.find({ _id: { $in: sparkSeatIds } }, 'label').lean()
+      : []
+    const sparkLabelMap = new Map(sparkSeats.map((s) => [String(s._id), s.label]))
+    const sparkline = sparklineRaw.map((w) => ({
+      seat_id: String(w.seat_id),
+      seat_label: sparkLabelMap.get(String(w.seat_id)) ?? '',
+      window_start: (w.window_start as Date).toISOString(),
+      window_end: (w.window_end as Date).toISOString(),
+      utilization_pct: Math.round(w.utilization_pct * 10) / 10,
+      delta_7d_pct: Math.round(w.delta_7d_pct * 10) / 10,
+      duration_hours: Math.round(w.duration_hours * 10) / 10,
+      is_waste: Boolean(w.is_waste),
+    }))
 
     // 2. Per-seat breakdown
     const perSeat = await UsageWindow.aggregate([
@@ -323,19 +432,32 @@ router.get('/efficiency', async (req, res) => {
         avg_utilization: { $avg: '$utilization_pct' },
         avg_delta_5h: { $avg: '$utilization_pct' }, // legacy alias
         avg_delta_7d: { $avg: '$delta_7d_pct' },
-        avg_delta_7d_sonnet: { $avg: '$delta_7d_sonnet_pct' },
-        avg_delta_7d_opus: { $avg: '$delta_7d_opus_pct' },
-        avg_impact_ratio: { $avg: '$impact_ratio' },
         session_count: { $sum: 1 },
         waste_count: { $sum: { $cond: ['$is_waste', 1, 0] } },
       }},
     ])
     const seatIds = perSeat.map(s => s._id)
-    const seatLabels = await Seat.find({ _id: { $in: seatIds } }, 'label').lean()
-    const labelMap = new Map(seatLabels.map(s => [String(s._id), s.label]))
-    const perSeatWithLabels = perSeat.map(s => ({
-      ...s, seat_id: String(s._id), label: labelMap.get(String(s._id)) ?? '', _id: undefined,
-    }))
+    // Fetch ALL in-scope seats (not just those with windows) so leaderboard shows every seat
+    const allInScopeSeats = await Seat.find(
+      effectiveIds ? { _id: { $in: effectiveIds } } : {},
+      '_id label',
+    ).lean()
+    const labelMap = new Map(allInScopeSeats.map(s => [String(s._id), s.label]))
+    const perSeatMap = new Map(perSeat.map(s => [String(s._id), s]))
+    // Merge: seats with window data + seats without (0% utilization)
+    const perSeatWithLabels = allInScopeSeats.map(seat => {
+      const key = String(seat._id)
+      const existing = perSeatMap.get(key)
+      if (existing) {
+        return { ...existing, seat_id: key, label: labelMap.get(key) ?? '', _id: undefined }
+      }
+      // Seat has no closed windows → show with 0 values
+      return {
+        seat_id: key, label: labelMap.get(key) ?? '',
+        avg_utilization: 0, avg_delta_5h: 0, avg_delta_7d: 0,
+        session_count: 0, waste_count: 0, _id: undefined,
+      }
+    })
 
     // 3. Per-user (owner) breakdown
     const perUser = await UsageWindow.aggregate([
@@ -384,6 +506,7 @@ router.get('/efficiency', async (req, res) => {
       delta_7d: Math.round(w.delta_7d_pct * 10) / 10,
       reset_count: 0,
       started_at: w.window_start,
+      last_activity_at: w.last_activity_at ?? null,
     }))
 
     // 6. Coverage: data quality flag
@@ -401,18 +524,73 @@ router.get('/efficiency', async (req, res) => {
       missing_seat_ids: missingIds,
     }
 
+    // 7. Quota forecast (7d linear regression across in-scope seats)
+    const forecastSeatIds = effectiveIds
+      ? effectiveIds.map(String)
+      : (await Seat.find({ deleted_at: null }, '_id').lean()).map(s => String(s._id))
+    const sevenDayAll = await computeAllSeatForecasts(forecastSeatIds)
+    const sevenDayForecast = sevenDayAll[0] ?? null
+
+    // 5h forecast: max utilization across active (open) windows
+    const maxFiveHour = activeWins.length > 0
+      ? Math.max(...activeWins.map(w => w.utilization_pct))
+      : null
+    const fiveHourStatus = maxFiveHour == null ? null
+      : maxFiveHour >= 80 ? 'critical' : maxFiveHour >= 50 ? 'warning' : 'safe'
+    let fiveHourResetsAt: string | null = null
+    if (maxFiveHour != null) {
+      const maxWin = activeWins.find(w => w.utilization_pct === maxFiveHour)
+      if (maxWin) {
+        const latest = await UsageSnapshot.findOne(
+          { seat_id: maxWin.seat_id },
+          'five_hour_resets_at',
+        ).sort({ fetched_at: -1 }).lean()
+        fiveHourResetsAt = latest?.five_hour_resets_at
+          ? new Date(latest.five_hour_resets_at).toISOString()
+          : null
+      }
+    }
+    const fiveHourForecast = maxFiveHour == null ? null
+      : {
+        current_pct: Math.round(maxFiveHour * 10) / 10,
+        status: fiveHourStatus as 'safe' | 'warning' | 'critical',
+        resets_at: fiveHourResetsAt,
+      }
+
+    // Top/Bottom seats from perSeat (overlap-safe split, reuses /personal logic).
+    // N ≤ 3: show all in top, skip bottom. N ≥ 4: half-split (max 3 each side).
+    const rankedSeats = [...perSeatWithLabels].sort((a, b) => b.avg_utilization - a.avg_utilization)
+    const n = rankedSeats.length
+    const k = n <= 3 ? n : Math.min(3, Math.floor(n / 2))
+    const topSeats = rankedSeats.slice(0, k).map(s => ({
+      seat_id: s.seat_id, label: s.label,
+      avg_utilization: Math.round(s.avg_utilization * 10) / 10,
+      session_count: s.session_count,
+    }))
+    const bottomSeats = n <= 3 ? [] : rankedSeats.slice(-k).reverse().map(s => ({
+      seat_id: s.seat_id, label: s.label,
+      avg_utilization: Math.round(s.avg_utilization * 10) / 10,
+      session_count: s.session_count,
+    }))
+
     res.json({
       summary: metrics[0] ?? {
-        avg_utilization: 0, avg_impact_ratio: null,
+        avg_utilization: 0,
         avg_delta_5h: 0, avg_delta_7d: 0,
-        avg_delta_7d_sonnet: 0, avg_delta_7d_opus: 0,
+        avg_sonnet_7d: 0, avg_opus_7d: 0,
+        peak_max: 0, peak_min: 0, stddev_util: 0,
+        tier_full: 0, tier_good: 0, tier_low: 0, tier_waste: 0,
         total_sessions: 0, waste_sessions: 0, total_resets: 0, total_hours: 0,
       },
+      sparkline,
       perSeat: perSeatWithLabels,
       perUser: perUserWithNames,
       dailyTrend,
       activeSessions: liveMetrics,
+      topSeats,
+      bottomSeats,
       coverage,
+      quota_forecast: { seven_day: sevenDayForecast, seven_day_seats: sevenDayAll, five_hour: fiveHourForecast },
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -432,18 +610,22 @@ router.get('/peak-hours', async (req, res) => {
       : querySeatIds
     const seatFilter = effectiveIds ? { seat_id: { $in: effectiveIds } } : {}
 
+    // Include both open + closed windows so today's usage shows up immediately.
+    // Metric: utilization_pct (% of 5h budget used) — intuitive for non-technical users.
     const grid = await UsageWindow.aggregate([
-      { $match: { is_closed: true, window_end: { $gte: rangeStart }, peak_hour_of_day: { $ne: null }, ...seatFilter } },
+      { $match: { window_end: { $gte: rangeStart }, peak_hour_of_day: { $ne: null }, ...seatFilter } },
       { $addFields: { dow: { $dayOfWeek: { date: '$window_end', timezone: 'Asia/Ho_Chi_Minh' } } } },
       { $group: {
         _id: { dow: '$dow', hour: '$peak_hour_of_day' },
-        avg_delta_7d: { $avg: '$delta_7d_pct' },
+        avg_util: { $avg: '$utilization_pct' },
+        max_util: { $max: '$utilization_pct' },
         window_count: { $sum: 1 },
       }},
       { $project: {
         dow: { $subtract: ['$_id.dow', 1] }, // normalize Mongo 1-7 → JS 0-6
         hour: '$_id.hour', _id: 0,
-        avg_delta_7d: { $round: ['$avg_delta_7d', 1] },
+        avg_util: { $round: ['$avg_util', 1] },
+        max_util: { $round: ['$max_util', 1] },
         window_count: 1,
       }},
     ])
@@ -460,6 +642,9 @@ router.get('/peak-hours', async (req, res) => {
 router.get('/personal', async (req, res) => {
   try {
     const userId = req.user!._id
+    // Aggregate $match does NOT auto-cast string → ObjectId (unlike Mongoose .find()).
+    // Pre-cast once for all aggregate pipelines below.
+    const userObjectId = new mongoose.Types.ObjectId(userId)
     const todayDow = new Date().getDay() // 0=Sunday … 6=Saturday
 
     // 1. Today's schedules for this user with seat label
@@ -515,7 +700,7 @@ router.get('/personal', async (req, res) => {
     }
 
     // 4. My Efficiency — per-owner aggregation across owned seats
-    const myWindowMatch = { owner_id: userId, window_end: { $gte: since }, is_closed: true }
+    const myWindowMatch = { owner_id: userObjectId, window_end: { $gte: since }, is_closed: true }
     const [mySummaryAgg, mySeatsAgg] = await Promise.all([
       UsageWindow.aggregate([
         { $match: myWindowMatch },
@@ -547,6 +732,13 @@ router.get('/personal', async (req, res) => {
       avg_utilization: Math.round(s.avg_utilization * 10) / 10,
       window_count: s.window_count,
     }))
+    // Split top/bottom so they never overlap.
+    // N ≤ 3: show all in top, skip bottom. N ≥ 4: half-split (max 3 each side).
+    const n = rankedSeats.length
+    const k = n <= 3 ? n : Math.min(3, Math.floor(n / 2))
+    const myTopSeats = rankedSeats.slice(0, k)
+    const myBottomSeats = n <= 3 ? [] : rankedSeats.slice(-k).reverse()
+
     const mySummary = mySummaryAgg[0] ?? null
     const myEfficiency = mySummary
       ? {
@@ -555,8 +747,8 @@ router.get('/personal', async (req, res) => {
           my_window_count: mySummary.my_window_count,
           my_sonnet_avg: Math.round(mySummary.my_sonnet_avg * 10) / 10,
           my_opus_avg: Math.round(mySummary.my_opus_avg * 10) / 10,
-          my_top_seats: rankedSeats.slice(0, 3),
-          my_bottom_seats: rankedSeats.slice(-3).reverse(),
+          my_top_seats: myTopSeats,
+          my_bottom_seats: myBottomSeats,
         }
       : null
 

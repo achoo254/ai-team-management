@@ -37,15 +37,16 @@ describe("AlertCard", () => {
     expect(screen.getByText("5h")).toBeDefined();
   });
 
-  it("renders extra_credit type", () => {
-    const extraAlert: Alert = {
+  it("renders 7d rate_limit with threshold metadata", () => {
+    const alert7d: Alert = {
       ...mockAlert,
-      type: "extra_credit",
-      message: "Extra credits 90% used",
-      metadata: { pct: 90, credits_used: 45, credits_limit: 50 },
+      type: "rate_limit",
+      window: "7d",
+      message: "Seat X: 7d usage 95%",
+      metadata: { max_pct: 95, threshold: 85, session: "7d" },
     };
-    render(<AlertCard alert={extraAlert} />);
-    expect(screen.getByText("Extra Credit")).toBeDefined();
+    render(<AlertCard alert={alert7d} />);
+    expect(screen.getByText("Rate Limit")).toBeDefined();
   });
 
   it("renders token_failure with error in expanded view", async () => {
