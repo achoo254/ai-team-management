@@ -12,7 +12,7 @@ export interface SeatExtraUsage {
 export interface SeatUsageItem {
   seat_id: string;
   label: string;
-  team_id: string | null;
+  owner_name?: string | null;
   five_hour_pct: number | null;
   five_hour_resets_at: string | null;
   seven_day_pct: number | null;
@@ -31,16 +31,6 @@ export interface UsageTrendPoint {
   date: string;
   avg_7d_pct: number;
   avg_5h_pct: number;
-}
-
-// Team breakdown stats
-export interface TeamUsageItem {
-  team_id: string;
-  team_name: string;
-  avg_5h_pct: number;
-  avg_7d_pct: number;
-  seat_count: number;
-  user_count: number;
 }
 
 // Today schedule entry
@@ -65,10 +55,11 @@ export interface EnhancedDashboardData {
   activeUsers: number;
   totalSeats: number;
   unresolvedAlerts: number;
+  tokenIssueCount: number;
+  fullSeatCount: number;
   todaySchedules: TodayScheduleItem[];
   usagePerSeat: SeatUsageItem[];
   usageTrend: UsageTrendPoint[];
-  teamUsage: TeamUsageItem[];
   overBudgetSeats: OverBudgetSeat[];
 }
 
@@ -170,5 +161,39 @@ export function useDashboardEnhanced(range: DashboardRange = "month", seatIds?: 
     queryKey: ["dashboard", "enhanced", range, key],
     queryFn: () =>
       fetchJson<EnhancedDashboardData>(`/api/dashboard/enhanced?${qs}`),
+  });
+}
+
+// Personal dashboard types
+export interface MyScheduleItem {
+  seat_label: string;
+  start_hour: number;
+  end_hour: number;
+  usage_budget_pct: number | null;
+}
+
+export interface MySeatItem {
+  seat_id: string;
+  label: string;
+  role: "owner" | "member";
+}
+
+export interface MyUsageRank {
+  rank: number;
+  total: number;
+  avgDelta5h: number;
+}
+
+export interface PersonalDashboardData {
+  mySchedulesToday: MyScheduleItem[];
+  mySeats: MySeatItem[];
+  myUsageRank: MyUsageRank | null;
+}
+
+export function usePersonalDashboard() {
+  return useQuery<PersonalDashboardData>({
+    queryKey: ["dashboard", "personal"],
+    queryFn: () => fetchJson<PersonalDashboardData>("/api/dashboard/personal"),
+    refetchInterval: 60_000, // refresh every minute
   });
 }

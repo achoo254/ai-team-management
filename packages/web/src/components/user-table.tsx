@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Trash2 } from "lucide-react";
 import { type AdminUser } from "@/hooks/use-admin";
-import { useTeams, type Team } from "@/hooks/use-teams";
 
 interface Props {
   users: AdminUser[];
@@ -13,10 +12,6 @@ interface Props {
 }
 
 export function UserTable({ users, onEdit, onDelete, onToggleActive }: Props) {
-  const { data: teamsData } = useTeams();
-  const teamMap = new Map<string, Team>();
-  for (const t of teamsData?.teams ?? []) teamMap.set(t._id, t);
-
   return (
     <div className="rounded-md border overflow-x-auto">
       <Table>
@@ -25,7 +20,6 @@ export function UserTable({ users, onEdit, onDelete, onToggleActive }: Props) {
             <TableHead>Tên</TableHead>
             <TableHead className="hidden sm:table-cell">Email</TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Team</TableHead>
             <TableHead className="hidden md:table-cell">Seat</TableHead>
             <TableHead>Trạng thái</TableHead>
             <TableHead className="w-20" />
@@ -38,19 +32,6 @@ export function UserTable({ users, onEdit, onDelete, onToggleActive }: Props) {
               <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{u.email}</TableCell>
               <TableCell>
                 <Badge variant={u.role === "admin" ? "default" : "secondary"}>{u.role}</Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {(u.team_ids ?? []).map((tid) => {
-                    const t = teamMap.get(tid);
-                    return t ? (
-                      <Badge key={tid} variant="outline" className="text-xs" style={{ borderLeftColor: t.color, borderLeftWidth: 3 }}>
-                        {t.name}
-                      </Badge>
-                    ) : null;
-                  })}
-                  {(!u.team_ids || u.team_ids.length === 0) && <span className="text-xs text-muted-foreground">—</span>}
-                </div>
               </TableCell>
               <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{u.seat_labels?.join(", ") || "—"}</TableCell>
               <TableCell>

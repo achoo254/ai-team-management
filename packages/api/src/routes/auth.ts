@@ -60,7 +60,6 @@ router.post('/google', async (req, res) => {
       name: user.name,
       email: user.email ?? email,
       role: user.role,
-      team_ids: (user.team_ids ?? []).map(String),
     }
 
     const token = signToken(payload)
@@ -78,7 +77,6 @@ router.post('/google', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        team_ids: (user.team_ids ?? []).map(String),
       },
     })
   } catch (error) {
@@ -97,7 +95,7 @@ router.post('/logout', (_req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user!._id)
-      .select('name email role team_ids seat_ids')
+      .select('name email role seat_ids')
       .lean()
     if (!user) {
       res.status(404).json({ error: 'User not found' })

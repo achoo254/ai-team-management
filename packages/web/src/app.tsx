@@ -7,7 +7,6 @@ import { DashboardShell } from '@/components/dashboard-shell'
 import LoginPage from '@/pages/login'
 import DashboardPage from '@/pages/dashboard'
 import SeatsPage from '@/pages/seats'
-import TeamsPage from '@/pages/teams'
 import SchedulePage from '@/pages/schedule'
 import AlertsPage from '@/pages/alerts'
 import AdminPage from '@/pages/admin'
@@ -27,7 +26,6 @@ export default function App() {
           <Route element={<AuthProvider><DashboardShell /></AuthProvider>}>
             <Route index element={<DashboardPage />} />
             <Route path="seats" element={<SeatsPage />} />
-            <Route path="teams" element={<TeamsPage />} />
             <Route path="schedule" element={<SchedulePage />} />
             <Route path="alerts" element={<AlertsPage />} />
             <Route path="usage" element={<UsagePage />} />

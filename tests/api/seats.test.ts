@@ -42,7 +42,7 @@ describe("POST /api/seats", () => {
     const token = createUserToken();
     const req = makeRequest("/api/seats", {
       method: "POST",
-      body: JSON.stringify({ email: "new@test.com", label: "New Seat", team: "dev" }),
+      body: JSON.stringify({ email: "new@test.com", label: "New Seat" }),
       token,
     });
     const res = await POST(req);
@@ -53,7 +53,7 @@ describe("POST /api/seats", () => {
     const token = createTestToken();
     const req = makeRequest("/api/seats", {
       method: "POST",
-      body: JSON.stringify({ email: "new@test.com", label: "New Seat", team: "dev", max_users: 3 }),
+      body: JSON.stringify({ email: "new@test.com", label: "New Seat", max_users: 3 }),
       token,
     });
     const res = await POST(req);
@@ -67,7 +67,7 @@ describe("POST /api/seats", () => {
     const token = createTestToken();
     const req = makeRequest("/api/seats", {
       method: "POST",
-      body: JSON.stringify({ email: "new@test.com" }), // missing label and team
+      body: JSON.stringify({ email: "new@test.com" }), // missing label
       token,
     });
     const res = await POST(req);

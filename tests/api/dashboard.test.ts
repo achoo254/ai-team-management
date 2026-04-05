@@ -44,7 +44,7 @@ describe("GET /api/dashboard/summary", () => {
     const { seat } = await seedTestData();
     const { Seat } = await import("@/models/seat");
     const { UsageSnapshot } = await import("@/models/usage-snapshot");
-    const otherSeat = await Seat.create({ email: "other@seat.com", label: "Other", team: "dev", max_users: 2 });
+    const otherSeat = await Seat.create({ email: "other@seat.com", label: "Other", max_users: 2 });
     await UsageSnapshot.create({
       seat_id: seat._id,
       raw_response: {},
@@ -96,15 +96,17 @@ describe("GET /api/dashboard/enhanced", () => {
     expect(body).toHaveProperty("activeUsers");
     expect(body).toHaveProperty("totalSeats");
     expect(body).toHaveProperty("unresolvedAlerts");
+    expect(body).toHaveProperty("tokenIssueCount");
+    expect(body).toHaveProperty("fullSeatCount");
     expect(body).toHaveProperty("todaySchedules");
     expect(body).toHaveProperty("usagePerSeat");
     expect(body).toHaveProperty("usageTrend");
-    expect(body).toHaveProperty("teamUsage");
 
     expect(Array.isArray(body.todaySchedules)).toBe(true);
     expect(Array.isArray(body.usagePerSeat)).toBe(true);
     expect(Array.isArray(body.usageTrend)).toBe(true);
-    expect(Array.isArray(body.teamUsage)).toBe(true);
+    expect(typeof body.tokenIssueCount).toBe("number");
+    expect(typeof body.fullSeatCount).toBe("number");
   });
 
   it("returns correct user and seat counts", async () => {

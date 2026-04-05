@@ -90,7 +90,7 @@ describe("POST /api/schedules/assign", () => {
     // beforeEach already seeded — look up existing user and create a second seat
     const user = await User.findOne();
     const { Seat } = await import("@/models/seat");
-    const seat2 = await Seat.create({ email: "other@test.com", label: "Other", team: "mkt", max_users: 2 });
+    const seat2 = await Seat.create({ email: "other@test.com", label: "Other", max_users: 2 });
     const token = createTestToken();
     const req = makeRequest("/api/schedules/assign", {
       method: "POST",
@@ -252,8 +252,7 @@ describe("PATCH /api/schedules/swap", () => {
       name: "User Two",
       email: "user2@test.com",
       role: "user",
-      team: "dev",
-      seat_id: seat._id,
+      seat_ids: [seat._id],
     });
 
     await Schedule.create({ seat_id: seatId, user_id: userId, day_of_week: 1, slot: "morning" });

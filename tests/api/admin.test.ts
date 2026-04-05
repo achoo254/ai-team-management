@@ -61,7 +61,7 @@ describe("POST /api/admin/users", () => {
     const token = createUserToken();
     const req = makeRequest("/api/admin/users", {
       method: "POST",
-      body: JSON.stringify({ name: "New User", email: "new@test.com", team: "dev" }),
+      body: JSON.stringify({ name: "New User", email: "new@test.com" }),
       token,
     });
     const res = await postUser(req);
@@ -72,7 +72,7 @@ describe("POST /api/admin/users", () => {
     const token = createTestToken();
     const req = makeRequest("/api/admin/users", {
       method: "POST",
-      body: JSON.stringify({ name: "New User", email: "newuser@test.com", team: "dev", role: "user" }),
+      body: JSON.stringify({ name: "New User", email: "newuser@test.com", role: "user" }),
       token,
     });
     const res = await postUser(req);
@@ -93,7 +93,6 @@ describe("POST /api/admin/users", () => {
       body: JSON.stringify({
         name: "Seated User",
         email: "seated@test.com",
-        team: "dev",
         role: "user",
         seatId: String(seat._id),
       }),
@@ -109,7 +108,7 @@ describe("POST /api/admin/users", () => {
     const token = createTestToken();
     const req = makeRequest("/api/admin/users", {
       method: "POST",
-      body: JSON.stringify({ name: "Default Role", email: "defaultrole@test.com", team: "mkt" }),
+      body: JSON.stringify({ name: "Default Role", email: "defaultrole@test.com" }),
       token,
     });
     const res = await postUser(req);

@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { useUserSettings, useUpdateUserSettings } from "@/hooks/use-user-settings";
@@ -35,14 +34,6 @@ export function WatchedSeatsCard() {
   const availableSeats = settings?.available_seats ?? [];
   if (availableSeats.length === 0) return null;
 
-  // Group seats by team label
-  const seatsByTeam: Record<string, typeof availableSeats> = {};
-  for (const seat of availableSeats) {
-    const key = seat.team?.name ?? seat.team_id ?? 'Unassigned'
-    if (!seatsByTeam[key]) seatsByTeam[key] = [];
-    seatsByTeam[key].push(seat);
-  }
-
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -52,25 +43,18 @@ export function WatchedSeatsCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-          {Object.entries(seatsByTeam).map(([team, seats]) => (
-            <div key={team}>
-              <Label className="text-xs font-medium text-muted-foreground uppercase">{team}</Label>
-              <div className="space-y-1 mt-1">
-                {seats.map((seat) => (
-                  <label key={seat._id} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(seat._id)}
-                      onChange={() => toggleSeat(seat._id)}
-                      className="rounded border-border"
-                    />
-                    <span>{seat.label}</span>
-                    <span className="text-xs text-muted-foreground">({seat.email})</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+          {availableSeats.map((seat) => (
+            <label key={seat._id} className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(seat._id)}
+                onChange={() => toggleSeat(seat._id)}
+                className="rounded border-border"
+              />
+              <span>{seat.label}</span>
+              <span className="text-xs text-muted-foreground">({seat.email})</span>
+            </label>
           ))}
         </div>
 

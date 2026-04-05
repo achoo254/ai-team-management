@@ -6,6 +6,182 @@ All notable changes to the Claude Teams Management Dashboard project are documen
 
 ---
 
+## [2026-04-05] Remove Teams Model + Dashboard Enrichment
+
+### Major Changes
+
+**Teams Model Removed (Complete Elimination)**
+- Deleted `packages/api/src/models/team.ts` — 22-line schema
+- Deleted `packages/api/src/routes/teams.ts` — 11 CRUD endpoints (395 lines)
+- Removed `requireTeamOwnerOrAdmin` middleware — no longer needed
+- Dropped `teams` MongoDB collection
+- Removed `team_ids` from User schema
+- Removed `team_id` from Seat schema
+- Cleaned 17 files removing all team references (types, imports, UI components, hooks)
+
+**Rationale:**
+- Teams were organizational grouping only, no core logic dependency
+- < 5 seats per user → YAGNI (You Aren't Gonna Need It)
+- Simplified data model: User.seat_ids (assigned) + Seat.owner_id (ownership) sufficient
+- Freed up dashboard slot for richer per-seat insights
+
+**Dashboard API Enrichment**
+
+Extended `/api/dashboard/enhanced` response:
+1. **tokenIssueCount** — seats with inactive tokens or fetch errors (computed, no extra query)
+2. **fullSeatCount** — seats at capacity (user_count >= max_users)
+3. **owner_name** per seat in usagePerSeat — single batch User query by owner_ids
+
+New `/api/dashboard/personal` endpoint (auth required):
+- `mySchedulesToday` — user's scheduled slots with seat labels + budget
+- `mySeats` — owned + assigned seats with role badge
+- `myUsageRank` — user's position in system (rank, total, avg delta 5h)
+
+**Frontend UI Updates**
+
+Dashboard components redesigned:
+1. **DashboardStatOverview** — Token health badge (admin only) using tokenIssueCount
+2. **DashboardDetailTable** — Removed Team column, added owner name display under seat label
+3. **DashboardPersonalContext** — New component for non-admin users showing schedule, seats, rank
+
+**Removed UI Components** (6 files):
+- `pages/teams.tsx`, `pages/team-detail.tsx`
+- `components/team-card.tsx`, `team-form-dialog.tsx`
+- `components/dashboard-team-stats.tsx`
+- `hooks/use-teams.ts`
+
+**Cleaned Components** (11+ files):
+- Navigation: app.tsx, sidebar, mobile-nav, header
+- Auth hooks: auth-provider, use-admin, use-seats, use-schedules, use-user-settings
+- Admin UI: user-form-dialog, user-table
+- Seat UI: seat-card, seat-form-dialog, usage-snapshot-card
+- Dashboard: dashboard-seat-filter, dashboard-seat-efficiency, watched-seats-card
+
+### Data Model Changes
+
+**User schema** (breaking):
+- Removed: `team_ids: ObjectId[]`
+
+**Seat schema** (breaking):
+- Removed: `team_id: ObjectId`
+
+**Dashboard response** (breaking):
+- Removed: `teamUsage` aggregate object
+- Removed: `team_id` from usagePerSeat items
+- Added: `tokenIssueCount: number`
+- Added: `fullSeatCount: number`
+- Added: `owner_name: string` per seat in usagePerSeat
+
+### Route Changes
+
+**Removed Endpoints**:
+- `GET /api/teams` (was: list teams)
+- `POST /api/teams` (was: create team)
+- `GET /api/teams/:id` (was: get team details)
+- `PUT /api/teams/:id` (was: update team)
+- `DELETE /api/teams/:id` (was: delete team)
+- `POST /api/teams/:id/members` (was: add member)
+- `DELETE /api/teams/:id/members/:userId` (was: remove member)
+- ... (11 total endpoints removed)
+
+**Extended Endpoints**:
+- `GET /api/dashboard/enhanced` — Now returns tokenIssueCount, fullSeatCount, owner_name
+- `GET /api/dashboard/personal` — NEW endpoint, scoped to requesting user
+
+### Breaking Changes
+
+1. **Teams model removed from all layers** — no backward compatibility path
+   - API clients cannot access team CRUD
+   - JWT no longer includes team_ids
+   - Frontend routes `/teams`, `/teams/:id` removed
+
+2. **Dashboard response shape changed**
+   - Removed: `teamUsage` (grouped usage by team)
+   - Added: `tokenIssueCount`, `fullSeatCount`
+   - Seats now include `owner_name` (requires User batch query)
+   - No team_id in seat entries
+
+3. **Frontend team components removed**
+   - `useTeams` hook no longer available
+   - Team badges, selectors, pages gone
+   - Team grouping in dashboard/watched-seats replaced with flat seat lists
+
+### Backward Compatibility
+
+- **Zero**: Old team documents in database remain but are unused by application
+- **Zero**: Old API clients expecting team endpoints will fail with 404
+- No migration needed — schema changes additive to remaining fields
+
+### Testing
+
+- Build: ✓ `pnpm -F @repo/api build` passes
+- Build: ✓ `pnpm -F @repo/web build` passes
+- Tests: ✓ 24/24 passing (team-related tests removed/updated)
+- Linting: ✓ Clean (ESLint + Prettier)
+- Manual: Dashboard renders with new badges, /personal endpoint returns correct data
+
+### Files Modified
+
+**Deleted (8 files):**
+- `packages/api/src/models/team.ts`
+- `packages/api/src/routes/teams.ts`
+- `packages/web/src/pages/teams.tsx`
+- `packages/web/src/pages/team-detail.tsx`
+- `packages/web/src/components/team-card.tsx`
+- `packages/web/src/components/team-form-dialog.tsx`
+- `packages/web/src/components/dashboard-team-stats.tsx`
+- `packages/web/src/hooks/use-teams.ts`
+
+**Backend Modified (10 files):**
+- `packages/api/src/index.ts` — Remove teams route mount
+- `packages/api/src/middleware.ts` — Remove requireTeamOwnerOrAdmin
+- `packages/api/src/routes/auth.ts` — Remove team_ids from JWT/response
+- `packages/api/src/routes/admin.ts` — Remove team_ids references
+- `packages/api/src/routes/seats.ts` — Remove team_id populate/create/update
+- `packages/api/src/routes/dashboard.ts` — Add tokenIssueCount, fullSeatCount, owner_name; remove teamUsage; add /personal
+- `packages/api/src/routes/user-settings.ts` — Remove team_id reference
+- `packages/api/src/services/alert-service.ts` — Remove emitTeamEvent
+- `packages/api/src/models/user.ts` — Remove team_ids field
+- `packages/api/src/models/seat.ts` — Remove team_id field
+
+**Frontend Modified (17+ files):**
+- `packages/web/src/app.tsx` — Remove teams routes
+- `packages/web/src/components/app-sidebar.tsx` — Remove Teams nav item
+- `packages/web/src/components/mobile-nav.tsx` — Remove Teams nav item
+- `packages/web/src/components/header.tsx` — Remove /teams breadcrumb
+- `packages/web/src/components/auth-provider.tsx` — Remove team_ids from AuthUser
+- `packages/web/src/pages/dashboard.tsx` — Add DashboardPersonalContext, remove DashboardTeamStats
+- `packages/web/src/pages/admin.tsx` — Remove team columns/selectors
+- `packages/web/src/components/dashboard-stat-overview.tsx` — Add token health badge
+- `packages/web/src/components/dashboard-detail-table.tsx` — Remove Team column, add owner_name
+- `packages/web/src/components/dashboard-personal-context.tsx` — NEW component
+- `packages/web/src/components/dashboard-seat-filter.tsx` — Remove team grouping
+- `packages/web/src/components/dashboard-seat-efficiency.tsx` — Remove team display
+- `packages/web/src/components/watched-seats-card.tsx` — Remove team grouping
+- `packages/web/src/components/seat-card.tsx` — Remove team badge
+- `packages/web/src/components/seat-form-dialog.tsx` — Remove team selector
+- `packages/web/src/components/usage-snapshot-card.tsx` — Remove team badge
+- `packages/web/src/components/user-form-dialog.tsx` — Remove team selector
+- `packages/web/src/components/user-table.tsx` — Remove Team column
+
+**Hooks Modified (5 files):**
+- `packages/web/src/hooks/use-admin.ts` — Remove team_ids from mutations
+- `packages/web/src/hooks/use-seats.ts` — Remove SeatTeam interface, team fields
+- `packages/web/src/hooks/use-schedules.ts` — Remove team_id/team from schedule
+- `packages/web/src/hooks/use-user-settings.ts` — Remove team_id from seat
+- `packages/web/src/hooks/use-dashboard.ts` — Add personal dashboard hook
+
+**Shared Modified (1 file):**
+- `packages/shared/types.ts` — Remove Team, SeatTeam, team_ids/team_id from all types
+
+### Related Plans
+
+- Plan: `plans/dattqh/260404-2348-dashboard-enrichment/`
+- Phases: 5 (all complete)
+- Code review: 8.5/10 approved with follow-ups on 30-day rank window, rank ascending sort, Vietnamese diacritics
+
+---
+
 ## [2026-04-04] Refactor Alert Settings to User Settings
 
 ### Major Changes

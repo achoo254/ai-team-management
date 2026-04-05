@@ -1,7 +1,9 @@
 import { Monitor, Users, Zap, TrendingUp, AlertTriangle, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardEnhanced, type DashboardRange } from "@/hooks/use-dashboard";
+import { useAuth } from "@/hooks/use-auth";
 
 interface MiniStatProps {
   label: string;
@@ -44,6 +46,7 @@ function StatSkeleton() {
 
 export function DashboardStatOverview({ range, seatIds }: { range: DashboardRange; seatIds?: string[] }) {
   const { data, isLoading } = useDashboardEnhanced(range, seatIds);
+  const { user } = useAuth();
 
   if (isLoading) {
     return (
@@ -61,12 +64,30 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
   const totalOccupancy = seats.reduce((a, s) => a + s.user_count, 0);
   const totalCapacity = seats.reduce((a, s) => a + s.max_users, 0);
 
+  const tokenIssueCount = data?.tokenIssueCount ?? 0;
+  const fullSeatCount = data?.fullSeatCount ?? 0;
+
+  // Build seats sub text: slot occupancy + "X full" if any seats are full
+  const seatsSub = fullSeatCount > 0
+    ? `${totalOccupancy}/${totalCapacity} slot · ${fullSeatCount} full`
+    : `${totalOccupancy}/${totalCapacity} slot đã dùng`;
+
   return (
-    <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="space-y-2">
+      {/* Token health warning — admin only */}
+      {user?.role === "admin" && tokenIssueCount > 0 && (
+        <div className="flex items-center gap-2">
+          <Badge variant="destructive" className="text-xs">
+            {tokenIssueCount} seat{tokenIssueCount > 1 ? "s" : ""} có vấn đề token
+          </Badge>
+          <span className="text-xs text-muted-foreground">Kiểm tra lại OAuth credentials</span>
+        </div>
+      )}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <MiniStat
         label="Seats"
         value={data?.totalSeats ?? 0}
-        sub={`${totalOccupancy}/${totalCapacity} slot đã dùng`}
+        sub={seatsSub}
         icon={Monitor}
         accent="bg-info-surface text-info-text"
       />
@@ -105,6 +126,7 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
         icon={Calendar}
         accent="bg-info-surface text-info-text"
       />
+      </div>
     </div>
   );
 }

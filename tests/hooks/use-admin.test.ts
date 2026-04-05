@@ -9,7 +9,6 @@ const mockUser = {
   name: "Alice",
   email: "alice@example.com",
   role: "user" as const,
-  team: "dev",
   active: true,
 };
 
@@ -56,7 +55,7 @@ describe("useCreateUser", () => {
     const { result } = renderHook(() => useCreateUser(), { wrapper });
 
     await act(async () => {
-      result.current.mutate({ name: "Alice", email: "alice@example.com", role: "user", team: "dev" });
+      result.current.mutate({ name: "Alice", email: "alice@example.com", role: "user" });
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

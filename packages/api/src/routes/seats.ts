@@ -39,11 +39,11 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const allowed = await getAllowedSeatIds(req.user!)
     const seatFilter = allowed ? { _id: { $in: allowed } } : {}
-    const seats = await Seat.find(seatFilter).select('+oauth_credential').populate('owner_id', 'name email').populate('team_id', 'name color').sort({ _id: 1 }).lean()
+    const seats = await Seat.find(seatFilter).select('+oauth_credential').populate('owner_id', 'name email').sort({ _id: 1 }).lean()
     const userFilter = allowed
       ? { active: true, seat_ids: { $in: allowed } }
       : { active: true, seat_ids: { $exists: true, $ne: [] } }
-    const users = await User.find(userFilter, 'name email seat_ids team_ids').lean()
+    const users = await User.find(userFilter, 'name email seat_ids').lean()
 
     // Group users by each seat_id (user can appear in multiple seats)
     const usersBySeat: Record<string, typeof users> = {}
@@ -66,17 +66,9 @@ router.get('/', authenticate, async (req, res) => {
       const populatedOwner = seatObj.owner_id && typeof seatObj.owner_id === 'object'
         ? seatObj.owner_id as unknown as { _id: string; name: string; email: string }
         : null
-      // Normalize team_id populated object
-      const populatedTeam = seatObj.team_id && typeof seatObj.team_id === 'object'
-        ? seatObj.team_id as unknown as { _id: string; name: string; color: string }
-        : null
 
       return {
         ...seatObj,
-        team_id: populatedTeam ? String(populatedTeam._id) : null,
-        team: populatedTeam
-          ? { _id: String(populatedTeam._id), name: populatedTeam.name, color: populatedTeam.color }
-          : null,
         owner_id: populatedOwner ? String(populatedOwner._id) : null,
         owner: populatedOwner
           ? { _id: String(populatedOwner._id), name: populatedOwner.name, email: populatedOwner.email }
@@ -101,12 +93,11 @@ router.get('/', authenticate, async (req, res) => {
 // Must be before /:id routes to avoid param matching
 router.get('/available-users', authenticate, requireAdmin, async (_req, res) => {
   try {
-    const users = await User.find({ active: true }, 'name email team_ids seat_ids').populate('seat_ids', 'label').lean()
+    const users = await User.find({ active: true }, 'name email seat_ids').populate('seat_ids', 'label').lean()
     const mapped = users.map((u) => ({
       id: u._id,
       name: u.name,
       email: u.email,
-      team_ids: (u.team_ids ?? []).map(String),
       active: true,
       seat_labels: ((u.seat_ids ?? []) as { label?: string }[]).map(s => s.label).filter(Boolean),
     }))
@@ -152,14 +143,14 @@ router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requ
 // POST /api/seats — create seat (any authenticated user becomes owner)
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { email, label, team_id, max_users } = req.body
+    const { email, label, max_users } = req.body
 
     if (!email || !label) {
       res.status(400).json({ error: 'email and label are required' })
       return
     }
 
-    const seat = await Seat.create({ email, label, team_id: team_id || null, max_users, owner_id: req.user!._id })
+    const seat = await Seat.create({ email, label, max_users, owner_id: req.user!._id })
     res.status(201).json(seat)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -172,7 +163,7 @@ router.put('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin
   try {
     const id = req.params.id as string
     // owner_id intentionally excluded — ownership transfer uses PUT /:id/transfer (admin only)
-    const allowed = ['email', 'label', 'team_id', 'max_users']
+    const allowed = ['email', 'label', 'max_users']
     const update: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in req.body) update[key] = req.body[key]

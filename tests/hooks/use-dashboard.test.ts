@@ -9,10 +9,12 @@ const mockDashboard = {
   activeUsers: 8,
   totalSeats: 4,
   unresolvedAlerts: 2,
+  tokenIssueCount: 0,
+  fullSeatCount: 1,
   todaySchedules: 3,
-  usagePerSeat: [{ label: "Seat 1", team: "dev", five_hour_pct: 40, seven_day_pct: 60 }],
-  usageTrend: [{ date: "2026-03-23", avg_pct: 55 }],
-  teamUsage: [{ team: "dev", avg_pct: 58 }],
+  usagePerSeat: [{ label: "Seat 1", owner_name: "John", five_hour_pct: 40, seven_day_pct: 60 }],
+  usageTrend: [{ date: "2026-03-23", avg_7d_pct: 55, avg_5h_pct: 40 }],
+  overBudgetSeats: [],
 };
 
 describe("useDashboardEnhanced", () => {

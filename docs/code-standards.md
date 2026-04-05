@@ -429,63 +429,32 @@ try {
 
 ## Notification Patterns
 
-### Event Emitters (Asynchronous Notifications)
+### Telegram Notifications (Alert & Report Flow)
 
-For ad-hoc events (not cron-based), use event emitter functions that send notifications without blocking request flow.
+Notifications are sent via two primary mechanisms:
 
-**Pattern** (from `alert-service.ts`):
-```typescript
-export async function emitTeamEvent(params: {
-  event_type: string          // e.g., 'team.member_added'
-  actor_id: string            // User who triggered action
-  target_user_id: string      // User receiving notification
-  team_id: string             // Team context
-  extra?: Record<string, unknown>  // Optional metadata
-}) {
-  // Skip self-actions
-  if (params.actor_id === params.target_user_id) return
+**1. Alert Notifications** (triggered by usage snapshot evaluation):
+- Sent via user's personal Telegram bot
+- Includes alert type (rate_limit, extra_credit, token_failure, usage_exceeded)
+- Fallback to system bot if personal bot unconfigured
+- Non-blocking: errors logged but don't block request flow
 
-  // Fetch required entities
-  const [targetUser, team] = await Promise.all([
-    User.findById(params.target_user_id),
-    Team.findById(params.team_id, 'label'),
-  ])
-  if (!targetUser || !team) return
+**2. Scheduled Reports** (per-user configurable delivery):
+- Sent via personal Telegram bot per user's schedule
+- Hourly cron evaluates matching day/hour for each user
+- Report filtered by seat ownership (admin sees all, users see own)
+- Timezone: Asia/Ho_Chi_Minh (server-side)
 
-  // Map event type to human-readable message
-  const messages: Record<string, string> = {
-    'team.member_added': `Bạn đã được thêm vào team ${team.label}`,
-    'team.member_removed': `Bạn đã bị xóa khỏi team ${team.label}`,
-    // ... more events
-  }
-
-  // Send via Telegram (personal bot) + FCM (if enabled)
-  if (targetUser.telegram_chat_id && targetUser.telegram_bot_token) {
-    await sendTelegramMessage(targetUser, messages[params.event_type])
-  }
-  if (targetUser.push_enabled && targetUser.fcm_tokens.length > 0) {
-    await sendFcmNotification(targetUser.fcm_tokens, messages[params.event_type])
-  }
-}
-```
-
-**Usage** (in routes):
-```typescript
-// After modifying team membership
-await emitTeamEvent({
-  event_type: 'team.member_added',
-  actor_id: req.user._id,
-  target_user_id: newMemberId,
-  team_id: teamId,
-})
-```
+**3. Weekly Summary** (admin notification):
+- Sent Friday 17:00 Asia/Saigon
+- Sent via system bot to configured group chat
+- Includes usage summary + alert count
 
 **Key Rules**:
-- Don't await emitters in request handlers (fire-and-forget; user doesn't wait)
-- Skip self-actions (user cannot notify themselves)
-- Emitters handle missing users/entities gracefully (no errors)
-- Use personal Telegram bot only (never system bot for user-to-user events)
-- Include optional FCM push if user has enabled it
+- Personal bots required for per-user notifications (alerts, schedules)
+- System bot used only for group-wide summaries
+- Errors logged but don't block request/cron execution
+- Non-blocking: fire-and-forget pattern for all Telegram sends
 
 ## File Size & Modularization
 

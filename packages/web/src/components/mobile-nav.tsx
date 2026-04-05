@@ -6,7 +6,6 @@ import {
   BarChart3,
   Menu,
   Monitor,
-  Users,
   AlertTriangle,
   Settings,
   Bot,
@@ -22,7 +21,6 @@ const bottomItems = [
 
 const sheetItems = [
   { label: "Seats", href: "/seats", icon: Monitor },
-  { label: "Teams", href: "/teams", icon: Users },
   { label: "Cảnh báo", href: "/alerts", icon: AlertTriangle },
   { label: "Cài đặt", href: "/settings", icon: Bot },
   { label: "Admin", href: "/admin", icon: Settings, adminOnly: true },

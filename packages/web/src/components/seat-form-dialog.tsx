@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type Seat } from "@/hooks/use-seats";
-import { useTeams } from "@/hooks/use-teams";
-import { useAuth } from "@/hooks/use-auth";
 
 interface Props {
   open: boolean;
@@ -17,23 +13,18 @@ interface Props {
   initial?: Seat | null;
 }
 
-const empty = { email: "", label: "", team_id: "", max_users: 2 };
+const empty = { email: "", label: "", max_users: 2 };
 
 export function SeatFormDialog({ open, onClose, onSubmit, loading, initial }: Props) {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  // Non-admin sees only own teams; admin sees all
-  const { data: teamsData } = useTeams(isAdmin ? undefined : { mine: true });
   const [form, setForm] = useState(empty);
 
   useEffect(() => {
     setForm(initial
-      ? { email: initial.email, label: initial.label, team_id: initial.team_id ?? "", max_users: initial.max_users }
+      ? { email: initial.email, label: initial.label, max_users: initial.max_users }
       : empty);
   }, [initial, open]);
 
-  const set = (k: string, v: string | number | null) => { if (v !== null) setForm((f) => ({ ...f, [k]: v })); };
-  const teams = teamsData?.teams ?? [];
+  const set = (k: string, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -47,29 +38,6 @@ export function SeatFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
           <div className="grid gap-1.5">
             <Label>Label</Label>
             <Input value={form.label} onChange={(e) => set("label", e.target.value)} placeholder="Seat A" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Team</Label>
-            <div className="relative">
-              <Select key={form.team_id || "__empty__"} value={form.team_id || undefined} onValueChange={(v) => set("team_id", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn team">
-                    {form.team_id ? teams.find((t) => t._id === form.team_id)?.name ?? "—" : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {teams.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.team_id && (
-                <button type="button" onClick={() => set("team_id", "")}
-                  className="absolute right-8 top-1/2 -translate-y-1/2 rounded-sm p-0.5 hover:bg-muted">
-                  <X className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-              )}
-            </div>
           </div>
           <div className="grid gap-1.5">
             <Label>Số user tối đa</Label>

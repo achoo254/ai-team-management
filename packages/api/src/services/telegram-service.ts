@@ -2,7 +2,6 @@ import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
 import { User, type IUser } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
-import { Team } from '../models/team.js'
 import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
 
 /** Escape HTML special chars for Telegram */
@@ -41,7 +40,6 @@ interface SeatRow {
   seat_id: unknown
   email: string
   label: string
-  team_id: string | null
   five_hour_pct: number | null
   seven_day_pct: number | null
   extra_usage: { is_enabled: boolean; used_credits: number | null; monthly_limit: number | null; utilization: number | null } | null
@@ -51,47 +49,32 @@ interface SeatRow {
 function buildReportHtml(
   rows: SeatRow[],
   usersBySeat: Record<string, string[]>,
-  teamLabels: Record<string, string>,
 ): string {
-  // Group seats by team_id
-  const teams: Record<string, SeatRow[]> = {}
-  for (const r of rows) {
-    const key = r.team_id ?? 'unassigned'
-    if (!teams[key]) teams[key] = []
-    teams[key].push(r)
-  }
-
   let msg = `📊 <b>Báo cáo Usage — ${new Date().toLocaleDateString('vi-VN')}</b>\n\n`
 
-  for (const [teamId, teamSeats] of Object.entries(teams)) {
-    const label = teamLabels[teamId] || (teamId === 'unassigned' ? 'Chưa gán team' : teamId)
-    msg += `<b>📌 ${esc(label)} Team</b>\n`
-    msg += `${'─'.repeat(24)}\n`
+  for (const s of rows) {
+    const highest = Math.max(s.five_hour_pct ?? 0, s.seven_day_pct ?? 0)
+    const warn = highest >= 80 ? '🔴' : highest >= 50 ? '🟡' : '🟢'
+    msg += `${warn} <b>${esc(s.label)}</b> <code>${esc(s.email)}</code>\n`
 
-    for (const s of teamSeats) {
-      const highest = Math.max(s.five_hour_pct ?? 0, s.seven_day_pct ?? 0)
-      const warn = highest >= 80 ? '🔴' : highest >= 50 ? '🟡' : '🟢'
-      msg += `\n${warn} <b>${esc(s.label)}</b> <code>${esc(s.email)}</code>\n`
+    if (s.five_hour_pct !== null) {
+      msg += `   5h:  ${buildProgressBar(s.five_hour_pct)} ${s.five_hour_pct}%\n`
+    }
+    if (s.seven_day_pct !== null) {
+      msg += `   7d:  ${buildProgressBar(s.seven_day_pct)} ${s.seven_day_pct}%\n`
+    }
+    if (s.five_hour_pct === null && s.seven_day_pct === null) {
+      msg += `   <i>Chưa có dữ liệu</i>\n`
+    }
 
-      if (s.five_hour_pct !== null) {
-        msg += `   5h:  ${buildProgressBar(s.five_hour_pct)} ${s.five_hour_pct}%\n`
-      }
-      if (s.seven_day_pct !== null) {
-        msg += `   7d:  ${buildProgressBar(s.seven_day_pct)} ${s.seven_day_pct}%\n`
-      }
-      if (s.five_hour_pct === null && s.seven_day_pct === null) {
-        msg += `   <i>Chưa có dữ liệu</i>\n`
-      }
+    if (s.extra_usage?.is_enabled && s.extra_usage.used_credits != null && s.extra_usage.monthly_limit != null) {
+      const pct = s.extra_usage.utilization ?? 0
+      msg += `   💳 $${s.extra_usage.used_credits}/$${s.extra_usage.monthly_limit} (${pct}%)\n`
+    }
 
-      if (s.extra_usage?.is_enabled && s.extra_usage.used_credits != null && s.extra_usage.monthly_limit != null) {
-        const pct = s.extra_usage.utilization ?? 0
-        msg += `   💳 $${s.extra_usage.used_credits}/$${s.extra_usage.monthly_limit} (${pct}%)\n`
-      }
-
-      const members = usersBySeat[String(s.seat_id)]
-      if (members && members.length > 0) {
-        msg += `   👥 ${members.map((n) => esc(n)).join(', ')}\n`
-      }
+    const members = usersBySeat[String(s.seat_id)]
+    if (members && members.length > 0) {
+      msg += `   👥 ${members.map((n) => esc(n)).join(', ')}\n`
     }
     msg += '\n'
   }
@@ -115,10 +98,9 @@ function buildReportHtml(
   return msg
 }
 
-/** Fetch common report data: snapshots map, users by seat, team labels */
+/** Fetch common report data: snapshots map, users by seat */
 async function fetchReportData() {
   const users = await User.find({ active: true }, 'name seat_ids').lean()
-  const teamRows = await Team.find({}, 'name label').sort({ name: 1 }).lean()
 
   const snapshots = await UsageSnapshot.aggregate([
     { $sort: { fetched_at: -1 } },
@@ -140,10 +122,7 @@ async function fetchReportData() {
     }
   }
 
-  const teamLabels: Record<string, string> = {}
-  for (const t of teamRows) teamLabels[String(t._id)] = t.name
-
-  return { snapMap, usersBySeat, teamLabels }
+  return { snapMap, usersBySeat }
 }
 
 /** Build seat rows from seats + snapshot map */
@@ -154,7 +133,6 @@ function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
       seat_id: s._id,
       email: s.email,
       label: s.label,
-      team_id: s.team_id ? String(s.team_id) : null,
       five_hour_pct: snap?.five_hour_pct ?? null,
       seven_day_pct: snap?.seven_day_pct ?? null,
       extra_usage: snap?.extra_usage ?? null,
@@ -172,7 +150,7 @@ export async function sendUserReport(userId: string) {
   const watchedIds = (user.watched_seat_ids ?? []).map(String)
   let seats
   if (watchedIds.length > 0) {
-    seats = await Seat.find({ _id: { $in: watchedIds } }).sort({ team_id: 1 }).lean()
+    seats = await Seat.find({ _id: { $in: watchedIds } }).sort({ label: 1 }).lean()
   } else {
     // Fallback: owned + assigned seats
     const ownedSeats = await Seat.find({ owner_id: userId }).lean()
@@ -181,14 +159,14 @@ export async function sendUserReport(userId: string) {
       : []
     const seatMap = new Map<string, any>()
     for (const s of [...ownedSeats, ...assignedSeats]) seatMap.set(String(s._id), s)
-    seats = Array.from(seatMap.values()).sort((a: any, b: any) => String(a.team_id ?? '').localeCompare(String(b.team_id ?? '')))
+    seats = Array.from(seatMap.values()).sort((a: any, b: any) => a.label.localeCompare(b.label))
   }
 
   if (seats.length === 0) return
 
-  const { snapMap, usersBySeat, teamLabels } = await fetchReportData()
+  const { snapMap, usersBySeat } = await fetchReportData()
   const rows = buildSeatRows(seats, snapMap)
-  const msg = buildReportHtml(rows, usersBySeat, teamLabels)
+  const msg = buildReportHtml(rows, usersBySeat)
 
   const token = decrypt(user.telegram_bot_token)
   await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined)

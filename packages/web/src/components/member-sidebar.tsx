@@ -1,7 +1,6 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { SeatWithUsers } from "@/hooks/use-schedules";
 
@@ -10,8 +9,8 @@ interface Props {
   isAdmin: boolean;
 }
 
-function DraggableMember({ userId, userName, seatId, team }: {
-  userId: string; userName: string; seatId: string; team: string;
+function DraggableMember({ userId, userName, seatId }: {
+  userId: string; userName: string; seatId: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `member-${userId}-${seatId}`,
@@ -23,9 +22,6 @@ function DraggableMember({ userId, userName, seatId, team }: {
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}
       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-grab active:cursor-grabbing select-none">
       <span className="text-sm truncate flex-1">{userName}</span>
-      <Badge variant="secondary" className="text-xs shrink-0">
-        {team ?? "—"}
-      </Badge>
     </div>
   );
 }
@@ -48,7 +44,6 @@ export function MemberSidebar({ seats, isAdmin }: Props) {
                 userId={user._id}
                 userName={user.name}
                 seatId={seat._id}
-                team={seat.team?.name ?? "—"}
               />
             ))}
             {(!seat.users || seat.users.length === 0) && (

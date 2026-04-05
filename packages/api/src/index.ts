@@ -11,7 +11,6 @@ import alertRoutes from './routes/alerts.js'
 import dashboardRoutes from './routes/dashboard.js'
 import scheduleRoutes from './routes/schedules.js'
 import seatRoutes from './routes/seats.js'
-import teamRoutes from './routes/teams.js'
 import usageSnapshotRoutes from './routes/usage-snapshots.js'
 import userSettingsRoutes from './routes/user-settings.js'
 import { checkAndSendScheduledReports } from './services/telegram-service.js'
@@ -32,7 +31,6 @@ app.use('/api/alerts', alertRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/schedules', scheduleRoutes)
 app.use('/api/seats', seatRoutes)
-app.use('/api/teams', teamRoutes)
 app.use('/api/usage-snapshots', usageSnapshotRoutes)
 app.use('/api/user', userSettingsRoutes)
 

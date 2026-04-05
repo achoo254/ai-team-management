@@ -11,8 +11,6 @@ export interface Seat {
   _id: string
   email: string
   label: string
-  team_id: string | null
-  team?: { _id: string; name: string; color: string } | null
   max_users: number
   owner_id: string | null
   owner?: { _id: string; name: string; email: string } | null
@@ -30,7 +28,6 @@ export interface User {
   name: string
   email?: string
   role: 'admin' | 'user'
-  team_ids: string[]
   seat_id?: string | null
   active: boolean
   telegram_chat_id?: string | null
@@ -88,15 +85,6 @@ export interface UserAlertSettings {
   enabled: boolean
   rate_limit_pct: number        // 1-100, default 80
   extra_credit_pct: number      // 1-100, default 80
-}
-
-export interface Team {
-  _id: string
-  name: string
-  color: string
-  created_by: string
-  creator?: { _id: string; name: string; email: string }
-  created_at: string
 }
 
 export interface UsageSnapshot {
@@ -157,5 +145,4 @@ export interface AuthUser {
   name: string
   email: string
   role: 'admin' | 'user'
-  team_ids: string[]
 }

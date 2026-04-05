@@ -18,7 +18,6 @@ quan-ly-team-claude/
 │   │   │   │   ├── schedule.ts
 │   │   │   │   ├── alert.ts
 │   │   │   │   ├── active-session.ts
-│   │   │   │   ├── team.ts
 │   │   │   │   └── usage-snapshot.ts # Usage data from Anthropic API
 │   │   │   ├── routes/              # Express route handlers (TypeScript)
 │   │   │   │   ├── auth.ts
@@ -27,7 +26,6 @@ quan-ly-team-claude/
 │   │   │   │   ├── schedules.ts
 │   │   │   │   ├── alerts.ts
 │   │   │   │   ├── admin.ts
-│   │   │   │   ├── teams.ts
 │   │   │   │   └── usage-snapshots.ts # Query & collect usage snapshots
 │   │   │   ├── services/            # Business logic (TypeScript)
 │   │   │   │   ├── alert-service.ts
@@ -48,7 +46,6 @@ quan-ly-team-claude/
 │   │   │   │   ├── schedules.tsx
 │   │   │   │   ├── alerts.tsx
 │   │   │   │   ├── admin.tsx
-│   │   │   │   ├── teams.tsx
 │   │   │   │   ├── usage-metrics.tsx  # Usage snapshots & token management
 │   │   │   │   └── login.tsx
 │   │   │   ├── components/          # Reusable React components
@@ -126,7 +123,6 @@ quan-ly-team-claude/
   _id: ObjectId (auto),
   email: String (required, unique),
   label: String (required),
-  team_id: ObjectId | null (reference to Team, default: null, index: true),
   owner_id: ObjectId | null (reference to User, index: true),
   max_users: Number (default: 3),
   oauth_credential: {
@@ -152,7 +148,6 @@ quan-ly-team-claude/
   name: String (required),
   email: String (unique, sparse),
   role: String (enum: ['admin', 'user'], default: 'user'),
-  team_ids: [ObjectId] (reference to Team, default: [], multi-team support),
   seat_ids: [ObjectId] (reference to Seat),
   active: Boolean (default: true),
   telegram_bot_token: String | null (encrypted AES-256-GCM),
@@ -219,20 +214,6 @@ quan-ly-team-claude/
 }
 ```
 
-#### Team
-```typescript
-{
-  _id: ObjectId (auto),
-  name: String (required, lowercase),
-  label: String (required),
-  color: String (default: '#3b82f6'),
-  created_by: ObjectId (reference to User, required, index: true),
-  created_at: Date (auto),
-  // Compound unique index: (created_by, name)
-  // Any authenticated user can create teams; ownership determined by created_by
-}
-```
-
 #### UsageSnapshot
 ```typescript
 {
@@ -267,7 +248,8 @@ quan-ly-team-claude/
 - `GET /api/auth/me` — Current authenticated user
 
 ### Dashboard
-- `GET /api/dashboard/stats` — Overview stats (seats, users, usage alerts)
+- `GET /api/dashboard/enhanced` — Overview stats (tokenIssueCount, fullSeatCount, owner_name per seat)
+- `GET /api/dashboard/personal` — Current user's schedule today, my seats with role, usage rank (auth required, any user)
 - `GET /api/dashboard/weekly-summary` — Weekly usage summary
 - `GET /api/dashboard/alerts` — Recent alerts
 
@@ -315,18 +297,6 @@ quan-ly-team-claude/
 - `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
 - `POST /api/user/settings/test-bot` — Test personal Telegram bot connection
 
-### Teams (Multi-Team Support)
-- `GET /api/teams` — List teams (all members; admin can filter via ?owner; user sees own teams via ?mine=true)
-- `POST /api/teams` — Create team (any authenticated user becomes creator/owner)
-- `PUT /api/teams/:id` — Update team (creator or admin)
-- `DELETE /api/teams/:id` — Delete team (creator or admin)
-- `GET /api/teams/:id/members` — List team members (creator or admin)
-- `POST /api/teams/:id/members` — Add member to team (creator or admin)
-- `DELETE /api/teams/:id/members/:userId` — Remove member (creator or admin)
-- `GET /api/teams/:id/seats` — List team seats (creator or admin)
-- `POST /api/teams/:id/seats` — Assign seat to team (creator or admin)
-- `DELETE /api/teams/:id/seats/:seatId` — Remove seat from team (creator or admin)
-
 ### Admin
 - `GET /api/admin/users` — List all users (admin only)
 - `POST /api/admin/users` — Create user (admin only)
@@ -348,7 +318,6 @@ quan-ly-team-claude/
 ### View Components
 - **Dashboard**: Stats, alerts, quick info
 - **Seats**: List, create, edit, delete seats + assign users
-- **Teams**: Manage team definitions (dev/mkt)
 - **Schedules**: Assign users to time slots
 - **Usage Metrics**: View real-time usage snapshots + manage tokens
 - **Admin**: User CRUD, system config, alert threshold settings

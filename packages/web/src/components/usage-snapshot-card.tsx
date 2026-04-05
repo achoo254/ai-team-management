@@ -1,7 +1,6 @@
 import { RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { useCollectSeatUsage } from '@/hooks/use-usage-snapshots'
 import { useAuth } from '@/hooks/use-auth'
 import type { UsageSnapshot } from '@repo/shared'
@@ -47,7 +46,7 @@ function ProgressBar({ label, pct, resetsAt }: { label: string; pct: number | nu
 
 interface Props {
   snapshot: UsageSnapshot
-  seat?: { label?: string; team?: { name: string; color?: string } | null }
+  seat?: { label?: string }
 }
 
 export function UsageSnapshotCard({ snapshot, seat }: Props) {
@@ -63,9 +62,6 @@ export function UsageSnapshotCard({ snapshot, seat }: Props) {
             {seat?.label ?? snapshot.seat_id}
           </CardTitle>
           <div className="flex items-center gap-1">
-            {seat?.team && (
-              <Badge variant="secondary" className="text-xs">{seat.team.name}</Badge>
-            )}
             {isAdmin && (
               <Button
                 variant="ghost"

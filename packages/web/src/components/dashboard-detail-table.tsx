@@ -77,7 +77,6 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
                 <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("label")}>
                   Seat{arrow("label")}
                 </TableHead>
-                <TableHead>Team</TableHead>
                 <TableHead>Thành viên</TableHead>
                 <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("five_hour_pct")}>
                   5h %{arrow("five_hour_pct")}
@@ -107,16 +106,22 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
                         </Badge>
                       )}
                     </div>
+                    {/* Owner name shown as subtitle under seat label */}
+                    {s.owner_name && (
+                      <span className="flex items-center gap-1 mt-0.5">
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 font-normal">
+                          chủ
+                        </Badge>
+                        <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">
+                          {s.owner_name}
+                        </span>
+                      </span>
+                    )}
                     {s.users.length > 0 && (
-                      <span className="block text-[11px] text-muted-foreground truncate max-w-[180px]">
+                      <span className="block text-[11px] text-muted-foreground truncate max-w-[180px] mt-0.5">
                         {s.users.join(", ")}
                       </span>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {s.team_id ?? "—"}
-                    </Badge>
                   </TableCell>
                   <TableCell>{occupancyBadge(s.user_count, s.max_users)}</TableCell>
                   <TableCell className="text-right">{pctCell(s.five_hour_pct)}</TableCell>
@@ -135,7 +140,7 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
               ))}
               {!seats.length && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Chưa có dữ liệu
                   </TableCell>
                 </TableRow>

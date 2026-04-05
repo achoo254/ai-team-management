@@ -2,7 +2,6 @@ import { Router } from 'express'
 import mongoose from 'mongoose'
 import { authenticate, getAllowedSeatIds } from '../middleware.js'
 import { Seat } from '../models/seat.js'
-import { Team } from '../models/team.js'
 import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Alert } from '../models/alert.js'
@@ -149,6 +148,20 @@ router.get('/enhanced', async (req, res) => {
       }
     }
 
+    // Compute tokenIssueCount from already-fetched seats (no extra query)
+    const tokenIssueCount = seats.filter(
+      (s) => s.token_active === false || !!s.last_fetch_error,
+    ).length
+
+    // Batch-query owner names (1 extra DB query)
+    const ownerIds = [...new Set(
+      seats.map((s) => s.owner_id).filter(Boolean).map((id) => String(id)),
+    )]
+    const ownerUsers = ownerIds.length > 0
+      ? await User.find({ _id: { $in: ownerIds } }, 'name').lean()
+      : []
+    const ownerMap = new Map(ownerUsers.map((u) => [String(u._id), u.name]))
+
     const usagePerSeat = seats.map((s) => {
       const key = String(s._id)
       const snap = snapshotMap.get(key)
@@ -156,7 +169,7 @@ router.get('/enhanced', async (req, res) => {
       return {
         seat_id: key,
         label: s.label,
-        team_id: s.team_id ? String(s.team_id) : null,
+        owner_name: s.owner_id ? (ownerMap.get(String(s.owner_id)) ?? null) : null,
         five_hour_pct: snap?.five_hour_pct ?? null,
         five_hour_resets_at: snap?.five_hour_resets_at ?? null,
         seven_day_pct: snap?.seven_day_pct ?? null,
@@ -170,6 +183,9 @@ router.get('/enhanced', async (req, res) => {
         users,
       }
     })
+
+    // Compute fullSeatCount from usagePerSeat (no extra query)
+    const fullSeatCount = usagePerSeat.filter((s) => s.user_count >= s.max_users).length
 
     // Usage trend filtered by selected range
     const rangeStart = new Date(Date.now() - RANGE_MS[range])
@@ -190,47 +206,16 @@ router.get('/enhanced', async (req, res) => {
       }},
     ])
 
-    // Team usage breakdown with richer stats (keyed by team_id)
-    const teamCalc: Record<string, {
-      total_5h: number; count_5h: number
-      total_7d: number; count_7d: number
-      seat_count: number; user_count: number
-    }> = {}
-    for (const s of seats) {
-      const teamKey = s.team_id ? String(s.team_id) : 'unassigned'
-      const key = String(s._id)
-      const snap = snapshotMap.get(key)
-      if (!teamCalc[teamKey]) teamCalc[teamKey] = { total_5h: 0, count_5h: 0, total_7d: 0, count_7d: 0, seat_count: 0, user_count: 0 }
-      teamCalc[teamKey].seat_count++
-      teamCalc[teamKey].user_count += (usersBySeatId[key] || []).length
-      if (snap?.five_hour_pct != null) { teamCalc[teamKey].total_5h += snap.five_hour_pct; teamCalc[teamKey].count_5h++ }
-      if (snap?.seven_day_pct != null) { teamCalc[teamKey].total_7d += snap.seven_day_pct; teamCalc[teamKey].count_7d++ }
-    }
-    // Resolve team labels
-    const teamIds = Object.keys(teamCalc).filter(k => k !== 'unassigned')
-    const teamDocs = teamIds.length > 0
-      ? await Team.find({ _id: { $in: teamIds } }, 'name').lean()
-      : []
-    const teamNameMap = new Map(teamDocs.map(t => [String(t._id), t.name]))
-
-    const teamUsage = Object.entries(teamCalc).map(([teamId, d]) => ({
-      team_id: teamId,
-      team_name: teamId === 'unassigned' ? 'Unassigned' : (teamNameMap.get(teamId) ?? teamId),
-      avg_5h_pct: d.count_5h > 0 ? Math.round(d.total_5h / d.count_5h) : 0,
-      avg_7d_pct: d.count_7d > 0 ? Math.round(d.total_7d / d.count_7d) : 0,
-      seat_count: d.seat_count,
-      user_count: d.user_count,
-    }))
-
     res.json({
       totalUsers,
       activeUsers,
       totalSeats,
       unresolvedAlerts,
+      tokenIssueCount,
+      fullSeatCount,
       todaySchedules,
       usagePerSeat,
       usageTrend,
-      teamUsage,
       overBudgetSeats,
     })
   } catch (error) {
@@ -276,7 +261,6 @@ router.get('/usage/by-seat', async (req, res) => {
           seat_id: s._id,
           seat_email: s.email,
           label: s.label,
-          team_id: s.team_id ? String(s.team_id) : null,
           five_hour_pct: snap?.five_hour_pct ?? null,
           seven_day_pct: snap?.seven_day_pct ?? null,
           last_fetched_at: snap?.last_fetched_at ?? null,
@@ -404,6 +388,73 @@ router.get('/efficiency', async (req, res) => {
       dailyTrend,
       activeSessions: liveMetrics,
     })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// GET /api/dashboard/personal — user-scoped dashboard data
+// Auth: any logged-in user (authenticate applied at router level)
+router.get('/personal', async (req, res) => {
+  try {
+    const userId = req.user!._id
+    const todayDow = new Date().getDay() // 0=Sunday … 6=Saturday
+
+    // 1. Today's schedules for this user with seat label
+    const rawSchedules = await Schedule.find({ user_id: userId, day_of_week: todayDow })
+      .populate<{ seat_id: { _id: unknown; label: string } }>('seat_id', 'label')
+      .sort({ start_hour: 1 })
+      .lean()
+
+    const mySchedulesToday = rawSchedules.map((sc) => ({
+      seat_label: (sc.seat_id as { label?: string } | null)?.label ?? '',
+      start_hour: sc.start_hour,
+      end_hour: sc.end_hour,
+      usage_budget_pct: sc.usage_budget_pct,
+    }))
+
+    // 2. Seats this user owns + seats they are assigned to (role distinction)
+    const [ownedSeats, userRecord] = await Promise.all([
+      Seat.find({ owner_id: userId }, 'label').lean(),
+      User.findById(userId, 'seat_ids').lean(),
+    ])
+
+    const ownedIds = new Set(ownedSeats.map((s) => String(s._id)))
+
+    // Seats assigned via seat_ids that are NOT owned (role=member)
+    const assignedIds = (userRecord?.seat_ids ?? []).filter((id) => !ownedIds.has(String(id)))
+    const memberSeats = assignedIds.length > 0
+      ? await Seat.find({ _id: { $in: assignedIds } }, 'label').lean()
+      : []
+
+    const mySeats = [
+      ...ownedSeats.map((s) => ({ seat_id: String(s._id), label: s.label, role: 'owner' as const })),
+      ...memberSeats.map((s) => ({ seat_id: String(s._id), label: s.label, role: 'member' as const })),
+    ]
+
+    // 3. Usage rank — aggregate avg delta_5h_pct per user over last 30 days, sort desc
+    // (lower delta = more efficient → rank ascending)
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const rankAgg = await SessionMetric.aggregate([
+      { $match: { created_at: { $gte: since } } },
+      { $group: { _id: '$user_id', avgDelta5h: { $avg: '$delta_5h_pct' } } },
+      { $sort: { avgDelta5h: 1 } },
+    ])
+
+    let myUsageRank: { rank: number; total: number; avgDelta5h: number } | null = null
+    if (rankAgg.length > 0) {
+      const idx = rankAgg.findIndex((r) => String(r._id) === String(userId))
+      if (idx !== -1) {
+        myUsageRank = {
+          rank: idx + 1,
+          total: rankAgg.length,
+          avgDelta5h: Math.round(rankAgg[idx].avgDelta5h * 10) / 10,
+        }
+      }
+    }
+
+    res.json({ mySchedulesToday, mySeats, myUsageRank })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

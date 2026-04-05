@@ -10,7 +10,6 @@ const mockUser: AuthUser = {
   name: "Alice",
   email: "alice@example.com",
   role: "admin",
-  team: "dev",
 };
 
 function makeWrapper(value: { user: AuthUser | null; loading: boolean; logout: () => Promise<void> }) {

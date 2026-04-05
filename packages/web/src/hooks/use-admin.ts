@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 export interface AdminUser {
   id: string; name: string; email: string; role: "admin" | "user";
-  team_ids: string[]; seat_ids?: string[]; active: boolean;
+  seat_ids?: string[]; active: boolean;
   seat_labels?: string[];
 }
 
@@ -17,7 +17,7 @@ export function useAdminUsers() {
 export function useCreateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Pick<AdminUser, "name" | "email" | "role" | "team_ids"> & { seat_ids?: string[] }) =>
+    mutationFn: (body: Pick<AdminUser, "name" | "email" | "role"> & { seat_ids?: string[] }) =>
       api.post("/api/admin/users", body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: KEY }); toast.success("Tạo user thành công"); },
     onError: (e: Error) => toast.error(e.message),

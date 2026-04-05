@@ -34,16 +34,16 @@ Run single test file: `pnpm vitest run tests/api/auth.test.ts`
 - `src/middleware.ts` — JWT auth (`authenticate`, `requireAdmin`, `requireSeatOwner`, `requireSeatOwnerOrAdmin`, `validateObjectId`, `signToken`)
 - `src/firebase-admin.ts` — Firebase Admin SDK init (Google ID token verification + FCM send)
 - `src/lib/encryption.ts` — AES-256-GCM encrypt/decrypt for OAuth credentials + Telegram bot tokens
-- `src/models/` — 8 Mongoose models: seat, user, usage-snapshot, schedule, alert, team, active-session, session-metric
-- `src/routes/` — 9 route files: auth, admin, alerts, dashboard, schedules, seats, teams, usage-snapshots, user-settings
+- `src/models/` — 7 Mongoose models: seat, user, usage-snapshot, schedule, alert, active-session, session-metric
+- `src/routes/` — 8 route files: auth, admin, alerts, dashboard, schedules, seats, usage-snapshots, user-settings
 - `src/services/` — alert-service, anthropic-service, fcm-service, telegram-service, token-refresh-service, usage-collector-service, vietnam-holidays
 - Dev: `tsx watch --env-file .env.local` on port **8386**
 
 ### `packages/web` — Vite + React 19 + React Router v7 SPA
 - `src/app.tsx` — BrowserRouter + QueryClientProvider + FCM setup
-- `src/pages/` — 9 pages: dashboard, seats, teams, schedule, alerts, usage, admin, login, settings
+- `src/pages/` — 8 pages: dashboard, seats, schedule, alerts, usage, admin, login, settings
 - `src/components/` — flat directory (shadcn/ui in `ui/`, 20+ feature components at root)
-- `src/hooks/` — 11 React Query hooks: use-auth, use-seats, use-teams, use-dashboard, use-alerts, use-schedules, use-usage-snapshots, use-user-settings, use-admin, use-fcm, use-mobile
+- `src/hooks/` — 10 React Query hooks: use-auth, use-seats, use-dashboard, use-alerts, use-schedules, use-usage-snapshots, use-user-settings, use-admin, use-fcm, use-mobile
 - `src/lib/` — api-client, firebase-client, theme, utils
 - `vite.config.ts` — proxies `/api` → `http://localhost:8386` (override via `VITE_API_URL`)
 - UI: Tailwind CSS v4 (`@tailwindcss/vite`), Recharts, Lucide, dnd-kit
@@ -52,7 +52,7 @@ Run single test file: `pnpm vitest run tests/api/auth.test.ts`
 - `types.ts` — API DTOs
 - `schedule-permissions.ts` — **pure permission resolver** (no DB calls, runs in both Node + browser). Single source of truth for schedule edit/delete/swap/clear authorization. Always use this instead of re-implementing permission logic.
 
-**MongoDB collections:** seats, users, usage_snapshots, schedules, alerts, teams, active_sessions, session_metrics
+**MongoDB collections:** seats, users, usage_snapshots, schedules, alerts, active_sessions, session_metrics
 
 ## Auth Flow
 

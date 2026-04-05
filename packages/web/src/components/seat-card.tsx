@@ -46,11 +46,6 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
             ) : null}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {seat.team ? (
-              <Badge variant="secondary" style={{ borderLeftColor: seat.team.color, borderLeftWidth: 3 }}>{seat.team.name}</Badge>
-            ) : (
-              <Badge variant="outline">No team</Badge>
-            )}
             {/* Export: owner only (not admin of other's seats) */}
             {isOwner && seat.has_token && (
               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onExportCredential} title="Export credential">

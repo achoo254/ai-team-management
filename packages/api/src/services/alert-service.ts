@@ -78,50 +78,6 @@ async function notifySubscribedUsers(
   ])
 }
 
-/** Emit team-related notification to a target user (skip if actor === target) */
-export async function emitTeamEvent(params: {
-  event_type: string
-  actor_id: string
-  target_user_id: string
-  team_id: string
-  extra?: Record<string, unknown>
-}) {
-  // Skip self-action
-  if (params.actor_id === params.target_user_id) return
-
-  const [targetUser, team] = await Promise.all([
-    User.findById(params.target_user_id),
-    (await import('../models/team.js')).Team.findById(params.team_id, 'label'),
-  ])
-  if (!targetUser || !team) return
-
-  const teamLabel = team.name || params.team_id
-  const messages: Record<string, string> = {
-    'team.member_added': `Bạn đã được thêm vào team ${teamLabel}`,
-    'team.member_removed': `Bạn đã bị xóa khỏi team ${teamLabel}`,
-    'team.seat_reassigned': `Seat của bạn đã được chuyển sang team ${teamLabel}`,
-    'team.deleted_by_admin': `Admin đã xóa team ${teamLabel} do bạn tạo`,
-    'team.updated_by_admin': `Admin đã chỉnh sửa team ${teamLabel} do bạn tạo`,
-  }
-  const message = messages[params.event_type] ?? `Team event: ${params.event_type}`
-
-  // Note: Team notifications use telegram/FCM only, no in-app alert record.
-  // Alert model requires seat_id (ref: Seat) — storing team_id there would corrupt data.
-
-  // Telegram (fire-and-forget)
-  if (targetUser.telegram_bot_token && targetUser.telegram_chat_id) {
-    sendAlertToUser(targetUser, 'rate_limit' as AlertType, teamLabel, {
-      custom_message: message,
-      event_type: params.event_type,
-    }).catch(console.error)
-  }
-
-  // FCM push (fire-and-forget)
-  if (targetUser.push_enabled && targetUser.fcm_tokens?.length > 0) {
-    sendPushToUser(params.target_user_id, 'rate_limit' as AlertType, teamLabel, message, '').catch(console.error)
-  }
-}
-
 /** Check alerts based on latest UsageSnapshot data + seat token status. Uses per-user thresholds. */
 export async function checkSnapshotAlerts() {
   let created = 0

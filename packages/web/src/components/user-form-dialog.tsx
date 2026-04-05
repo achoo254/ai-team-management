@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type AdminUser } from "@/hooks/use-admin";
-import { useTeams } from "@/hooks/use-teams";
 import { useSeats } from "@/hooks/use-seats";
 
 interface Props {
@@ -18,31 +17,25 @@ interface Props {
   initial?: AdminUser | null;
 }
 
-type FormState = { name: string; email: string; role: "admin" | "user"; team_ids: string[]; seat_ids: string[] };
-const empty: FormState = { name: "", email: "", role: "user", team_ids: [], seat_ids: [] };
+type FormState = { name: string; email: string; role: "admin" | "user"; seat_ids: string[] };
+const empty: FormState = { name: "", email: "", role: "user", seat_ids: [] };
 
 export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Props) {
   const [form, setForm] = useState<FormState>(empty);
-  const { data: teamsData } = useTeams();
   const { data: seatsData } = useSeats();
 
   useEffect(() => {
     setForm(initial
-      ? { name: initial.name, email: initial.email, role: initial.role, team_ids: initial.team_ids ?? [], seat_ids: (initial.seat_ids ?? []).map(String) }
+      ? { name: initial.name, email: initial.email, role: initial.role, seat_ids: (initial.seat_ids ?? []).map(String) }
       : empty);
   }, [initial, open]);
 
   const set = (k: string, v: string | null) => { if (v !== null) setForm((f) => ({ ...f, [k]: v })); };
 
-  const teams = teamsData?.teams ?? [];
   const seats = seatsData?.seats ?? [];
-  const selectedTeamIds = new Set(form.team_ids);
-  const availableTeams = teams.filter((t) => !selectedTeamIds.has(t._id));
   const selectedSeatIds = new Set(form.seat_ids);
   const availableSeats = seats.filter((s) => !selectedSeatIds.has(s._id));
 
-  const addTeam = (teamId: string) => setForm((f) => ({ ...f, team_ids: [...f.team_ids, teamId] }));
-  const removeTeam = (teamId: string) => setForm((f) => ({ ...f, team_ids: f.team_ids.filter((id) => id !== teamId) }));
   const addSeat = (seatId: string) => setForm((f) => ({ ...f, seat_ids: [...f.seat_ids, seatId] }));
   const removeSeat = (seatId: string) => setForm((f) => ({ ...f, seat_ids: f.seat_ids.filter((id) => id !== seatId) }));
 
@@ -68,32 +61,6 @@ export function UserFormDialog({ open, onClose, onSubmit, loading, initial }: Pr
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Teams</Label>
-            <div className="flex flex-wrap gap-1 mb-1">
-              {form.team_ids.map((tid) => {
-                const t = teams.find((x) => x._id === tid);
-                return (
-                  <Badge key={tid} variant="outline" className="gap-1 pr-1">
-                    {t?.name ?? tid}
-                    <button type="button" onClick={() => removeTeam(tid)} className="hover:text-destructive">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                );
-              })}
-            </div>
-            {availableTeams.length > 0 && (
-              <Select value="" onValueChange={(v) => { if (v) addTeam(v); }}>
-                <SelectTrigger><SelectValue placeholder="Thêm team..." /></SelectTrigger>
-                <SelectContent>
-                  {availableTeams.map((t) => (
-                    <SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
           </div>
           <div className="grid gap-1.5">
             <Label>Seats</Label>

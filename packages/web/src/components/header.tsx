@@ -9,7 +9,6 @@ const pageTitles: Record<string, string> = {
   "/seats": "Seats",
   "/schedule": "Lịch phân ca",
   "/usage": "Usage",
-  "/teams": "Teams",
   "/alerts": "Cảnh báo",
   "/admin": "Admin",
 };

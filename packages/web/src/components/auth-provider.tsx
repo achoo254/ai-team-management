@@ -6,7 +6,6 @@ export type AuthUser = {
   name: string;
   email: string;
   role: "admin" | "user";
-  team_ids: string[];
 };
 
 type AuthContextValue = {

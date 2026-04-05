@@ -106,7 +106,6 @@ describe("POST /api/auth/google", () => {
     expect(body.user.email).toBe("user@test.com");
     expect(body.user).toHaveProperty("id");
     expect(body.user).toHaveProperty("role");
-    expect(body.user).toHaveProperty("team");
   });
 });
 
@@ -135,7 +134,6 @@ describe("GET /api/auth/me", () => {
     expect(body).toHaveProperty("user");
     expect(body.user.email).toBe("user@test.com");
     expect(body.user).toHaveProperty("role");
-    expect(body.user).toHaveProperty("team");
   });
 
   it("returns 404 when JWT _id does not match any user", async () => {

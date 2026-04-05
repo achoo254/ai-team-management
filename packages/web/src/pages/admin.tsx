@@ -27,7 +27,7 @@ export default function AdminPage() {
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
 
-  const handleSubmit = useCallback((body: Partial<AdminUser> & { seatId?: string }) => {
+  const handleSubmit = useCallback((body: Partial<AdminUser> & { seat_ids?: string[] }) => {
     const mut = editing
       ? updateUser.mutateAsync({ id: editing.id, ...body })
       : createUser.mutateAsync(body as Parameters<typeof createUser.mutateAsync>[0]);

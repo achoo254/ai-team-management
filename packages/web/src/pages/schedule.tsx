@@ -238,9 +238,9 @@ export default function SchedulePage() {
               <SelectTrigger>
                 <SelectValue placeholder="Chọn thành viên">
                   {form.userId
-                    ? seatUsers.find((u) => u._id === form.userId)?.email
-                      || seatUsers.find((u) => u._id === form.userId)?.name
-                      || form.userId
+                    ? seatUsers.find((u) => u._id === form.userId)?.name
+                      || seatUsers.find((u) => u._id === form.userId)?.email
+                      || "—"
                     : undefined}
                 </SelectValue>
               </SelectTrigger>
