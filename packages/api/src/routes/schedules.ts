@@ -99,11 +99,25 @@ router.get('/heatmap/:seatId', authenticate, async (req, res) => {
     }
 
     const weeks = Math.min(Math.max(parseInt(req.query.weeks as string) || 4, 1), 52)
-    const nWeeksAgo = new Date()
-    nWeeksAgo.setDate(nWeeksAgo.getDate() - weeks * 7)
+
+    // weekStart param: view a specific week (ISO date, e.g. "2026-04-06")
+    const weekStartParam = req.query.weekStart as string | undefined
+    let dateFrom: Date
+    let dateTo: Date | undefined
+    if (weekStartParam && /^\d{4}-\d{2}-\d{2}$/.test(weekStartParam)) {
+      dateFrom = new Date(weekStartParam + 'T00:00:00.000Z')
+      dateTo = new Date(dateFrom)
+      dateTo.setDate(dateTo.getDate() + 7)
+    } else {
+      dateFrom = new Date()
+      dateFrom.setDate(dateFrom.getDate() - weeks * 7)
+    }
+
+    const dateFilter: Record<string, unknown> = { $gte: dateFrom }
+    if (dateTo) dateFilter.$lt = dateTo
 
     const data = await SeatActivityLog.aggregate([
-      { $match: { seat_id: new mongoose.Types.ObjectId(seatId), date: { $gte: nWeeksAgo } } },
+      { $match: { seat_id: new mongoose.Types.ObjectId(seatId), date: dateFilter } },
       {
         $group: {
           _id: { day: { $dayOfWeek: '$date' }, hour: '$hour' },
@@ -119,7 +133,7 @@ router.get('/heatmap/:seatId', authenticate, async (req, res) => {
           // Convert MongoDB dayOfWeek (1=Sun..7=Sat) → JS (0=Sun..6=Sat)
           day_of_week: { $cond: [{ $eq: ['$_id.day', 1] }, 0, { $subtract: ['$_id.day', 1] }] },
           hour: '$_id.hour',
-          activity_rate: { $divide: ['$total_active', { $max: [weeks, '$total_records'] }] },
+          activity_rate: { $divide: ['$total_active', { $max: [dateTo ? 1 : weeks, '$total_records'] }] },
           avg_delta: 1,
           max_delta: 1,
         },

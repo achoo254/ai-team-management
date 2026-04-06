@@ -28,10 +28,15 @@ export function useSchedulePatterns(seatId?: string | null) {
   });
 }
 
-export function useActivityHeatmap(seatId: string | null, weeks = 4) {
+export function useActivityHeatmap(seatId: string | null, weeks = 4, weekStart?: string) {
   return useQuery<{ data: HeatmapCell[] }>({
-    queryKey: ["activity-heatmap", seatId, weeks],
-    queryFn: () => api.get(`/api/schedules/heatmap/${seatId}?weeks=${weeks}`),
+    queryKey: ["activity-heatmap", seatId, weeks, weekStart],
+    queryFn: () => {
+      const params = weekStart
+        ? `weekStart=${weekStart}`
+        : `weeks=${weeks}`;
+      return api.get(`/api/schedules/heatmap/${seatId}?${params}`);
+    },
     enabled: !!seatId,
   });
 }

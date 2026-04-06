@@ -136,8 +136,10 @@ function HeatmapCellEl({ cell, delta, isActive, isNow, isWeekend, isFuture }: {
       style={{ height: `${CELL_H}px` }}
     >
       {isNow && (
-        <span className="absolute inset-0 flex items-center justify-center text-[9px] font-medium text-primary">
-          now
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="text-[9px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
+            now
+          </span>
         </span>
       )}
     </div>

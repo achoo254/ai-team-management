@@ -15,10 +15,6 @@ export const config = {
     version: process.env.ANTHROPIC_VERSION || '2023-06-01',
     oauthClientId: process.env.ANTHROPIC_OAUTH_CLIENT_ID || '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
   },
-  // BLD digest config
-  dataDir: process.env.DATA_DIR || './data',
-  digestLinkSecret: process.env.DIGEST_LINK_SECRET || '',
-  bldDigestTelegramTopicId: process.env.BLD_DIGEST_TELEGRAM_TOPIC_ID || null,
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',
     chatId: process.env.TELEGRAM_CHAT_ID || '',

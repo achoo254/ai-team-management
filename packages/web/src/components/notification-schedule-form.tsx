@@ -9,8 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import { useUserSettings, useUpdateUserSettings } from "@/hooks/use-user-settings";
+import { useMutation } from "@tanstack/react-query";
+import { api } from "@/lib/api-client";
 import type { NotificationSettings } from "@repo/shared/types";
 
 const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -20,6 +22,26 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   report_days: [5],
   report_hour: 8,
 };
+
+/** Send a test usage report via Telegram */
+function TestReportButton({ disabled }: { disabled: boolean }) {
+  const testMutation = useMutation({
+    mutationFn: () => api.post("/api/user/settings/test-report"),
+  });
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => testMutation.mutate()}
+      disabled={disabled || testMutation.isPending}
+      title="Gửi báo cáo thử qua Telegram ngay bây giờ"
+    >
+      {testMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : <Send size={14} className="mr-1" />}
+      {testMutation.isSuccess ? "Đã gửi ✓" : testMutation.isError ? "Lỗi" : "Gửi thử"}
+    </Button>
+  );
+}
 
 export function NotificationScheduleForm() {
   const { data: settings, isLoading } = useUserSettings();
@@ -128,10 +150,13 @@ export function NotificationScheduleForm() {
           </Select>
         </div>
 
-        <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending || !dirty}>
-          {updateMutation.isPending && <Loader2 size={14} className="animate-spin mr-1" />}
-          Lưu
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending || !dirty}>
+            {updateMutation.isPending && <Loader2 size={14} className="animate-spin mr-1" />}
+            Lưu
+          </Button>
+          <TestReportButton disabled={!hasTelegram} />
+        </div>
       </CardContent>
     </Card>
   );

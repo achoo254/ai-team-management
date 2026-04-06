@@ -4,6 +4,7 @@ import { authenticate } from '../middleware.js'
 import { User } from '../models/user.js'
 import { Seat } from '../models/seat.js'
 import { encrypt, decrypt, isEncryptionConfigured } from '../lib/encryption.js'
+import { sendUserReport } from '../services/telegram-service.js'
 import { getMessaging } from '../firebase-admin.js'
 
 const router = Router()
@@ -33,8 +34,18 @@ router.get('/settings', async (req, res) => {
       allAccessibleSeats = Array.from(seatMap.values())
     }
 
-    // Populate watched_seats with labels
+    // Populate watched_seats with labels — skip soft-deleted seats
     const seatLookup = new Map(allAccessibleSeats.map((s) => [String(s._id), s]))
+    const rawWatched = user.watched_seats ?? []
+    const staleIds = rawWatched
+      .map((ws) => String(ws.seat_id))
+      .filter((id) => !seatLookup.has(id))
+    // Auto-cleanup: remove watched entries for deleted/inaccessible seats
+    if (staleIds.length > 0) {
+      const staleSet = new Set(staleIds)
+      user.watched_seats = rawWatched.filter((ws) => !staleSet.has(String(ws.seat_id)))
+      await user.save()
+    }
     const watchedSeats = (user.watched_seats ?? []).map((ws) => {
       const s = seatLookup.get(String(ws.seat_id))
       return {
@@ -119,23 +130,13 @@ router.put('/settings', async (req, res) => {
       user.push_enabled = !!push_enabled
     }
 
-    // Update alert settings (channels + type toggles + BLD digest config)
+    // Update alert settings (channels + type toggles)
     if (alert_settings) {
       const as = alert_settings
       user.alert_settings = {
         enabled: !!as.enabled,
         telegram_enabled: as.telegram_enabled !== false,
         token_failure_enabled: as.token_failure_enabled !== false,
-        bld_digest_enabled: !!as.bld_digest_enabled,
-        bld_digest_days: Array.isArray(as.bld_digest_days)
-          ? as.bld_digest_days
-              .map((d: unknown) => Number(d))
-              .filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)
-          : [5],
-        bld_digest_hour:
-          as.bld_digest_hour == null || as.bld_digest_hour === ''
-            ? 17
-            : Math.max(0, Math.min(23, Number(as.bld_digest_hour))),
         fleet_util_threshold_pct:
           as.fleet_util_threshold_pct == null || as.fleet_util_threshold_pct === ''
             ? null
@@ -316,6 +317,17 @@ router.post('/settings/test-bot', async (req, res) => {
       return
     }
 
+    res.json({ success: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
+// POST /api/user/settings/test-report — send test usage report via user's personal bot
+router.post('/settings/test-report', async (req, res) => {
+  try {
+    await sendUserReport(String(req.user!._id))
     res.json({ success: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

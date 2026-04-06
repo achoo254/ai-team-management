@@ -36,7 +36,7 @@ export interface Seat {
   owner?: { _id: string; name: string; email: string } | null
   has_token?: boolean
   token_active?: boolean
-  /** When true, seat appears in admin overview / BLD metrics tab. */
+  /** When true, seat appears in admin overview metrics tab. */
   include_in_overview?: boolean
   oauth_credential?: OAuthCredentialMeta | null
   last_fetched_at?: string | null
@@ -142,10 +142,6 @@ export interface UserAlertSettings {
   enabled: boolean
   telegram_enabled: boolean       // send via Telegram channel
   token_failure_enabled: boolean  // receive token invalid/failure alerts, default true
-  // BLD-specific settings (admin only, ignored for regular users)
-  bld_digest_enabled?: boolean
-  bld_digest_days?: number[]   // 0=Sun..6=Sat, default [5]
-  bld_digest_hour?: number     // 0-23, Asia/Ho_Chi_Minh, default 17
   fleet_util_threshold_pct?: number | null
   fleet_util_threshold_days?: number | null
 }
@@ -263,7 +259,7 @@ export interface UrgentForecastItem {
   status: QuotaForecastStatus
 }
 
-// ── BLD (Executive Dashboard) DTOs ───────────────────────────────────────────
+// ── Overview (Fleet Metrics) DTOs ─────────────────────────────────────────────
 
 export interface BldWorstForecast {
   seat_id: string

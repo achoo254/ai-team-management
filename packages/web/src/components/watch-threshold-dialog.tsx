@@ -100,7 +100,7 @@ export function WatchThresholdDialog({ open, onOpenChange, seatId, seatLabel, cu
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            ℹ Theo dõi seat cũng bao gồm báo cáo usage hàng tuần.
+            ℹ Ngưỡng này chỉ kích hoạt cảnh báo khi usage vượt mức. Báo cáo định kỳ cấu hình riêng ở trang Cài đặt.
           </p>
         </div>
         <DialogFooter>

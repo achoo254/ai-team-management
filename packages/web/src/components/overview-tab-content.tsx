@@ -6,8 +6,8 @@
  * - user   → user's own seat_ids
  */
 
-import { RefreshCw } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { RefreshCw, Download } from "lucide-react";
+import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useFleetKpis, useSeatStats, useRebalanceSuggestions } from "@/hooks/use-bld-metrics";
 import { BldFleetKpiCards } from "@/components/bld-fleet-kpi-cards";
@@ -17,6 +17,7 @@ import { BldSeatStatsPanel } from "@/components/bld-seat-stats-panel";
 import { BldActionsPanel } from "@/components/bld-actions-panel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { generateOverviewHtml } from "@/lib/export-overview-html";
 
 function OverviewSkeleton() {
   return (
@@ -45,6 +46,10 @@ export function OverviewTabContent() {
   const seatStatsQuery = useSeatStats();
   const suggestionsQuery = useRebalanceSuggestions();
 
+  // Track active refetching for spinner animation
+  const bldFetching = useIsFetching({ queryKey: ["bld"] });
+  const isRefreshing = bldFetching > 0;
+
   const isLoading =
     fleetQuery.isLoading || seatStatsQuery.isLoading || suggestionsQuery.isLoading;
   const hasError =
@@ -54,9 +59,30 @@ export function OverviewTabContent() {
     queryClient.invalidateQueries({ queryKey: ["bld"] });
   }
 
+  function handleExportHtml() {
+    if (!fleetQuery.data) return;
+    const html = generateOverviewHtml({
+      kpis: fleetQuery.data.kpis,
+      wwHistory: fleetQuery.data.wwHistory,
+      ddHistory: fleetQuery.data.ddHistory,
+      seatStats: seatStatsQuery.data ?? null,
+      suggestions: suggestionsQuery.data ?? [],
+    });
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `overview-report-${date}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const showSpinner = isLoading || isRefreshing;
+
   return (
     <div className="space-y-6">
-      {/* Sub-header with refresh button */}
+      {/* Sub-header with refresh + export buttons */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
@@ -65,16 +91,29 @@ export function OverviewTabContent() {
               : "Tổng quan các seat của bạn"}
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={isLoading}
-          className="gap-1.5"
-        >
-          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          Làm mới
-        </Button>
+        <div className="flex items-center gap-2">
+          {fleetQuery.data && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportHtml}
+              className="gap-1.5"
+            >
+              <Download className="h-4 w-4" />
+              Xuất báo cáo
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={showSpinner}
+            className="gap-1.5"
+          >
+            <RefreshCw className={`h-4 w-4 transition-transform ${showSpinner ? "animate-spin" : ""}`} />
+            Làm mới
+          </Button>
+        </div>
       </div>
 
       {/* Loading state */}

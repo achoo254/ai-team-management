@@ -114,17 +114,24 @@ export default function DashboardPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="detail">Chi tiết</TabsTrigger>
-          <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-        </TabsList>
+        {/* Sticky bar: tabs + filters — desktop only */}
+        <div className="lg:sticky lg:top-0 lg:z-30 lg:bg-background lg:pb-2 lg:-mt-6 lg:pt-6 lg:-mx-6 lg:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <TabsList>
+              <TabsTrigger value="detail">Chi tiết</TabsTrigger>
+              <TabsTrigger value="overview">Tổng quan</TabsTrigger>
+            </TabsList>
+            {activeTab === "detail" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <DashboardSeatFilter value={seatIds} onChange={handleSeatFilterChange} />
+                <DashboardRangeFilter value={range} onChange={handleRangeChange} />
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* ── Chi tiết tab ─────────────────────────────────────────────────── */}
         <TabsContent value="detail" className="space-y-6 mt-4">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <DashboardSeatFilter value={seatIds} onChange={handleSeatFilterChange} />
-            <DashboardRangeFilter value={range} onChange={handleRangeChange} />
-          </div>
 
           {/* Row 1: Key metrics */}
           <DashboardStatOverview range={range} seatIds={seatIds} />

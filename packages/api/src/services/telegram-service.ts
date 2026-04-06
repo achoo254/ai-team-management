@@ -3,6 +3,8 @@ import { Seat } from '../models/seat.js'
 import { User, type IUser } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
+import { computeFleetKpis } from './bld-metrics-service.js'
+import type { FleetKpis } from '@repo/shared/types'
 // AlertType imported from shared (same type used by alert-service + fcm-service)
 type AlertType = import('@repo/shared/types').AlertType
 
@@ -47,12 +49,36 @@ interface SeatRow {
   extra_usage: { is_enabled: boolean; used_credits: number | null; monthly_limit: number | null; utilization: number | null } | null
 }
 
-/** Build HTML report from seat rows */
+/** Build overview section from fleet KPIs */
+function buildOverviewSection(kpis: FleetKpis): string {
+  let msg = `── <b>TỔNG QUAN</b> ──────────────\n`
+  msg += `📈 Tận dụng TB 7 ngày: <b>${Math.round(kpis.utilPct)}%</b>`
+  if (kpis.wwDelta !== 0) {
+    const sign = kpis.wwDelta > 0 ? '+' : ''
+    msg += ` (so tuần trước: ${sign}${kpis.wwDelta.toFixed(1)}%)`
+  }
+  msg += `\n`
+  msg += `💸 Lãng phí ước tính: <b>$${Math.round(kpis.wasteUsd)}</b>/$${Math.round(kpis.totalCostUsd)}/tháng\n`
+  msg += `💺 Tổng: ${kpis.billableCount} seats\n`
+  if (kpis.worstForecast?.hours_to_full != null) {
+    msg += `⚠️ <b>${esc(kpis.worstForecast.seat_label)}</b> sắp cạn quota 7 ngày (~${Math.round(kpis.worstForecast.hours_to_full)}h nữa)\n`
+  }
+  return msg
+}
+
+/** Build HTML report from seat rows + optional fleet overview */
 function buildReportHtml(
   rows: SeatRow[],
   usersBySeat: Record<string, string[]>,
+  kpis: FleetKpis | null,
 ): string {
   let msg = `📊 <b>Báo cáo Usage — ${new Date().toLocaleDateString('vi-VN')}</b>\n\n`
+
+  // Fleet overview section
+  if (kpis) {
+    msg += buildOverviewSection(kpis)
+    msg += `\n── <b>CHI TIẾT SEATS</b> ──────────\n\n`
+  }
 
   for (const s of rows) {
     const highest = Math.max(s.five_hour_pct ?? 0, s.seven_day_pct ?? 0)
@@ -69,9 +95,14 @@ function buildReportHtml(
       msg += `   <i>Chưa có dữ liệu</i>\n`
     }
 
-    if (s.extra_usage?.is_enabled && s.extra_usage.used_credits != null && s.extra_usage.monthly_limit != null) {
-      const pct = s.extra_usage.utilization ?? 0
-      msg += `   💳 $${s.extra_usage.used_credits}/$${s.extra_usage.monthly_limit} (${pct}%)\n`
+    if (s.extra_usage?.is_enabled && s.extra_usage.monthly_limit != null) {
+      const used = s.extra_usage.used_credits ?? 0
+      if (used > 0) {
+        const pct = s.extra_usage.utilization ?? 0
+        msg += `   💳 Phí phát sinh: $${used}/$${s.extra_usage.monthly_limit} (${pct}%)\n`
+      } else {
+        msg += `   💳 Phí phát sinh: chưa dùng (giới hạn $${s.extra_usage.monthly_limit})\n`
+      }
     }
 
     const members = usersBySeat[String(s.seat_id)]
@@ -152,12 +183,12 @@ export async function sendUserReport(userId: string) {
   const watchedIds = (user.watched_seats ?? []).map((w) => String(w.seat_id))
   let seats
   if (watchedIds.length > 0) {
-    seats = await Seat.find({ _id: { $in: watchedIds } }).sort({ label: 1 }).lean()
+    seats = await Seat.find({ _id: { $in: watchedIds }, include_in_overview: true }).sort({ label: 1 }).lean()
   } else {
-    // Fallback: owned + assigned seats
-    const ownedSeats = await Seat.find({ owner_id: userId }).lean()
+    // Fallback: owned + assigned seats (only include_in_overview)
+    const ownedSeats = await Seat.find({ owner_id: userId, include_in_overview: true }).lean()
     const assignedSeats = user.seat_ids?.length
-      ? await Seat.find({ _id: { $in: user.seat_ids } }).lean()
+      ? await Seat.find({ _id: { $in: user.seat_ids }, include_in_overview: true }).lean()
       : []
     const seatMap = new Map<string, any>()
     for (const s of [...ownedSeats, ...assignedSeats]) seatMap.set(String(s._id), s)
@@ -166,9 +197,13 @@ export async function sendUserReport(userId: string) {
 
   if (seats.length === 0) return
 
-  const { snapMap, usersBySeat } = await fetchReportData()
+  const seatIds = seats.map((s: any) => String(s._id))
+  const [{ snapMap, usersBySeat }, kpis] = await Promise.all([
+    fetchReportData(),
+    computeFleetKpis({ type: 'user', seatIds }).catch(() => null),
+  ])
   const rows = buildSeatRows(seats, snapMap)
-  const msg = buildReportHtml(rows, usersBySeat)
+  const msg = buildReportHtml(rows, usersBySeat, kpis)
 
   const token = decrypt(user.telegram_bot_token)
   await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined)
@@ -318,64 +353,6 @@ function currentVnDayHour(now: Date): { day: number; hour: number } {
   }
 }
 
-/**
- * Find admins whose BLD digest schedule matches the current day/hour.
- * Returns empty array if encryption not configured or no matches.
- */
-export async function findBldDigestRecipientsForCurrentHour(): Promise<
-  Array<{ name: string; telegram_bot_token: string; telegram_chat_id: string; telegram_topic_id?: string | null }>
-> {
-  if (!isEncryptionConfigured()) return []
-  const { day, hour } = currentVnDayHour(new Date())
-
-  const admins = await User.find(
-    {
-      role: 'admin',
-      'alert_settings.bld_digest_enabled': true,
-      'alert_settings.bld_digest_days': day,
-      'alert_settings.bld_digest_hour': hour,
-      telegram_bot_token: { $ne: null },
-      telegram_chat_id: { $ne: null },
-    },
-    'telegram_bot_token telegram_chat_id telegram_topic_id name',
-  ).lean()
-
-  return admins.map(a => ({
-    name: a.name,
-    telegram_bot_token: a.telegram_bot_token as string,
-    telegram_chat_id: a.telegram_chat_id as string,
-    telegram_topic_id: a.telegram_topic_id ?? null,
-  }))
-}
-
-/** Send the BLD digest PDF link to a pre-resolved list of admins via their personal bots. */
-export async function sendBldDigestToAdminList(
-  link: string,
-  admins: Array<{ name: string; telegram_bot_token: string; telegram_chat_id: string; telegram_topic_id?: string | null }>,
-): Promise<number> {
-  if (admins.length === 0) return 0
-  const msg =
-    `📄 <b>BLD Weekly Digest</b>\n` +
-    `Bao cao hang tuan da san sang.\n` +
-    `<a href="${link}">Tai xuat PDF</a> (het han sau 7 ngay)`
-
-  let sent = 0
-  for (const admin of admins) {
-    try {
-      const botToken = decrypt(admin.telegram_bot_token)
-      await sendMessageWithBot(
-        botToken,
-        admin.telegram_chat_id,
-        msg,
-        admin.telegram_topic_id ?? undefined,
-      )
-      sent++
-    } catch (err) {
-      console.error(`[BLD Digest] Failed to send to admin ${admin.name}:`, err)
-    }
-  }
-  return sent
-}
 
 /** Send notification to a specific user via their personal bot */
 export async function sendToUser(userId: string, message: string) {

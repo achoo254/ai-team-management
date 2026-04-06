@@ -27,7 +27,7 @@ export function WatchEmptyStateBanner() {
       <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
       <div className="flex-1 text-sm">
         <span className="text-foreground">
-          Bạn chưa theo dõi seat nào — sẽ không nhận alert usage <strong>và báo cáo usage hàng tuần</strong>.
+          Bạn chưa theo dõi seat nào — sẽ không nhận cảnh báo khi usage vượt ngưỡng.
         </span>{" "}
         <Link to="/seats" className="underline text-primary">
           Watch seats →

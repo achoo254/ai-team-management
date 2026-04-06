@@ -3,7 +3,6 @@ import { AlertSettingsForm } from "@/components/alert-settings-form";
 import { NotificationScheduleForm } from "@/components/notification-schedule-form";
 import { WatchedSeatsSummary } from "@/components/watched-seats-summary";
 import { WatchEmptyStateBanner } from "@/components/watch-empty-state-banner";
-import { BldAlertSettingsForm } from "@/components/bld-alert-settings-form";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function SettingsPage() {
@@ -22,7 +21,6 @@ export default function SettingsPage() {
         <AlertSettingsForm />
         <NotificationScheduleForm />
         <WatchedSeatsSummary />
-        {isAdmin && <BldAlertSettingsForm />}
       </div>
     </div>
   );

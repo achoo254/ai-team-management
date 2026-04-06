@@ -10,10 +10,7 @@ export interface IAlertSettings {
   enabled: boolean
   telegram_enabled: boolean
   token_failure_enabled: boolean
-  // BLD-specific alert config (admin only)
-  bld_digest_enabled?: boolean
-  bld_digest_days?: number[]   // 0=Sun, 1=Mon, ... 6=Sat. Default [5] (Fri).
-  bld_digest_hour?: number     // 0-23, Asia/Ho_Chi_Minh. Default 17.
+  // BLD digest fields (deprecated — kept for DB compat, no longer used)
   fleet_util_threshold_pct?: number | null
   fleet_util_threshold_days?: number | null
 }

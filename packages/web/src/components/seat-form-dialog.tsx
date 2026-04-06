@@ -81,10 +81,10 @@ function EditMode({ open, onClose, onSubmit, loading, initial }: Props & { initi
             />
             <div className="grid gap-0.5">
               <label htmlFor="edit-include-in-overview" className="text-sm font-medium cursor-pointer">
-                Tính vào thống kê đội seat
+                Tính vào thống kê tổng quan
               </label>
               <p className="text-xs text-muted-foreground">
-                Dữ liệu seat sẽ được tính vào mức sử dụng, lãng phí, và báo cáo tuần
+                Dữ liệu seat sẽ được tính vào mục Tổng quan (mức tận dụng, lãng phí) và báo cáo usage tự động
               </p>
             </div>
           </div>
