@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { config } from './config.js'
 import { Seat } from './models/seat.js'
+import { Team } from './models/team.js'
 import { User } from './models/user.js'
 
 export interface JwtPayload {
@@ -114,14 +115,16 @@ export async function getAllowedSeatIds(
     const seats = await Seat.find(filter, '_id').lean()
     return seats.map((s) => new mongoose.Types.ObjectId(String(s._id)))
   }
-  const [dbUser, ownedSeats] = await Promise.all([
+  const [dbUser, ownedSeats, userTeams] = await Promise.all([
     User.findById(user._id, 'seat_ids').lean(),
     Seat.find({ owner_id: user._id }, '_id').lean(),
+    Team.find({ member_ids: user._id }, 'seat_ids').lean(),
   ])
   const assigned = (dbUser?.seat_ids ?? []).map((id) => new mongoose.Types.ObjectId(String(id)))
   const owned = ownedSeats.map((s) => new mongoose.Types.ObjectId(String(s._id)))
+  const teamSeatIds = userTeams.flatMap((t) => t.seat_ids).map((id) => new mongoose.Types.ObjectId(String(id)))
   const map = new Map<string, mongoose.Types.ObjectId>()
-  for (const id of [...assigned, ...owned]) map.set(String(id), id)
+  for (const id of [...assigned, ...owned, ...teamSeatIds]) map.set(String(id), id)
   return [...map.values()]
 }
 

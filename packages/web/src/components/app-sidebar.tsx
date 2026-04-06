@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router";
 import {
   LayoutDashboard,
   Monitor,
+  Users,
   Calendar,
   AlertTriangle,
   Settings,
@@ -25,6 +26,7 @@ import { useAuth } from "@/hooks/use-auth";
 const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Seats", href: "/seats", icon: Monitor },
+  { label: "Teams", href: "/teams", icon: Users },
   { label: "Hoạt động Seat", href: "/schedule", icon: Calendar },
   { label: "Usage", href: "/usage", icon: Activity },
   { label: "Cảnh báo", href: "/alerts", icon: AlertTriangle },

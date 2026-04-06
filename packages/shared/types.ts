@@ -175,6 +175,19 @@ export interface UsageSnapshot {
   fetched_at: string
 }
 
+export interface Team {
+  _id: string
+  name: string
+  description: string | null
+  seat_ids: string[]
+  member_ids: string[]
+  owner_id: string
+  owner?: { _id: string; name: string; email: string } | null
+  members?: { _id: string; name: string; email: string }[]
+  seats?: { _id: string; label: string; email: string }[]
+  created_at: string
+}
+
 // Populated variants
 export interface SchedulePopulated extends Omit<Schedule, 'seat_id'> {
   seat_id: Seat

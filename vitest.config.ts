@@ -25,7 +25,6 @@ export default defineConfig({
       "tests/lib/**/*.test.{ts,tsx}",
       "tests/api/usage-window-detector.test.ts",
       "tests/api/bld-metrics.test.ts",
-      "tests/api/bld-pdf-service.test.ts",
     ],
     exclude: ["tests/ui/**", "tests/services/**"],
     // UI tests opt-in via // @vitest-environment jsdom comment

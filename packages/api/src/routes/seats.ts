@@ -532,6 +532,9 @@ router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAd
     // Clear activity logs (runtime state — must stop for deleted seat)
     const { SeatActivityLog } = await import('../models/seat-activity-log.js')
     await SeatActivityLog.deleteMany({ seat_id: id })
+    // Remove seat from all teams
+    const { Team } = await import('../models/team.js')
+    await Team.updateMany({ seat_ids: id }, { $pull: { seat_ids: id } })
     // Soft delete the seat — cleanup cron will cascade-delete usage/alerts after 30 days
     seat.deleted_at = new Date()
     seat.token_active = false

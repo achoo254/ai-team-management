@@ -12,6 +12,7 @@ import AlertsPage from '@/pages/alerts'
 import AdminPage from '@/pages/admin'
 import UsagePage from '@/pages/usage'
 import SettingsPage from '@/pages/settings'
+import TeamsPage from '@/pages/teams'
 
 export default function App() {
   const [queryClient] = useState(
@@ -26,6 +27,7 @@ export default function App() {
           <Route element={<AuthProvider><DashboardShell /></AuthProvider>}>
             <Route index element={<DashboardPage />} />
             <Route path="seats" element={<SeatsPage />} />
+            <Route path="teams" element={<TeamsPage />} />
             <Route path="schedule" element={<SchedulePage />} />
             <Route path="alerts" element={<AlertsPage />} />
             <Route path="usage" element={<UsagePage />} />

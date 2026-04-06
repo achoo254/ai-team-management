@@ -26,6 +26,7 @@ quan-ly-team-claude/
 │   │   │   │   ├── schedules.ts
 │   │   │   │   ├── alerts.ts
 │   │   │   │   ├── admin.ts
+│   │   │   │   ├── teams.ts             # Team CRUD & management
 │   │   │   │   └── usage-snapshots.ts # Query & collect usage snapshots
 │   │   │   ├── services/            # Business logic (TypeScript)
 │   │   │   │   ├── alert-service.ts
@@ -47,6 +48,7 @@ quan-ly-team-claude/
 │   │   │   │   ├── seats.tsx
 │   │   │   │   ├── schedule.tsx       # Activity heatmap visualization
 │   │   │   │   ├── alerts.tsx
+│   │   │   │   ├── teams.tsx          # Team grouping (view-only seat organization)
 │   │   │   │   ├── admin.tsx
 │   │   │   │   ├── usage-metrics.tsx  # Usage snapshots & token management
 │   │   │   │   └── login.tsx
@@ -121,7 +123,7 @@ quan-ly-team-claude/
 
 ### Mongoose Models (packages/api/src/models/*.ts)
 
-**Collections (7 total)**: seats, users, schedules, alerts, usage_snapshots, seat_activity_logs, usage_windows
+**Collections (8 total)**: seats, users, schedules, alerts, usage_snapshots, seat_activity_logs, usage_windows, teams
 
 #### Seat
 ```typescript
@@ -276,6 +278,22 @@ quan-ly-team-claude/
 }
 ```
 
+#### Team (View-Only Seat Grouping)
+```typescript
+{
+  _id: ObjectId (auto),
+  name: String (required, unique),
+  description: String | null,
+  seat_ids: [ObjectId] (reference to Seat, view-only grouping),
+  member_ids: [ObjectId] (reference to User),
+  owner_id: ObjectId (reference to User, index: true),
+  created_at: Date (auto),
+  // Indexes: (owner_id), (member_ids)
+  // Design: Team = view-only grouping; alerts/schedule require individual seat_ids
+  // Soft-deleted seats auto-removed from teams (manual cleanup recommended)
+}
+```
+
 ## API Endpoints
 
 ### Auth
@@ -325,6 +343,12 @@ quan-ly-team-claude/
 - `POST /api/usage-snapshots/collect` — Trigger collection for all seats (admin only)
 - `POST /api/usage-snapshots/collect/:seatId` — Trigger collection for single seat (admin only)
 
+### Teams (View-Only Seat Grouping)
+- `GET /api/teams` — List teams (admin: all, user: owned + member teams)
+- `POST /api/teams` — Create team (any user; non-admin restricted to owned seats)
+- `PUT /api/teams/:id` — Update team (owner or admin)
+- `DELETE /api/teams/:id` — Delete team (owner or admin)
+
 ### Alerts
 - `GET /api/alerts` — List alerts
 - `POST /api/alerts` — Create alert (admin only)
@@ -358,6 +382,7 @@ quan-ly-team-claude/
 - **Dashboard**: Stats, alerts, quick info, fleet KPIs, per-seat overview with activity patterns
 - **Seats**: List, create, edit, delete seats + assign users
 - **Schedules**: Auto-generated activity heatmap (read-only), visualized as 7x24 grid per seat, realtime activity status
+- **Teams**: Create/edit/delete team groups, manage team members, view grouped seats (view-only)
 - **Usage Metrics**: View real-time usage snapshots + manage tokens
 - **Admin**: User CRUD, system config, alert threshold settings
 - **Alerts**: View, resolve alerts, filter by type/window/seat

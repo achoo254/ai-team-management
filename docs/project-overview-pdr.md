@@ -45,7 +45,11 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 ### 5. User & Team Management
 - Create/update users (name, email, role, team)
-- Manage teams (dev/mkt): name, label, color
+- **Teams Feature**: Create/edit/delete team groups; team = view-only grouping of seats for organizational clarity
+  - Any authenticated user can create a team; non-admin restricted to adding seats they own
+  - Team owner or admin can manage team members and seats
+  - Teams enable users to view grouped seats together; alerts/schedule still require individual seat_ids
+  - Soft-deleted seats auto-removed from teams
 - Admin role gating for sensitive operations
 
 ### 6. Usage Metrics Collection
@@ -152,6 +156,7 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Personal Telegram bot integration (per-user encrypted tokens)
 - Usage snapshots with 90-day TTL
 - Vietnamese UI for seat restore flow (choice banner)
+- **Teams Feature**: Create/edit/delete team groups (view-only seat grouping); team CRUD endpoints + UI; team members see grouped seats
 
 ### Potential Improvements (Phase 2)
 

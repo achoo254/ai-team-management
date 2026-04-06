@@ -34,7 +34,7 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 ### Database
 - **Type**: MongoDB (document-based NoSQL)
 - **Connection**: Mongoose 9.3.1 ODM
-- **Collections**: 7 (seats, users, schedules, alerts, usage_snapshots, seat_activity_logs, usage_windows)
+- **Collections**: 8 (seats, users, schedules, alerts, usage_snapshots, seat_activity_logs, usage_windows, teams)
 - **Indexing**: Compound indexes on (seat_id, day_of_week), (user_id, seat_id, type, window), and (seat_id, fetched_at)
 - **TTL**: usage_snapshots collection auto-expires after 90 days; seat_activity_logs kept for pattern analysis
 
@@ -89,7 +89,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 - Middleware stack for auth, parsing, CORS
 - Error handling with try-catch in all async handlers
 
-**Route Structure** (8 files):
+**Route Structure** (9 files):
 - `routes/auth.ts` — Login, logout, current user
 - `routes/dashboard.ts` — Stats, weekly summary, alerts
 - `routes/seats.ts` — Seat CRUD (owner auto-set), user assignment, token management, credentials export, profile cache
@@ -109,6 +109,7 @@ Subsequent requests: JWT read from cookie or Authorization header
 - `routes/admin.ts` — User management, manual alert check trigger
 - `routes/schedules.ts` — Auto-generated activity patterns (read-only), heatmap aggregation, activity logs, realtime status
 - `routes/alerts.ts` — Alert creation, resolution, listing
+- `routes/teams.ts` — Team CRUD (any user can create, owner/admin manage, non-admin restricted to owned seats)
 - `routes/usage-snapshots.ts` — Query snapshots, trigger collection
 - `routes/user-settings.ts` — Per-user alert settings, Telegram bot config, notification schedule, test notifications
 
@@ -299,6 +300,23 @@ Subsequent requests: JWT read from cookie or Authorization header
 }
 ```
 
+#### Teams (View-Only Seat Grouping)
+```typescript
+{
+  _id: ObjectId,
+  name: String (required, unique),
+  description: String | null (max 500 chars),
+  seat_ids: [ObjectId] (ref: Seat, view-only grouping),
+  member_ids: [ObjectId] (ref: User),
+  owner_id: ObjectId (ref: User, index: true),
+  created_at: Date,
+  // Index: (owner_id), (member_ids)
+  // Design: Team = view-only grouping for organizational clarity
+  // Alerts & schedules still require individual seat_ids
+  // Soft-deleted seats auto-removed from teams via cleanup job
+}
+```
+
 ### 4. Frontend SPA (React 19 + Vite)
 
 **Location**: `packages/web/src`
@@ -329,9 +347,10 @@ API calls via React Query (TanStack Query)
 2. `pages/usage-log.tsx` — Usage snapshots & historical metrics with date filtering
 3. `pages/seats.tsx` — List, create, edit, delete seats + assign users
 4. `pages/schedule.tsx` — Auto-generated activity heatmap (7x24 grid), activity logs, realtime status per seat
-5. `pages/alerts.tsx` — View and resolve alerts, filter by type/window/seat
-6. `pages/admin.tsx` — User CRUD, system admin panel
-7. `pages/login.tsx` — Login page with Google sign-in
+5. `pages/teams.tsx` — Create/edit/delete team groups, manage members, view grouped seats (view-only)
+6. `pages/alerts.tsx` — View and resolve alerts, filter by type/window/seat
+7. `pages/admin.tsx` — User CRUD, system admin panel
+8. `pages/login.tsx` — Login page with Google sign-in
 
 **State Management**:
 - React Context for global auth state
