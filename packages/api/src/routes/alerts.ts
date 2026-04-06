@@ -1,22 +1,27 @@
 import { Router } from 'express'
-import { authenticate } from '../middleware.js'
+import { authenticate, getAllowedSeatIds } from '../middleware.js'
 import { Alert } from '../models/alert.js'
 import { User } from '../models/user.js'
+import type { JwtPayload } from '../middleware.js'
 
 const router = Router()
 
-/** Resolve current user's watched seat IDs. */
-async function getWatchedSeatIds(userId: string): Promise<string[]> {
-  const user = await User.findById(userId, 'watched_seats').lean()
-  return (user?.watched_seats ?? []).map((w) => String(w.seat_id))
+/** Resolve seat IDs for alert scope: watched_seats if configured, else all allowed seats. */
+async function getAlertSeatIds(user: JwtPayload): Promise<string[]> {
+  const dbUser = await User.findById(user._id, 'watched_seats').lean()
+  const watched = (dbUser?.watched_seats ?? []).map((w) => String(w.seat_id))
+  if (watched.length > 0) return watched
+  // Fallback: all seats user has access to (owned + assigned + team)
+  const allowed = await getAllowedSeatIds(user)
+  return allowed.map((id) => String(id))
 }
 
-/** Build scope filter: personal alerts + seat-wide alerts for watched seats. */
-function buildScopeFilter(userId: string, watchedIds: string[]): Record<string, unknown> {
+/** Build scope filter: all alerts for accessible seats + personal alerts. */
+function buildScopeFilter(userId: string, seatIds: string[]): Record<string, unknown> {
   return {
     $or: [
       { user_id: userId },
-      { user_id: null, seat_id: { $in: watchedIds } },
+      { seat_id: { $in: seatIds } },
     ],
   }
 }
@@ -32,8 +37,8 @@ router.get('/', authenticate, async (req, res) => {
     if (before) filter.created_at = { $lt: new Date(before) }
 
     const userId = String(req.user!._id)
-    const watchedIds = await getWatchedSeatIds(userId)
-    const scope = buildScopeFilter(userId, watchedIds)
+    const seatIds = await getAlertSeatIds(req.user!)
+    const scope = buildScopeFilter(userId, seatIds)
     Object.assign(filter, scope)
 
     // Narrow by seat if requested
@@ -68,8 +73,8 @@ router.post('/mark-read', authenticate, async (req, res) => {
     }
 
     const userId = String(req.user!._id)
-    const watchedIds = await getWatchedSeatIds(userId)
-    const scope = buildScopeFilter(userId, watchedIds)
+    const seatIds = await getAlertSeatIds(req.user!)
+    const scope = buildScopeFilter(userId, seatIds)
 
     const result = await Alert.updateMany(
       { _id: { $in: alert_ids }, ...scope },
@@ -86,8 +91,8 @@ router.post('/mark-read', authenticate, async (req, res) => {
 router.get('/unread-count', authenticate, async (req, res) => {
   try {
     const userId = String(req.user!._id)
-    const watchedIds = await getWatchedSeatIds(userId)
-    const scope = buildScopeFilter(userId, watchedIds)
+    const seatIds = await getAlertSeatIds(req.user!)
+    const scope = buildScopeFilter(userId, seatIds)
 
     const count = await Alert.countDocuments({
       read_by: { $ne: req.user!._id },

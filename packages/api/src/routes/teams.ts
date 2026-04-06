@@ -26,13 +26,24 @@ function transformTeam(doc: Record<string, unknown>) {
   }
 }
 
-// GET /api/teams — list teams user belongs to (admin: all)
+// GET /api/teams — list teams user belongs to or has a seat in (admin: all)
 router.get('/', authenticate, async (req, res) => {
   const user = req.user!
-  const filter =
-    user.role === 'admin'
-      ? {}
-      : { $or: [{ member_ids: user._id }, { owner_id: user._id }] }
+  let filter = {}
+  if (user.role !== 'admin') {
+    // Get user's directly accessible seat IDs for team visibility
+    const [dbUser, ownedSeats] = await Promise.all([
+      User.findById(user._id, 'seat_ids').lean(),
+      Seat.find({ owner_id: user._id }, '_id').lean(),
+    ])
+    const userSeatIds = [
+      ...(dbUser?.seat_ids ?? []).map((id) => String(id)),
+      ...ownedSeats.map((s) => String(s._id)),
+    ]
+    filter = {
+      $or: [{ member_ids: user._id }, { owner_id: user._id }, { seat_ids: { $in: userSeatIds } }],
+    }
+  }
   const raw = await Team.find(filter)
     .populate('owner_id', 'name email')
     .populate('member_ids', 'name email')

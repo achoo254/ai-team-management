@@ -8,6 +8,7 @@ import { SeatCard } from "@/components/seat-card";
 import { SeatFormDialog, type SeatFormSubmit } from "@/components/seat-form-dialog";
 import { SeatTokenDialog } from "@/components/seat-token-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ExportCredentialDialog } from "@/components/export-credential-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { useSeats, useCreateSeat, useUpdateSeat, useDeleteSeat, useAssignUser, useUnassignUser, useTransferOwnership, useAvailableUsers, exportSeatCredential, type Seat } from "@/hooks/use-seats";
 import { useAdminUsers } from "@/hooks/use-admin";
@@ -37,13 +38,20 @@ export default function SeatsPage() {
   const [editing, setEditing] = useState<Seat | null>(null);
   const [deleting, setDeleting] = useState<Seat | null>(null);
   const [tokenSeat, setTokenSeat] = useState<SharedSeat | null>(null);
+  const [exportingSeat, setExportingSeat] = useState<Seat | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
-  const handleExportSingle = async (seat: Seat) => {
+  const handleExportConfirm = async () => {
+    if (!exportingSeat) return;
+    setExportLoading(true);
     try {
-      await exportSeatCredential(seat._id, seat.label);
-      toast.success(`Đã export credential cho ${seat.label}`);
+      await exportSeatCredential(exportingSeat._id, exportingSeat.label);
+      toast.success(`Đã export credential cho ${exportingSeat.label}`);
+      setExportingSeat(null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export thất bại");
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -100,7 +108,7 @@ export default function SeatsPage() {
                   onEdit={handleEdit} onDelete={setDeleting}
                   onAssign={(seatId, userId) => assign.mutate({ seatId, userId })}
                   onUnassign={(seatId, userId) => unassign.mutate({ seatId, userId })}
-                  onExportCredential={() => handleExportSingle(seat)}
+                  onExportCredential={() => setExportingSeat(seat)}
                   onTransfer={isAdmin ? handleTransfer : undefined} />
               </div>
             );
@@ -181,6 +189,14 @@ export default function SeatsPage() {
       <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={handleDelete}
         loading={deleteSeat.isPending} title="Xoá Seat"
         description={`Bạn có chắc muốn xoá seat "${deleting?.label}"?`} />
+
+      <ExportCredentialDialog
+        open={!!exportingSeat}
+        seatLabel={exportingSeat?.label ?? ""}
+        loading={exportLoading}
+        onClose={() => setExportingSeat(null)}
+        onConfirm={handleExportConfirm}
+      />
     </div>
   );
 }

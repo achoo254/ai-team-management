@@ -115,16 +115,24 @@ export async function getAllowedSeatIds(
     const seats = await Seat.find(filter, '_id').lean()
     return seats.map((s) => new mongoose.Types.ObjectId(String(s._id)))
   }
-  const [dbUser, ownedSeats, userTeams] = await Promise.all([
+  // Step 1: get user's directly accessible seats
+  const [dbUser, ownedSeats] = await Promise.all([
     User.findById(user._id, 'seat_ids').lean(),
     Seat.find({ owner_id: user._id }, '_id').lean(),
-    Team.find({ member_ids: user._id }, 'seat_ids').lean(),
   ])
   const assigned = (dbUser?.seat_ids ?? []).map((id) => new mongoose.Types.ObjectId(String(id)))
   const owned = ownedSeats.map((s) => new mongoose.Types.ObjectId(String(s._id)))
+  const directSeatIds = [...assigned, ...owned]
+
+  // Step 2: find teams where user is explicit member OR user has a seat in the team
+  const userTeams = await Team.find(
+    { $or: [{ member_ids: user._id }, { seat_ids: { $in: directSeatIds } }] },
+    'seat_ids',
+  ).lean()
   const teamSeatIds = userTeams.flatMap((t) => t.seat_ids).map((id) => new mongoose.Types.ObjectId(String(id)))
+
   const map = new Map<string, mongoose.Types.ObjectId>()
-  for (const id of [...assigned, ...owned, ...teamSeatIds]) map.set(String(id), id)
+  for (const id of [...directSeatIds, ...teamSeatIds]) map.set(String(id), id)
   return [...map.values()]
 }
 
