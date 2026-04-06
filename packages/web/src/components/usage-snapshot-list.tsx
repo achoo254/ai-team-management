@@ -12,6 +12,15 @@ export function UsageSnapshotList({ highlightSeatId }: { highlightSeatId?: strin
   const { data: seatsData } = useSeats()
   const isAdmin = user?.role === 'admin'
 
+  const seats = seatsData?.seats ?? []
+
+  // Scroll to highlighted seat card when data loads
+  useEffect(() => {
+    if (highlightSeatId && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [highlightSeatId, seats.length])
+
   if (isLoading) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -29,8 +38,6 @@ export function UsageSnapshotList({ highlightSeatId }: { highlightSeatId?: strin
     if (!snapshotBySeatId.has(s.seat_id)) snapshotBySeatId.set(s.seat_id, s)
   }
 
-  const seats = seatsData?.seats ?? []
-
   if (seats.length === 0) {
     return (
       <div className="space-y-4">
@@ -41,13 +48,6 @@ export function UsageSnapshotList({ highlightSeatId }: { highlightSeatId?: strin
       </div>
     )
   }
-
-  // Scroll to highlighted seat card on mount
-  useEffect(() => {
-    if (highlightSeatId && highlightRef.current) {
-      highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }
-  }, [highlightSeatId, seats.length])
 
   return (
     <div className="space-y-4">

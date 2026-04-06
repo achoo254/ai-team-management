@@ -26,7 +26,7 @@ function buildInlineKeyboard(seatId?: string) {
         { text: '📈 Usage', url: `${url}/usage${q}` },
       ],
       [
-        { text: '📅 Lịch phân ca', url: `${url}/schedule${q}` },
+        { text: '📅 Hoạt động Seats', url: `${url}/schedule${q}` },
         { text: '💺 Quản lý Seats', url: `${url}/seats${q}` },
       ],
     ],
