@@ -52,6 +52,9 @@ router.get('/settings', async (req, res) => {
         seat_id: String(ws.seat_id),
         threshold_5h_pct: ws.threshold_5h_pct,
         threshold_7d_pct: ws.threshold_7d_pct,
+        burn_rate_threshold: ws.burn_rate_threshold ?? 15,
+        eta_warning_hours: ws.eta_warning_hours ?? 1.5,
+        forecast_warning_hours: ws.forecast_warning_hours ?? 48,
         seat_label: s?.label ?? null,
         seat_email: s?.email ?? null,
       }
