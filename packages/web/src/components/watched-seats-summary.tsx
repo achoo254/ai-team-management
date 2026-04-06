@@ -9,7 +9,10 @@ import { WatchThresholdDialog } from "./watch-threshold-dialog";
 export function WatchedSeatsSummary() {
   const { data: settings } = useUserSettings();
   const unwatchMut = useUnwatchSeat();
-  const [editing, setEditing] = useState<{ seatId: string; label: string; th5h: number; th7d: number } | null>(null);
+  const [editing, setEditing] = useState<{
+    seatId: string; label: string; th5h: number; th7d: number;
+    burn_rate_threshold?: number | null; eta_warning_hours?: number | null; forecast_warning_hours?: number | null;
+  } | null>(null);
 
   const watched = settings?.watched_seats ?? [];
 
@@ -48,6 +51,9 @@ export function WatchedSeatsSummary() {
                             label: label as string,
                             th5h: w.threshold_5h_pct,
                             th7d: w.threshold_7d_pct,
+                            burn_rate_threshold: w.burn_rate_threshold,
+                            eta_warning_hours: w.eta_warning_hours,
+                            forecast_warning_hours: w.forecast_warning_hours,
                           })
                         }
                       >
@@ -77,7 +83,13 @@ export function WatchedSeatsSummary() {
           onOpenChange={(open) => !open && setEditing(null)}
           seatId={editing.seatId}
           seatLabel={editing.label}
-          current={{ threshold_5h_pct: editing.th5h, threshold_7d_pct: editing.th7d }}
+          current={{
+            threshold_5h_pct: editing.th5h,
+            threshold_7d_pct: editing.th7d,
+            burn_rate_threshold: editing.burn_rate_threshold,
+            eta_warning_hours: editing.eta_warning_hours,
+            forecast_warning_hours: editing.forecast_warning_hours,
+          }}
         />
       )}
     </>

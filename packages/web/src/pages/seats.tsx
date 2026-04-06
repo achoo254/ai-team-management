@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { Plus, Monitor, Key, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,9 @@ import type { Seat as SharedSeat } from "@repo/shared";
 
 export default function SeatsPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightSeatId = searchParams.get("seat");
+  const highlightRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === "admin";
   const { data, isLoading } = useSeats();
   const createSeat = useCreateSeat();
@@ -71,23 +75,36 @@ export default function SeatsPage() {
 
   const canManage = (seat: Seat) => isAdmin || seat.owner_id === user?._id;
 
+  // Scroll to highlighted seat on mount
+  useEffect(() => {
+    if (highlightSeatId && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightSeatId, data]);
+
   const renderSection = (title: string, sectionSeats: Seat[]) => {
     if (sectionSeats.length === 0) return null;
     return (
       <div className="space-y-3">
         <h2 className="text-lg font-semibold text-muted-foreground">{title}</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sectionSeats.map((seat) => (
-            <SeatCard key={seat._id} seat={seat} isAdmin={isAdmin}
-              currentUserId={user?._id ?? ""}
-              canManage={canManage(seat)}
-              allUsers={allUsers}
-              onEdit={handleEdit} onDelete={setDeleting}
-              onAssign={(seatId, userId) => assign.mutate({ seatId, userId })}
-              onUnassign={(seatId, userId) => unassign.mutate({ seatId, userId })}
-              onExportCredential={() => handleExportSingle(seat)}
-              onTransfer={isAdmin ? handleTransfer : undefined} />
-          ))}
+          {sectionSeats.map((seat) => {
+            const isHighlighted = seat._id === highlightSeatId;
+            return (
+              <div key={seat._id} ref={isHighlighted ? highlightRef : undefined}
+                className={isHighlighted ? 'rounded-lg ring-2 ring-primary' : ''}>
+                <SeatCard seat={seat} isAdmin={isAdmin}
+                  currentUserId={user?._id ?? ""}
+                  canManage={canManage(seat)}
+                  allUsers={allUsers}
+                  onEdit={handleEdit} onDelete={setDeleting}
+                  onAssign={(seatId, userId) => assign.mutate({ seatId, userId })}
+                  onUnassign={(seatId, userId) => unassign.mutate({ seatId, userId })}
+                  onExportCredential={() => handleExportSingle(seat)}
+                  onTransfer={isAdmin ? handleTransfer : undefined} />
+              </div>
+            );
+          })}
         </div>
       </div>
     );

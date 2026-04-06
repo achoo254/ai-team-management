@@ -19,6 +19,9 @@ export interface IWatchedSeat {
   seat_id: Types.ObjectId
   threshold_5h_pct: number
   threshold_7d_pct: number
+  burn_rate_threshold: number | null    // %/h, default 15 (null = disabled)
+  eta_warning_hours: number | null      // hours, default 1.5 (null = disabled)
+  forecast_warning_hours: number | null // hours, default 48 (null = disabled)
 }
 
 export interface IUser extends Document {
@@ -56,6 +59,9 @@ const userSchema = new Schema<IUser>(
           seat_id: { type: Schema.Types.ObjectId, ref: 'Seat', required: true },
           threshold_5h_pct: { type: Number, default: 90, min: 1, max: 100 },
           threshold_7d_pct: { type: Number, default: 85, min: 1, max: 100 },
+          burn_rate_threshold: { type: Number, default: 15, min: 5 },
+          eta_warning_hours: { type: Number, default: 1.5, min: 0.5 },
+          forecast_warning_hours: { type: Number, default: 48, min: 6 },
         },
       ],
       default: [],

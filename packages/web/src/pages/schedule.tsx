@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import { AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -35,7 +36,8 @@ function LoadingSkeleton() {
 
 export default function SchedulePage() {
   const { user } = useAuth();
-  const [activeSeatId, setActiveSeatId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const [activeSeatId, setActiveSeatId] = useState<string | null>(searchParams.get("seat"));
   const [weekStart, setWeekStart] = useState(getCurrentWeekStart);
 
   const { data: seatsData, isLoading: loadingSeats } = useSeatsWithUsers();

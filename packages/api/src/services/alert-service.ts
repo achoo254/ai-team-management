@@ -4,7 +4,14 @@ import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { User, type IUser } from '../models/user.js'
 import { sendAlertToUser } from './telegram-service.js'
 import { sendPushToUser } from './fcm-service.js'
+import { checkFastBurnAlerts, checkQuotaForecastAlerts } from './predictive-alert-service.js'
 import type { AlertType, AlertWindow } from '@repo/shared/types'
+
+/** Signature for insertIfNewPerUser — used by predictive-alert-service. */
+export type InsertAlertFn = (
+  user: IUser, seatId: string, type: AlertType, window: AlertWindow,
+  message: string, metadata: Record<string, unknown>, seatLabel: string,
+) => Promise<boolean>
 
 /** Return true if user has notifications enabled for this type. */
 function isTypeEnabledForUser(user: IUser, type: AlertType): boolean {
@@ -21,6 +28,7 @@ async function deliverToUser(
   seatLabel: string,
   metadata: Record<string, unknown>,
   alertId: string,
+  seatId?: string,
 ) {
   const as = user.alert_settings
   if (!as?.enabled) return
@@ -28,7 +36,7 @@ async function deliverToUser(
   const pushOn = user.push_enabled && (user.fcm_tokens?.length ?? 0) > 0
 
   const promises: Promise<unknown>[] = []
-  if (telegramOn) promises.push(sendAlertToUser(user, type, seatLabel, metadata).catch((e) => console.error('[Alert] telegram:', e)))
+  if (telegramOn) promises.push(sendAlertToUser(user, type, seatLabel, metadata, seatId).catch((e) => console.error('[Alert] telegram:', e)))
   if (pushOn) promises.push(sendPushToUser(String(user._id), type, seatLabel, '', alertId).catch((e) => console.error('[Alert] push:', e)))
   await Promise.allSettled(promises)
 }
@@ -48,14 +56,15 @@ async function insertIfNewPerUser(
 ): Promise<boolean> {
   if (!isTypeEnabledForUser(user, type)) return false
 
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const dedupHours = type === 'fast_burn' ? 4 : 24
+  const dedupAgo = new Date(Date.now() - dedupHours * 60 * 60 * 1000)
   const lastAlert = await Alert.findOne({
     user_id: user._id,
     seat_id: seatId,
     type,
     window,
     notified_at: { $ne: null },
-    created_at: { $gte: oneDayAgo },
+    created_at: { $gte: dedupAgo },
   }).sort({ created_at: -1 }).lean()
 
   if (lastAlert) {
@@ -89,7 +98,7 @@ async function insertIfNewPerUser(
     read_by: [],
     notified_at: new Date(),
   })
-  await deliverToUser(user, type, seatLabel, metadata, String(alert._id))
+  await deliverToUser(user, type, seatLabel, metadata, String(alert._id), seatId)
   return true
 }
 
@@ -131,7 +140,7 @@ async function insertIfNewSeatWide(
     'watched_seats.seat_id': seatId,
     'alert_settings.enabled': true,
   })
-  await Promise.allSettled(watchers.map((u) => deliverToUser(u, type, seatLabel, metadata, alertId)))
+  await Promise.allSettled(watchers.map((u) => deliverToUser(u, type, seatLabel, metadata, alertId, seatId)))
   return true
 }
 
@@ -215,7 +224,14 @@ export async function checkSnapshotAlerts() {
     }
   }
 
-  // 3. Check token_failure — seats with any fetch error, fanout per-user
+  // 3. Fast burn checks (5h velocity + ETA)
+  created += await checkFastBurnAlerts(snapshots, seatMap, watchers, insertIfNewPerUser)
+
+  // 4. Quota forecast checks (7d linear projection)
+  const seatIdStrs = seatIds.map((id) => String(id))
+  created += await checkQuotaForecastAlerts(seatIdStrs, seatMap, watchers, insertIfNewPerUser)
+
+  // 5. Check token_failure — seats with any fetch error, fanout per-user
   const failedSeats = await Seat.find(
     { last_fetch_error: { $ne: null } },
     'label email token_active last_fetch_error',
@@ -247,4 +263,3 @@ export async function checkSnapshotAlerts() {
   return { alertsCreated: created }
 }
 
-// Budget alerts removed — replaced by activity anomaly detection (activity-anomaly-service.ts)

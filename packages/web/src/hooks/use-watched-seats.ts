@@ -5,6 +5,9 @@ import { toast } from "sonner";
 interface WatchThresholds {
   threshold_5h_pct?: number;
   threshold_7d_pct?: number;
+  burn_rate_threshold?: number | null;
+  eta_warning_hours?: number | null;
+  forecast_warning_hours?: number | null;
 }
 
 export function useWatchSeat() {

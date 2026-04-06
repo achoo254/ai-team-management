@@ -13,20 +13,21 @@ function esc(str: string | number): string {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-/** Build inline keyboard with app links. Returns undefined if URL is not HTTPS (Telegram requirement). */
-function buildInlineKeyboard() {
+/** Build inline keyboard with app links. Appends ?seat=<id> when seatId provided for deep-linking. */
+function buildInlineKeyboard(seatId?: string) {
   const url = config.webUrl
   if (!url.startsWith('https://')) return undefined
 
+  const q = seatId ? `?seat=${seatId}` : ''
   return {
     inline_keyboard: [
       [
-        { text: '📊 Dashboard', url: `${url}/dashboard` },
-        { text: '📈 Usage', url: `${url}/usage` },
+        { text: '📊 Dashboard', url: `${url}/dashboard${q}` },
+        { text: '📈 Usage', url: `${url}/usage${q}` },
       ],
       [
-        { text: '📅 Lịch phân ca', url: `${url}/schedule` },
-        { text: '💺 Quản lý Seats', url: `${url}/seats` },
+        { text: '📅 Lịch phân ca', url: `${url}/schedule${q}` },
+        { text: '💺 Quản lý Seats', url: `${url}/seats${q}` },
       ],
     ],
   }
@@ -246,6 +247,7 @@ export async function sendAlertToUser(
   type: AlertType,
   seatLabel: string,
   metadata: Record<string, unknown>,
+  seatId?: string,
 ): Promise<void> {
   if (!user.telegram_bot_token || !user.telegram_chat_id || !isEncryptionConfigured()) return
 
@@ -300,13 +302,13 @@ export async function sendAlertToUser(
   }
 
   const token = decrypt(user.telegram_bot_token)
-  await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined)
+  await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined, seatId)
 }
 
 /** Send via arbitrary bot token + chat ID */
-async function sendMessageWithBot(botToken: string, chatId: string, text: string, topicId?: string) {
+async function sendMessageWithBot(botToken: string, chatId: string, text: string, topicId?: string, seatId?: string) {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`
-  const keyboard = buildInlineKeyboard()
+  const keyboard = buildInlineKeyboard(seatId)
   const body: Record<string, unknown> = {
     chat_id: chatId,
     text,

@@ -1,10 +1,12 @@
+import { useEffect, useRef } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLatestSnapshots } from '@/hooks/use-usage-snapshots'
 import { useSeats } from '@/hooks/use-seats'
 import { useAuth } from '@/hooks/use-auth'
 import { UsageSnapshotCard } from './usage-snapshot-card'
 
-export function UsageSnapshotList() {
+export function UsageSnapshotList({ highlightSeatId }: { highlightSeatId?: string | null }) {
+  const highlightRef = useRef<HTMLDivElement>(null)
   const { user } = useAuth()
   const { data, isLoading } = useLatestSnapshots()
   const { data: seatsData } = useSeats()
@@ -40,19 +42,29 @@ export function UsageSnapshotList() {
     )
   }
 
+  // Scroll to highlighted seat card on mount
+  useEffect(() => {
+    if (highlightSeatId && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [highlightSeatId, seats.length])
+
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Usage mới nhất</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {seats.map((seat) => {
           const snap = snapshotBySeatId.get(seat._id)
+          const isHighlighted = seat._id === highlightSeatId
           return (
-            <UsageSnapshotCard
-              key={seat._id}
-              seatId={seat._id}
-              snapshot={snap}
-              seat={seat}
-            />
+            <div key={seat._id} ref={isHighlighted ? highlightRef : undefined}
+              className={isHighlighted ? 'rounded-lg ring-2 ring-primary' : ''}>
+              <UsageSnapshotCard
+                seatId={seat._id}
+                snapshot={snap}
+                seat={seat}
+              />
+            </div>
           )
         })}
       </div>

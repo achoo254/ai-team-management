@@ -35,15 +35,20 @@ export default function DashboardPage() {
   const updateSettings = useUpdateUserSettings();
   const initialized = useRef(false);
 
-  // Load persisted filters once on mount
+  // Load persisted filters once on mount; ?seat= param overrides saved filters
   useEffect(() => {
     if (userSettings && !initialized.current) {
-      const saved = userSettings.dashboard_filter_seat_ids ?? [];
-      if (saved.length > 0) setSeatIds(saved);
+      const seatParam = searchParams.get("seat");
+      if (seatParam) {
+        setSeatIds([seatParam]);
+      } else {
+        const saved = userSettings.dashboard_filter_seat_ids ?? [];
+        if (saved.length > 0) setSeatIds(saved);
+      }
       if (userSettings.dashboard_default_range) setRange(userSettings.dashboard_default_range);
       initialized.current = true;
     }
-  }, [userSettings]);
+  }, [userSettings, searchParams]);
 
   // Persist filter changes (debounced 1s)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);

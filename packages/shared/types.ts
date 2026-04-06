@@ -102,7 +102,7 @@ export interface RealtimeStatus {
   last_snapshot_at: string | null
 }
 
-export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
+export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk' | 'fast_burn' | 'quota_forecast'
 export type AlertWindow = '5h' | '7d' | null
 
 export interface AlertMetadata {
@@ -124,6 +124,12 @@ export interface AlertMetadata {
   max_pct?: number
   breakdown?: { seven_day_pct?: number | null; seven_day_sonnet_pct?: number | null; seven_day_opus_pct?: number | null }
   threshold?: number
+  // Predictive alert fields
+  velocity?: number           // %/h burn rate (fast_burn)
+  eta_hours?: number          // hours to 100% (fast_burn)
+  slope_per_hour?: number     // 7d slope (quota_forecast)
+  hours_to_threshold?: number // hours to user threshold (quota_forecast)
+  hours_to_reset?: number     // hours until reset (quota_forecast)
 }
 
 export interface Alert {
@@ -150,6 +156,9 @@ export interface WatchedSeat {
   seat_id: string
   threshold_5h_pct: number
   threshold_7d_pct: number
+  burn_rate_threshold?: number | null
+  eta_warning_hours?: number | null
+  forecast_warning_hours?: number | null
   seat_label?: string
   seat_email?: string
 }

@@ -25,13 +25,26 @@ function clampPct(val: unknown, fallback: number): number {
   return Math.max(1, Math.min(100, n))
 }
 
+/** Clamp predictive threshold or return null (disabled). */
+function clampPredictive(val: unknown, fallback: number | null, min: number, max: number): number | null {
+  if (val === null) return null
+  if (val === undefined) return fallback
+  const n = Number(val)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.min(max, Math.round(n * 10) / 10))
+}
+
 // POST /api/user/watched-seats — start watching a seat with thresholds
 router.post('/', async (req, res) => {
   try {
-    const { seat_id, threshold_5h_pct, threshold_7d_pct } = req.body as {
+    const { seat_id, threshold_5h_pct, threshold_7d_pct,
+            burn_rate_threshold, eta_warning_hours, forecast_warning_hours } = req.body as {
       seat_id?: string
       threshold_5h_pct?: unknown
       threshold_7d_pct?: unknown
+      burn_rate_threshold?: unknown
+      eta_warning_hours?: unknown
+      forecast_warning_hours?: unknown
     }
     if (!seat_id) { res.status(400).json({ error: 'seat_id required' }); return }
 
@@ -48,6 +61,9 @@ router.post('/', async (req, res) => {
       seat_id: seat._id as any,
       threshold_5h_pct: clampPct(threshold_5h_pct, 90),
       threshold_7d_pct: clampPct(threshold_7d_pct, 85),
+      burn_rate_threshold: clampPredictive(burn_rate_threshold, 15, 5, 50),
+      eta_warning_hours: clampPredictive(eta_warning_hours, 1.5, 0.5, 4),
+      forecast_warning_hours: clampPredictive(forecast_warning_hours, 48, 6, 168),
     }
     user.watched_seats = [...(user.watched_seats ?? []), entry]
     await user.save()
@@ -56,6 +72,9 @@ router.post('/', async (req, res) => {
       seat_id: String(seat._id),
       threshold_5h_pct: entry.threshold_5h_pct,
       threshold_7d_pct: entry.threshold_7d_pct,
+      burn_rate_threshold: entry.burn_rate_threshold,
+      eta_warning_hours: entry.eta_warning_hours,
+      forecast_warning_hours: entry.forecast_warning_hours,
       seat_label: (seat as any).label,
       seat_email: (seat as any).email,
     })
@@ -69,9 +88,13 @@ router.post('/', async (req, res) => {
 router.put('/:seatId', validateObjectId('seatId'), async (req, res) => {
   try {
     const { seatId } = req.params
-    const { threshold_5h_pct, threshold_7d_pct } = req.body as {
+    const { threshold_5h_pct, threshold_7d_pct,
+            burn_rate_threshold, eta_warning_hours, forecast_warning_hours } = req.body as {
       threshold_5h_pct?: unknown
       threshold_7d_pct?: unknown
+      burn_rate_threshold?: unknown
+      eta_warning_hours?: unknown
+      forecast_warning_hours?: unknown
     }
 
     const user = await User.findById(req.user!._id)
@@ -82,6 +105,9 @@ router.put('/:seatId', validateObjectId('seatId'), async (req, res) => {
 
     if (threshold_5h_pct !== undefined) entry.threshold_5h_pct = clampPct(threshold_5h_pct, entry.threshold_5h_pct)
     if (threshold_7d_pct !== undefined) entry.threshold_7d_pct = clampPct(threshold_7d_pct, entry.threshold_7d_pct)
+    if (burn_rate_threshold !== undefined) entry.burn_rate_threshold = clampPredictive(burn_rate_threshold, entry.burn_rate_threshold, 5, 50)
+    if (eta_warning_hours !== undefined) entry.eta_warning_hours = clampPredictive(eta_warning_hours, entry.eta_warning_hours, 0.5, 4)
+    if (forecast_warning_hours !== undefined) entry.forecast_warning_hours = clampPredictive(forecast_warning_hours, entry.forecast_warning_hours, 6, 168)
 
     user.markModified('watched_seats')
     await user.save()
@@ -90,6 +116,9 @@ router.put('/:seatId', validateObjectId('seatId'), async (req, res) => {
       seat_id: seatId,
       threshold_5h_pct: entry.threshold_5h_pct,
       threshold_7d_pct: entry.threshold_7d_pct,
+      burn_rate_threshold: entry.burn_rate_threshold,
+      eta_warning_hours: entry.eta_warning_hours,
+      forecast_warning_hours: entry.forecast_warning_hours,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

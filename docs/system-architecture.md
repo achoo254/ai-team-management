@@ -114,13 +114,15 @@ Subsequent requests: JWT read from cookie or Authorization header
 - `routes/user-settings.ts` — Per-user alert settings, Telegram bot config, notification schedule, test notifications
 
 **Service Layer**:
-- `services/alert-service.ts` — Alert generation, snapshot-based threshold checking
+- `services/alert-service.ts` — Core alert generation, snapshot-based threshold checking, deduplication logic
+- `services/predictive-alert-service.ts` — Predictive alert logic: fast_burn (velocity + ETA) and quota_forecast (7d linear projection)
 - `services/telegram-service.ts` — Telegram message formatting, personal + system bot notifications
 - `services/usage-collector-service.ts` — Fetch usage data from Anthropic API, concurrent collection
 - `services/seat-activity-detector.ts` — Detect hourly activity from usage snapshot deltas, populate SeatActivityLog
 - `services/activity-pattern-service.ts` — Analyze historical activity, generate weekly recurring patterns, update Schedule collection
 - `services/activity-anomaly-service.ts` — Detect unusual activity spikes for anomaly alerts
 - `services/anthropic-service.ts` — Anthropic OAuth profile fetch & caching
+- `services/quota-forecast-service.ts` — Linear regression forecasting for 7-day quotas
 
 **Utility Libraries**:
 - `lib/encryption.ts` — AES-256-GCM encrypt/decrypt for Telegram bot tokens
@@ -181,7 +183,14 @@ Subsequent requests: JWT read from cookie or Authorization header
   telegram_bot_token: String | null (encrypted AES-256-GCM),
   telegram_chat_id: String | null,
   telegram_topic_id: String | null,
-  watched_seat_ids: [ObjectId] (ref: Seat, seats subscribed to for alerts),
+  watched_seats: [{
+    seat_id: ObjectId (ref: Seat, unique per user),
+    threshold_5h_pct: Number (default: 90, 5-hour usage threshold),
+    threshold_7d_pct: Number (default: 85, 7-day usage threshold),
+    burn_rate_threshold: Number | null (default: 15 %/h, null = disabled for fast_burn alerts),
+    eta_warning_hours: Number | null (default: 1.5h, null = disabled, hours to 100%),
+    forecast_warning_hours: Number | null (default: 48h, null = disabled, lookahead for quota_forecast)
+  }] (comprehensive seat monitoring config per user),
   notification_settings: {
     report_enabled: Boolean (default: false),
     report_days: [Number] (default: [5], 0=Sun, 6=Sat),
@@ -189,9 +198,11 @@ Subsequent requests: JWT read from cookie or Authorization header
   },
   alert_settings: {
     enabled: Boolean (default: false),
-    rate_limit_pct: Number (default: 80),
-    extra_credit_pct: Number (default: 80)
+    telegram_enabled: Boolean (default: true),
+    token_failure_enabled: Boolean (default: true)
   },
+  dashboard_filter_seat_ids: [ObjectId] (ref: Seat, user's preferred seat filter),
+  dashboard_default_range: String (enum: ['day', 'week', 'month', '3month', '6month'], default: 'day'),
   fcm_tokens: [String] (Firebase Cloud Messaging tokens, default: []),
   push_enabled: Boolean (FCM push notifications, default: false),
   created_at: Date
@@ -235,16 +246,23 @@ Subsequent requests: JWT read from cookie or Authorization header
   _id: ObjectId,
   user_id: ObjectId | null (ref: User, primary dedup key),
   seat_id: ObjectId (ref: Seat),
-  type: String (enum: ['rate_limit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk']),
-  window: String | null (enum: ['5h', '7d'], for rate_limit alerts),
+  type: String (enum: ['rate_limit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk', 'fast_burn', 'quota_forecast']),
+  window: String | null (enum: ['5h', '7d'], for rate_limit/fast_burn alerts),
   message: String,
   metadata: {
+    // Common fields
     pct?: Number,
     error?: String,
     delta?: Number,
     budget?: Number,
     user_id?: String,
-    user_name?: String
+    user_name?: String,
+    // Predictive alert fields (fast_burn, quota_forecast)
+    velocity?: Number (%/h burn rate),
+    eta_hours?: Number (hours to 100% for fast_burn),
+    slope_per_hour?: Number (7d slope for quota_forecast),
+    hours_to_threshold?: Number (hours to user threshold),
+    hours_to_reset?: Number (hours until window reset)
   },
   read_by: [ObjectId] (users who marked as read),
   notified_at: Date | null (when notification sent, prevents re-notify),
@@ -376,8 +394,11 @@ API calls via React Query (TanStack Query)
      - Feeds pattern analyzer with activity data
    - **checkSnapshotAlerts()** from alert-service.ts (chained after activity detection):
      - Evaluates latest UsageSnapshot for each seat
-     - For each user watching that seat: checks against user's alert_settings thresholds
-     - Creates alerts for: rate_limit (5h, 7d windows), token_failure
+     - For each user watching that seat: checks against user's watched_seats thresholds
+     - Creates snapshot alerts: rate_limit (5h, 7d windows), token_failure
+     - Creates predictive alerts via predictive-alert-service.ts:
+       * **fast_burn**: velocity >= burn_rate_threshold AND eta_hours <= eta_warning_hours
+       * **quota_forecast**: 7d slope projects hit user threshold within forecast_warning_hours
      - Deduplicates: max 1 unresolved alert per (user_id, seat_id, type, window)
      - Sends Telegram notification to subscribed user via personal bot
 

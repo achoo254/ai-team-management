@@ -51,7 +51,13 @@ export function WatchSeatButton({ seatId, seatLabel }: Props) {
           onOpenChange={setDialogOpen}
           seatId={seatId}
           seatLabel={seatLabel}
-          current={{ threshold_5h_pct: current.threshold_5h_pct, threshold_7d_pct: current.threshold_7d_pct }}
+          current={{
+            threshold_5h_pct: current.threshold_5h_pct,
+            threshold_7d_pct: current.threshold_7d_pct,
+            burn_rate_threshold: current.burn_rate_threshold,
+            eta_warning_hours: current.eta_warning_hours,
+            forecast_warning_hours: current.forecast_warning_hours,
+          }}
         />
       </>
     );

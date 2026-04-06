@@ -1,6 +1,10 @@
+import { useSearchParams } from 'react-router'
 import { UsageSnapshotList } from '@/components/usage-snapshot-list'
 
 export default function UsagePage() {
+  const [searchParams] = useSearchParams()
+  const highlightSeatId = searchParams.get('seat')
+
   return (
     <div className="space-y-6">
       <div>
@@ -9,7 +13,7 @@ export default function UsagePage() {
       </div>
 
       {/* Latest snapshots grid */}
-      <UsageSnapshotList />
+      <UsageSnapshotList highlightSeatId={highlightSeatId} />
     </div>
   )
 }
