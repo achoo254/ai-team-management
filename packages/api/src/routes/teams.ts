@@ -12,6 +12,20 @@ function isObjectIdArray(arr: unknown): arr is string[] {
   return Array.isArray(arr) && arr.every((id) => typeof id === 'string' && mongoose.Types.ObjectId.isValid(id))
 }
 
+/** Transform populated team doc to match shared Team type (separate seats/members/owner fields + raw ID arrays). */
+function transformTeam(doc: Record<string, unknown>) {
+  const { seat_ids, member_ids, owner_id, ...rest } = doc
+  return {
+    ...rest,
+    seat_ids: (seat_ids as Array<{ _id: string }>)?.map((s) => String(s._id)) ?? [],
+    member_ids: (member_ids as Array<{ _id: string }>)?.map((m) => String(m._id)) ?? [],
+    owner_id: owner_id ? String((owner_id as { _id: string })._id) : null,
+    seats: seat_ids ?? [],
+    members: member_ids ?? [],
+    owner: owner_id ?? null,
+  }
+}
+
 // GET /api/teams — list teams user belongs to (admin: all)
 router.get('/', authenticate, async (req, res) => {
   const user = req.user!
@@ -19,12 +33,12 @@ router.get('/', authenticate, async (req, res) => {
     user.role === 'admin'
       ? {}
       : { $or: [{ member_ids: user._id }, { owner_id: user._id }] }
-  const teams = await Team.find(filter)
+  const raw = await Team.find(filter)
     .populate('owner_id', 'name email')
     .populate('member_ids', 'name email')
     .populate('seat_ids', 'label email')
     .lean()
-  res.json({ teams })
+  res.json({ teams: raw.map((t) => transformTeam(t as unknown as Record<string, unknown>)) })
 })
 
 // POST /api/teams — create team (any authenticated user)
@@ -130,7 +144,7 @@ router.put('/:id', authenticate, validateObjectId('id'), async (req, res) => {
     .populate('member_ids', 'name email')
     .populate('seat_ids', 'label email')
     .lean()
-  res.json(populated)
+  res.json(transformTeam(populated as unknown as Record<string, unknown>))
 })
 
 // DELETE /api/teams/:id — delete team (owner or admin)
