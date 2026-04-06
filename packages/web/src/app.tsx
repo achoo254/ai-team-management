@@ -26,6 +26,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route element={<AuthProvider><DashboardShell /></AuthProvider>}>
             <Route index element={<DashboardPage />} />
+            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="seats" element={<SeatsPage />} />
             <Route path="teams" element={<TeamsPage />} />
             <Route path="schedule" element={<SchedulePage />} />
