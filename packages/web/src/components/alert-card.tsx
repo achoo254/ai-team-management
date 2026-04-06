@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
-  AlertTriangle, TrendingUp, KeyRound, Clock, ChevronDown,
+  AlertTriangle, TrendingUp, KeyRound, Clock, ChevronDown, Flame, BarChart3, Activity, Moon,
 } from "lucide-react";
 import type { Alert } from "@/hooks/use-alerts";
 
@@ -11,6 +11,10 @@ const TYPE_CONFIG: Record<string, { label: string; variant: "destructive" | "sec
   usage_exceeded: { label: "Vượt Budget", variant: "destructive", icon: AlertTriangle },
   session_waste: { label: "Lãng phí", variant: "secondary", icon: Clock },
   "7d_risk": { label: "7d Risk", variant: "destructive", icon: TrendingUp },
+  unexpected_activity: { label: "Ngoài giờ", variant: "secondary", icon: Activity },
+  unexpected_idle: { label: "Rảnh bất thường", variant: "secondary", icon: Moon },
+  quota_forecast: { label: "Quota Forecast", variant: "secondary", icon: BarChart3 },
+  fast_burn: { label: "Fast Burn", variant: "destructive", icon: Flame },
 };
 
 function UsageBar({ label, pct }: { label: string; pct: number }) {
@@ -82,6 +86,47 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
           )}
         </div>
       );
+    case "quota_forecast": {
+      const pct = m.pct ?? 0;
+      const slope = m.slope_per_hour ?? m.velocity ?? 0;
+      const hToThreshold = m.hours_to_threshold ?? m.hours_to_full;
+      const hToReset = m.hours_to_reset;
+      return (
+        <div className="space-y-1.5 pt-2 border-t border-border/50">
+          <UsageBar label="7d hiện" pct={Math.round(pct)} />
+          <p className="text-[11px] text-muted-foreground">
+            Slope: {Number(slope).toFixed(1)}%/h
+            {hToThreshold != null && <> &middot; Chạm ngưỡng trong ~{Number(hToThreshold) < 24 ? `${Math.round(Number(hToThreshold))}h` : `${(Number(hToThreshold) / 24).toFixed(1)} ngày`}</>}
+          </p>
+          {hToReset != null && (
+            <p className="text-[11px] text-muted-foreground">Reset sau {(Number(hToReset) / 24).toFixed(1)} ngày</p>
+          )}
+        </div>
+      );
+    }
+    case "fast_burn": {
+      const pct = m.pct ?? 0;
+      const velocity = m.velocity ?? m.burn_rate_per_hour ?? 0;
+      const etaH = m.eta_hours;
+      const minsFull = m.minutes_to_full;
+      const etaStr = etaH != null
+        ? (Number(etaH) < 1 ? `${Math.round(Number(etaH) * 60)} phút` : `${Number(etaH).toFixed(1)}h`)
+        : (minsFull != null ? `${minsFull} phút` : null);
+      return (
+        <div className="space-y-1.5 pt-2 border-t border-border/50">
+          <UsageBar label="5h hiện" pct={Math.round(pct)} />
+          <p className="text-[11px] text-muted-foreground">
+            Burn rate: {Math.round(Number(velocity))}%/h
+            {etaStr && <> &middot; Còn ~{etaStr}</>}
+          </p>
+          {m.resets_at && (
+            <p className="text-[11px] text-muted-foreground">
+              Reset: {new Date(m.resets_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
+        </div>
+      );
+    }
     default:
       return null;
   }

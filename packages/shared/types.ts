@@ -102,7 +102,7 @@ export interface RealtimeStatus {
   last_snapshot_at: string | null
 }
 
-export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk' | 'fast_burn' | 'quota_forecast'
+export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk' | 'unexpected_activity' | 'unexpected_idle' | 'quota_forecast' | 'fast_burn'
 export type AlertWindow = '5h' | '7d' | null
 
 export interface AlertMetadata {
@@ -124,10 +124,16 @@ export interface AlertMetadata {
   max_pct?: number
   breakdown?: { seven_day_pct?: number | null; seven_day_sonnet_pct?: number | null; seven_day_opus_pct?: number | null }
   threshold?: number
+  // quota_forecast metadata
+  slope_per_hour?: number
+  hours_to_full?: number
+  forecast_status?: string
+  // fast_burn metadata
+  burn_rate_per_hour?: number
+  minutes_to_full?: number
   // Predictive alert fields
   velocity?: number           // %/h burn rate (fast_burn)
   eta_hours?: number          // hours to 100% (fast_burn)
-  slope_per_hour?: number     // 7d slope (quota_forecast)
   hours_to_threshold?: number // hours to user threshold (quota_forecast)
   hours_to_reset?: number     // hours until reset (quota_forecast)
 }

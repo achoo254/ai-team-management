@@ -299,6 +299,42 @@ export async function sendAlertToUser(
         + `Dự kiến: ${esc(String(metadata.projected ?? ''))}% (còn ${esc(String(metadata.remaining_sessions ?? ''))} sessions)\n`
         + `→ Cần giảm tải hoặc chuyển sang seat khác`
       break
+    case 'quota_forecast': {
+      const daysFmt = metadata.hours_to_full ? (Number(metadata.hours_to_full) / 24).toFixed(1) : '?'
+      const slope = metadata.slope_per_hour ? Number(metadata.slope_per_hour).toFixed(1) : '?'
+      const resetsIn = metadata.resets_at
+        ? ((new Date(metadata.resets_at as string).getTime() - Date.now()) / 3600_000 / 24).toFixed(1)
+        : null
+      msg = `📈 <b>Quota Forecast Warning</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Hiện: ${esc(String(metadata.pct ?? ''))}% | Slope: ${esc(slope)}%/h\n`
+        + `Dự kiến chạm 100% trong ~${esc(daysFmt)} ngày`
+        + (resetsIn ? `\nReset sau ${esc(resetsIn)} ngày` : '')
+      break
+    }
+    case 'fast_burn': {
+      const rate = metadata.burn_rate_per_hour ?? metadata.velocity ?? metadata.pct
+      const mins = metadata.minutes_to_full ?? (metadata.eta_hours != null ? Math.round(Number(metadata.eta_hours) * 60) : null)
+      msg = `⚡ <b>Fast Burn Alert</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Burn rate: ${esc(String(rate ?? ''))}%/h\n`
+        + `Hiện: ${esc(String(metadata.pct ?? ''))}%`
+        + (mins != null ? ` | Còn ~${esc(String(mins))} phút` : '')
+      break
+    }
+    case 'unexpected_activity':
+      msg = `🟡 <b>Hoạt động ngoài dự kiến</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Seat đang hoạt động ngoài giờ dự kiến`
+      break
+    case 'unexpected_idle':
+      msg = `🟡 <b>Rảnh ngoài dự kiến</b>\n`
+        + `Seat: <b>${esc(seatLabel)}</b>\n`
+        + `Seat không hoạt động trong giờ dự kiến`
+      break
+    default:
+      msg = `ℹ️ <b>${esc(type)}</b>\nSeat: <b>${esc(seatLabel)}</b>`
+      break
   }
 
   const token = decrypt(user.telegram_bot_token)

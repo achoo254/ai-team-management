@@ -262,4 +262,3 @@ export async function checkSnapshotAlerts() {
 
   return { alertsCreated: created }
 }
-

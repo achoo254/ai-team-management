@@ -8,6 +8,10 @@ const ALERT_DISPLAY: Record<AlertType, { title: string }> = {
   usage_exceeded: { title: 'Usage Budget Exceeded' },
   session_waste: { title: 'Session lãng phí' },
   '7d_risk': { title: '7d Usage Risk' },
+  unexpected_activity: { title: 'Hoạt động ngoài dự kiến' },
+  unexpected_idle: { title: 'Rảnh ngoài dự kiến' },
+  quota_forecast: { title: 'Quota Forecast Warning' },
+  fast_burn: { title: 'Fast Burn Alert' },
 }
 
 /** Send FCM push to a user's registered devices */
