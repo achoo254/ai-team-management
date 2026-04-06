@@ -41,7 +41,7 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
               <CardTitle className="text-base truncate">{seat.label}</CardTitle>
               {/* Subtle indicator: seat is included in overview / BLD metrics */}
               {seat.include_in_overview && (
-                <BarChart2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" title="Đưa vào báo cáo tổng quan" />
+                <span title="Đưa vào báo cáo tổng quan"><BarChart2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /></span>
               )}
             </div>
             <p className="text-sm text-muted-foreground truncate">{seat.email}</p>

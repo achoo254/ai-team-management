@@ -45,7 +45,7 @@ quan-ly-team-claude/
 │   │   │   ├── pages/               # Route page components (TypeScript)
 │   │   │   │   ├── dashboard.tsx
 │   │   │   │   ├── seats.tsx
-│   │   │   │   ├── schedules.tsx
+│   │   │   │   ├── schedule.tsx       # Activity heatmap visualization
 │   │   │   │   ├── alerts.tsx
 │   │   │   │   ├── admin.tsx
 │   │   │   │   ├── usage-metrics.tsx  # Usage snapshots & token management
@@ -55,7 +55,7 @@ quan-ly-team-claude/
 │   │   │   │   ├── seat-card.tsx
 │   │   │   │   ├── seat-form-dialog.tsx # Create/restore seat flow
 │   │   │   │   ├── seat-restore-banner.tsx # Vietnamese restore choice UI
-│   │   │   │   ├── schedule-grid.tsx
+│   │   │   │   ├── activity-heatmap.tsx # 7x24 grid visualization
 │   │   │   │   ├── dashboard-shell.tsx
 │   │   │   │   └── ...
 │   │   │   ├── lib/
@@ -104,7 +104,7 @@ quan-ly-team-claude/
 | **Database** | MongoDB (via Mongoose 9.3.1) |
 | **Auth** | Firebase Admin SDK + JWT (jsonwebtoken) |
 | **Data Fetching** | React Query (TanStack Query) |
-| **Styling** | Tailwind CSS 4 + Base UI |
+| **Styling** | Tailwind CSS 4 + shadcn/ui (Radix UI) |
 | **Async Jobs** | node-cron (hourly scheduler + weekly report) |
 | **Notifications** | Telegram Bot API (system + personal bot) |
 | **Testing** | Vitest |
@@ -406,15 +406,15 @@ See `.env.example` for all variables. Key:
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `PORT` | No | 3000 | Server port |
+| `API_PORT` | No | 8386 | API server port |
 | `JWT_SECRET` | Yes | - | JWT signing key (min 32 chars) |
 | `MONGO_URI` | Yes | - | MongoDB connection string |
 | `FIREBASE_SERVICE_ACCOUNT_PATH` | Yes | - | Path to Firebase service account JSON |
 | `ENCRYPTION_KEY` | Yes | - | 64-char hex string (32 bytes) for AES-256-GCM |
-| `TELEGRAM_BOT_TOKEN` | No | - | Telegram bot token |
-| `TELEGRAM_CHAT_ID` | No | - | Telegram chat ID for notifications |
+| `TELEGRAM_BOT_TOKEN` | No | - | Telegram bot token (system bot) |
+| `TELEGRAM_CHAT_ID` | No | - | Telegram chat ID for system notifications |
 | `TELEGRAM_TOPIC_ID` | No | - | Telegram topic ID (optional) |
-| `APP_URL` | No | http://localhost:3000 | Public URL for links |
+| `WEB_URL` | No | http://localhost:5173 | Public web URL for links |
 
 ## Performance Characteristics
 

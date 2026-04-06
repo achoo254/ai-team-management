@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Internal dashboard for managing Claude Teams accounts. Centralizes seat allocation, usage tracking, scheduling, alerting, and notifications.
+Internal dashboard for managing Claude Teams accounts. Centralizes seat allocation, real-time activity tracking, usage monitoring, intelligent alerts, and multi-channel notifications—enabling team leads to optimize seat utilization and prevent service disruptions.
 
 ## Target Users
 
@@ -77,14 +77,14 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - AES-256-GCM encryption for sensitive data (access tokens, bot tokens)
 
 ### Frontend
-- Vanilla JS SPA
-- Dynamic HTML partial loading
-- No framework/bundler
-- CSS (Tailwind or custom)
+- React 19 SPA with React Router v7
+- Vite bundler with HMR
+- Tailwind CSS v4 via @tailwindcss/vite
+- shadcn/ui (Radix UI) component library
 
 ### Database
 - MongoDB (via MONGO_URI env var)
-- Collections: seats, users, schedules, alerts, settings, teams, usage_snapshots
+- Collections: seats, users, schedules, alerts, usage_snapshots, seat_activity_logs, active_sessions
 - Mongoose models with schema validation
 - TTL indexes for automatic data cleanup (usage_snapshots: 90-day retention)
 
@@ -103,9 +103,9 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 
 ## Success Criteria
 
-1. All CRUD operations on seats, users, schedules, alerts functional
-2. Weekly usage logging & retrieval working
-3. Usage metrics collected every 30 minutes for active seats
+1. All CRUD operations on seats, users, alerts functional
+2. Activity tracking automated and heatmap visualized
+3. Usage metrics collected every 5 minutes for active seats
 4. Access tokens encrypted and stored securely
 5. Usage snapshots queryable with pagination and filtering
 6. Telegram notifications sent on schedule
@@ -122,10 +122,11 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 - Admin role gating verified
 - Error handling graceful (400/401/403/500 responses)
 - Documentation complete and current
-- Usage collection cron job running every 30 minutes
+- Usage collection cron job running every 5 minutes
+- Activity tracking detects hourly changes
 - Token encryption/decryption working correctly
 - Usage snapshots stored and queryable
-- Frontend displays latest metrics with status indicators
+- Frontend displays activity heatmap and metrics with status indicators
 
 ## Product Roadmap (Phase 1 Complete)
 
@@ -198,8 +199,9 @@ Internal dashboard for managing Claude Teams accounts. Centralizes seat allocati
 |------|-----------|
 | Seat | Claude Teams account with N slots |
 | Slot | Single user access on a seat |
-| Usage % | Weekly percentage (0-100%) of seat usage by user |
-| Schedule | Time-based (day + morning/afternoon) assignment of user to seat |
-| Alert | Notification triggered by usage threshold or inactivity |
+| Usage % | Percentage (0-100%) of seat usage within a time window (5h, 7d) |
+| Activity Pattern | Auto-generated recurring 7x24 heatmap showing typical seat usage hours |
+| SeatActivityLog | Hourly activity record (is_active, delta) updated every 5 minutes |
+| Alert | Notification triggered by usage threshold, token failure, or activity anomaly |
 | Team | Group classification (dev or mkt) for organizational tracking |
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 + TypeScript backend, Vite + React 19 SPA frontend, and shared TypeScript types. Manages Claude API seats (account licenses) with per-owner credentials, hourly scheduling, and usage monitoring.
+Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 + TypeScript backend, Vite + React 19 SPA frontend, and shared TypeScript types. Manages Claude API seats (account licenses) with per-owner credentials, automated seat activity tracking, and usage monitoring.
 
 **Architecture Type**: Monorepo (pnpm workspaces) with clear separation between packages: API backend (Express 5), web frontend (React + Vite), and shared types.
 
@@ -26,7 +26,7 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 - **Build Tool**: Vite 8
 - **Language**: TypeScript 5
 - **Styling**: Tailwind CSS 4 (via @tailwindcss/vite)
-- **UI Components**: Base UI React
+- **UI Components**: shadcn/ui (Radix UI)
 - **Charts**: Recharts 3.8.0
 - **Data Fetching**: @tanstack/react-query 5.95.0
 - **Notifications**: Sonner (toast library)
@@ -45,9 +45,9 @@ Claude Teams Management Dashboard is a pnpm monorepo with 3 packages: Express 5 
 
 ### Infrastructure
 - **Hosting**: Any Node.js-compatible server
-- **API Port**: 3001 (configurable)
+- **API Port**: 8386 (configurable via API_PORT)
 - **Frontend Port**: 5173 (Vite dev, proxies /api to API)
-- **Environment**: .env-based configuration (root-level .env)
+- **Environment**: .env-based configuration (package-level .env.local files)
 - **Build**: TypeScript compilation to dist/ directories
 
 ## System Components
@@ -406,11 +406,11 @@ Required:
   ENCRYPTION_KEY         — 64-char hex string (32 bytes) for AES-256-GCM encryption (access tokens + bot tokens)
 
 Optional:
-  PORT                   — Server port (default: 8386)
+  API_PORT               — API server port (default: 8386)
   TELEGRAM_BOT_TOKEN     — System bot token for group notifications
   TELEGRAM_CHAT_ID       — Telegram chat ID for system bot
   TELEGRAM_TOPIC_ID      — Telegram topic (optional)
-  APP_URL                — Public app URL (default: http://localhost:3000)
+  WEB_URL                — Public web URL (default: http://localhost:5173)
 ```
 
 **Note**: Users can configure personal Telegram bot tokens via `/api/user/settings` (encrypted with ENCRYPTION_KEY)

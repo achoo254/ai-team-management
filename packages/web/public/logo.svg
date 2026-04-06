@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#16213e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e8590c"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="bar1" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#e8590c"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+    <linearGradient id="bar2" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="bar3" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="32" y="32" width="448" height="448" rx="80" ry="80" fill="url(#bg)"/>
+
+  <!-- Dashboard grid lines (subtle) -->
+  <line x1="256" y1="100" x2="256" y2="412" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/>
+  <line x1="100" y1="256" x2="412" y2="256" stroke="#ffffff" stroke-opacity="0.06" stroke-width="1.5"/>
+
+  <!-- Bar chart representing usage monitoring -->
+  <rect x="128" y="280" width="48" height="120" rx="8" fill="url(#bar1)" opacity="0.9"/>
+  <rect x="196" y="220" width="48" height="180" rx="8" fill="url(#bar2)" opacity="0.9"/>
+  <rect x="264" y="250" width="48" height="150" rx="8" fill="url(#bar3)" opacity="0.9"/>
+  <rect x="332" y="190" width="48" height="210" rx="8" fill="url(#bar1)" opacity="0.9"/>
+
+  <!-- Trend line overlay -->
+  <polyline points="152,260 220,200 288,230 356,170"
+    stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+    fill="none" opacity="0.8"/>
+  <!-- Trend line dots -->
+  <circle cx="152" cy="260" r="5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="220" cy="200" r="5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="288" cy="230" r="5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="356" cy="170" r="5" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Team icons (3 people silhouettes at top) -->
+  <!-- Center person -->
+  <circle cx="256" cy="108" r="16" fill="url(#accent)"/>
+  <path d="M232 148 C232 134 280 134 280 148" stroke="url(#accent)" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- Left person (smaller) -->
+  <circle cx="196" cy="116" r="12" fill="#ffffff" opacity="0.5"/>
+  <path d="M178 146 C178 136 214 136 214 146" stroke="#ffffff" stroke-opacity="0.5" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+  <!-- Right person (smaller) -->
+  <circle cx="316" cy="116" r="12" fill="#ffffff" opacity="0.5"/>
+  <path d="M298 146 C298 136 334 136 334 146" stroke="#ffffff" stroke-opacity="0.5" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

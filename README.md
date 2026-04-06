@@ -1,253 +1,198 @@
-# Claude Teams Management Dashboard
+<p align="center">
+  <img src="packages/web/public/logo.svg" alt="Claude Teams Manager" width="120" height="120" />
+</p>
 
-Dashboard quản lý tài khoản Claude Teams nội bộ. Tập trung quản lý phân bổ seat, theo dõi mức sử dụng, lịch trình, cảnh báo và thông báo qua Telegram.
+<h1 align="center">Claude Teams Manager</h1>
+
+<p align="center">
+  <strong>Dashboard nội bộ quản lý tài khoản Claude Teams — seats, theo dõi hoạt động, giám sát mức sử dụng & cảnh báo.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React 19" />
+  <img src="https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white" alt="Express 5" />
+  <img src="https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/MongoDB-Mongoose_9-47A248?logo=mongodb&logoColor=white" alt="MongoDB" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS v4" />
+  <img src="https://img.shields.io/badge/Firebase-Auth_+_FCM-FFCA28?logo=firebase&logoColor=black" alt="Firebase" />
+</p>
 
 > [English version (README.en.md)](./README.en.md)
+
+---
+
+## Tổng quan
+
+Claude Teams Manager là công cụ full-stack nội bộ giúp tập trung quản lý tài khoản Claude Teams. Cung cấp giám sát mức sử dụng realtime, theo dõi hoạt động seat tự động, cảnh báo per-user và thông báo đa kênh — tất cả đằng sau Google SSO với phân quyền theo vai trò.
+
+### Tính năng chính
+
+- **Quản lý Seat** — Tạo, phân công, theo dõi seat Claude Teams với OAuth credentials mã hóa per-owner (AES-256-GCM)
+- **Theo dõi hoạt động Seat** — Heatmap hoạt động realtime theo tuần, tự động phát hiện seat đang active qua usage snapshots mỗi 5 phút
+- **Giám sát mức sử dụng** — Chụp usage snapshots tự động 5 phút/lần, biểu đồ xu hướng, KPI delta ngày-qua-ngày, activity heatmap
+- **Cảnh báo thông minh** — Cấu hình ngưỡng per-user cho rate limit, extra credit, lỗi token với dedup 24h
+- **Push Notifications** — Firebase Cloud Messaging (web push) + feed thông báo trong app
+- **Tích hợp Telegram** — Nhắc nhở cá nhân theo giờ (bot mã hóa per-user) + tổng kết tuần (system bot)
+- **Dashboard Admin** — Phân tích toàn team, session metrics, điều khiển quản trị
+
+---
+
+## Công nghệ sử dụng
+
+### Frontend
+
+| Công nghệ | Mục đích |
+|:---|:---|
+| **React 19** | UI framework với concurrent features mới nhất |
+| **React Router v7** | Client-side routing (SPA) |
+| **TanStack React Query** | Quản lý server state & caching |
+| **Tailwind CSS v4** | Utility-first styling qua `@tailwindcss/vite` |
+| **shadcn/ui** (Radix UI) | UI components accessible, composable |
+| **Recharts 3** | Trực quan hóa dữ liệu & biểu đồ |
+| **Lucide** | Thư viện icon |
+| **Vite** | Build tool với HMR & API proxy |
+
+### Backend
+
+| Công nghệ | Mục đích |
+|:---|:---|
+| **Express 5** | HTTP framework (async error handling) |
+| **TypeScript (ESM)** | Codebase type-safe, ES modules xuyên suốt |
+| **MongoDB + Mongoose 9** | Document database với schema validation |
+| **node-cron** | Tác vụ định kỳ (thu thập usage, thông báo, refresh token) |
+| **tsx** | Dev server với watch mode & env file support |
+
+### Bảo mật & Xác thực
+
+| Công nghệ | Mục đích |
+|:---|:---|
+| **Firebase Admin SDK** | Xác minh Google ID token |
+| **JWT (httpOnly cookie)** | Session token stateless (hết hạn 24h) |
+| **AES-256-GCM** | Mã hóa at-rest cho OAuth credentials & Telegram tokens |
+| **Phân quyền theo vai trò** | Mô hình quyền Admin / Seat Owner / Member |
+| **Firebase Cloud Messaging** | Web push notifications mã hóa |
+
+### Hạ tầng
+
+| Công nghệ | Mục đích |
+|:---|:---|
+| **pnpm workspaces** | Monorepo với 3 packages (api, web, shared) |
+| **ESM everywhere** | Module system nhất quán xuyên suốt |
+| **Vitest** | Unit & integration testing |
+| **ESLint 9** | Chất lượng & nhất quán code |
+
+---
+
+## Kiến trúc
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    pnpm monorepo                    │
+├──────────────┬──────────────────┬───────────────────┤
+│  packages/   │  packages/       │  packages/        │
+│  web         │  api             │  shared           │
+│              │                  │                   │
+│  React 19    │  Express 5       │  TypeScript types │
+│  Vite        │  MongoDB         │  Permission logic │
+│  Tailwind v4 │  Firebase Admin  │                   │
+│  shadcn/ui   │  node-cron       │                   │
+│              │  AES-256-GCM     │                   │
+└──────┬───────┴────────┬─────────┴───────────────────┘
+       │    /api proxy  │
+       └────────────────┘
+              │
+    ┌─────────┴─────────┐
+    │     MongoDB       │
+    │  7 collections    │
+    └───────────────────┘
+```
+
+### Luồng xác thực
+
+1. Người dùng đăng nhập Google qua Firebase client SDK
+2. `POST /api/auth/google` xác minh token qua Firebase Admin → tự tạo user → cấp JWT cookie
+3. Các request tiếp theo xác thực qua httpOnly cookie hoặc Bearer token
+4. Hành động admin được kiểm soát bởi middleware; hành động seat-scoped kiểm tra quyền sở hữu
+
+---
 
 ## Bắt đầu nhanh
 
 ### Yêu cầu
+
 - Node.js 18+
 - pnpm 9+
-- MongoDB (local hoặc cloud)
-- Firebase project với service account JSON
-- (Tuỳ chọn) Telegram bot cho thông báo
+- MongoDB (local hoặc Atlas)
+- Firebase project với service account
 
 ### Cài đặt
 
-1. Clone repo và cài dependencies:
 ```bash
+# Cài dependencies
 pnpm install
-```
 
-2. Tạo file `.env.local` cho từng package:
-```bash
+# Cấu hình môi trường
 cp packages/api/.env.example packages/api/.env.local
 cp packages/web/.env.example packages/web/.env.local
-```
+# Sửa các file .env.local với credentials của bạn
 
-3. Điền các biến môi trường bắt buộc (xem phần Biến môi trường bên dưới).
-
-4. Khởi động server phát triển:
-```bash
+# Khởi động dev
 pnpm dev
 ```
 
-- Frontend: `http://localhost:5173`
-- API: `http://localhost:8386`
+| Dịch vụ | URL |
+|:---|:---|
+| Frontend | http://localhost:5173 |
+| API | http://localhost:8386 |
 
-## Lệnh
+### Các lệnh
 
-| Lệnh | Mục đích |
-|---------|---------|
-| `pnpm install` | Cài dependencies cho toàn bộ workspace |
-| `pnpm dev` | Chạy cả web + api song song (dev) |
-| `pnpm dev:web` | Chạy Vite dev server (port 5173) |
-| `pnpm dev:api` | Chạy Express API (port 8386) |
-| `pnpm build` | Build toàn bộ packages |
-| `pnpm build:staging` | Build cho staging |
-| `pnpm lint` | Chạy ESLint |
-| `pnpm test` | Chạy Vitest tests |
-| `pnpm test:coverage` | Chạy tests với coverage |
-
-## Công nghệ
-
-| Tầng | Công nghệ |
-|-------|-----------|
-| **Runtime** | Node.js 18+ |
-| **Package Manager** | pnpm workspaces (monorepo) |
-| **Backend** | Express 5, TypeScript (ESM), tsx |
-| **Database** | MongoDB (Mongoose 9) |
-| **Xác thực** | Firebase Admin SDK + JWT |
-| **Frontend** | React 19, React Router v7, Vite |
-| **State** | TanStack React Query |
-| **Styling** | Tailwind CSS v4 (`@tailwindcss/vite`) |
-| **UI Components** | shadcn/ui (Radix UI), Lucide icons |
-| **Charts** | Recharts 3 |
-| **Drag & Drop** | dnd-kit |
-| **Tác vụ định kỳ** | node-cron |
-| **Thông báo** | Telegram Bot API |
-| **Testing** | Vitest |
-| **Linting** | ESLint 9 |
-
-## Biến môi trường
-
-Mỗi package có `.env.local` riêng. Xem `.env.example` trong từng package.
-
-### API (`packages/api/.env.local`)
-- `JWT_SECRET` — Khoá ký JWT (tối thiểu 32 ký tự)
-- `MONGO_URI` — Chuỗi kết nối MongoDB
-- `FIREBASE_SERVICE_ACCOUNT_PATH` — Đường dẫn file JSON Firebase service account
-- `API_PORT` — Cổng API (mặc định: 8386)
-- `WEB_URL` — URL frontend (mặc định: http://localhost:5173)
-- `TELEGRAM_BOT_TOKEN` — Token bot Telegram cho thông báo
-- `TELEGRAM_CHAT_ID` — Chat ID Telegram cho cảnh báo
-- `TELEGRAM_TOPIC_ID` — Topic ID Telegram (tuỳ chọn)
-- `ANTHROPIC_BASE_URL` — URL Anthropic API (mặc định: https://api.anthropic.com)
-- `ANTHROPIC_ADMIN_KEY` — Admin key Anthropic
-- `ANTHROPIC_VERSION` — Phiên bản API Anthropic
-
-### Web (`packages/web/.env.local`)
-- `VITE_FIREBASE_API_KEY` — Firebase API key
-- `VITE_FIREBASE_AUTH_DOMAIN` — Firebase auth domain
-- `VITE_FIREBASE_PROJECT_ID` — Firebase project ID
-- `VITE_API_URL` — URL API backend (mặc định: http://localhost:8386)
-
-## Kiến trúc
-
-### Monorepo (pnpm workspaces)
-
-```
-packages/
-├── api/      — Express 5 + TypeScript backend (ESM)
-├── web/      — Vite + React 19 SPA
-└── shared/   — Shared TypeScript types
+```bash
+pnpm dev              # Chạy web + api song song
+pnpm build            # Build production
+pnpm build:staging    # Build staging
+pnpm lint             # ESLint
+pnpm test             # Chạy tests
+pnpm test:coverage    # Tests với coverage
 ```
 
-### Backend (`packages/api`)
-- **Xác thực**: Đăng nhập Google qua Firebase, JWT cookie (24h)
-- **API**: 8 file route REST endpoints
-- **Models**: 6 Mongoose collection (seats, users, usage_logs, schedules, alerts, teams)
-- **Services**: alert-service, telegram-service, usage-sync-service, anthropic-service
-- **Cron Jobs**: Thứ 6 lúc 15:00 & 17:00 (Asia/Saigon)
-- **Dev**: `tsx watch --env-file .env.local`
-
-### Frontend (`packages/web`)
-- React 19 SPA với React Router v7
-- 8 pages: dashboard, seats, teams, schedule, alerts, log-usage, admin, login
-- 20+ feature components + shadcn/ui components
-- 9 React Query hooks cho data fetching
-- Recharts cho biểu đồ, dnd-kit cho drag-and-drop
-- Vite proxy `/api` → Express backend
-
-### Cơ sở dữ liệu (MongoDB)
-```
-Collections:
-  - seats: Tài khoản Claude Teams (owner_id, oauth_credential)
-  - users: Thành viên, alert_settings, notification_settings
-  - usage_snapshots: Chụp mức sử dụng định kỳ
-  - schedules: Phân lịch theo khung giờ (ngày + start_hour/end_hour)
-  - alerts: Thông báo sử dụng cao & lỗi token
-  - teams: Định nghĩa đội nhóm
-  - active_sessions: Session đang chạy (tracking budget)
-```
+---
 
 ## Cấu trúc dự án
 
 ```
 ai-team-management/
 ├── packages/
-│   ├── api/                           # Express 5 backend
+│   ├── api/              # Express 5 backend
 │   │   ├── src/
-│   │   │   ├── index.ts               # App entry, CORS, cron jobs
-│   │   │   ├── config.ts              # Env config
-│   │   │   ├── db.ts                  # Mongoose connection
-│   │   │   ├── middleware.ts           # JWT auth, role checks
-│   │   │   ├── firebase-admin.ts      # Firebase Admin SDK
-│   │   │   ├── models/                # 8 Mongoose models
-│   │   │   ├── routes/                # 8 REST route files
-│   │   │   └── services/              # Business logic (5 services)
+│   │   │   ├── models/   # 7 Mongoose models
+│   │   │   ├── routes/   # 8+ REST endpoints
+│   │   │   ├── services/ # Business logic
+│   │   │   └── lib/      # Tiện ích mã hóa
 │   │   └── .env.example
-│   │
-│   ├── web/                           # Vite + React 19 SPA
+│   ├── web/              # React 19 SPA
 │   │   ├── src/
-│   │   │   ├── main.tsx               # Entry point
-│   │   │   ├── app.tsx                # Router + QueryClient
-│   │   │   ├── pages/                 # 8 page components
-│   │   │   ├── components/            # Feature + shadcn/ui components
-│   │   │   ├── hooks/                 # 9 React Query hooks
-│   │   │   └── lib/                   # api-client, firebase, theme, utils
-│   │   ├── vite.config.ts             # Vite + Tailwind + proxy config
+│   │   │   ├── pages/    # 8 page components
+│   │   │   ├── components/  # Feature + shadcn/ui
+│   │   │   ├── hooks/    # 10+ React Query hooks
+│   │   │   └── lib/      # API client, Firebase, utils
 │   │   └── .env.example
-│   │
-│   └── shared/                        # Shared TypeScript types
-│       └── types.ts
-│
-├── docs/                              # Documentation
-├── plans/                             # Implementation plans
-├── .env.example                       # Root env guide
-├── pnpm-workspace.yaml                # Workspace config
-├── package.json                       # Root scripts
-└── CLAUDE.md                          # Dev guidance
+│   └── shared/           # Shared types & permission logic
+├── docs/                 # Tài liệu kỹ thuật
+└── plans/                # Kế hoạch triển khai
 ```
 
-## Tính năng chính
-
-### Quản lý Seat
-Tạo, cập nhật và xoá seat Claude Teams. Phân công vào nhóm. Theo dõi dung lượng seat và người dùng hiện tại.
-
-### Ghi nhận mức sử dụng
-Người dùng ghi nhận phần trăm sử dụng hàng tuần (0-100%) cho tất cả model và chi tiết từng model. Lưu trữ theo người dùng theo tuần.
-
-### Lịch trình Theo Giờ
-Phân lịch khung giờ linh hoạt (start_hour → end_hour). Gán người dùng theo ngày + giờ. Phân bổ budget sử dụng. Ngăn trùng lịch trên cùng seat.
-
-### Cảnh báo Thời Gian Thực & Cài Đặt Per-User
-Mỗi người dùng cấu hình ngưỡng cảnh báo riêng (rate_limit_pct, extra_credit_pct). Theo dõi seats cụ thể (watched_seat_ids). Tự động cảnh báo sử dụng cao, lỗi token, vượt budget.
-
-### Thông báo Telegram Per-User
-- **Mỗi giờ**: Báo cáo cho người dùng nếu trùng lịch (personal bot, được mã hóa)
-- **Thứ 6 17:00**: Tổng kết tuần (system bot)
-
-### Quản lý Seat với Quyền Sở Hữu
-Tạo, cập nhật, xoá seat. Chủ seat quản lý chi tiết, admin quản lý toàn bộ (ngoại trừ xuất credential của seat người khác).
-
-### Xác thực & Phân Quyền
-Đăng nhập Google qua Firebase. JWT cookie (24h). Admin có tất cả quyền người dùng NGOẠI TRỪ xuất credential của seat người khác.
-
-## Tác vụ thường dùng
-
-### Chạy dev server
-```bash
-pnpm dev          # Cả web + api
-pnpm dev:web      # Chỉ frontend (port 5173)
-pnpm dev:api      # Chỉ backend (port 8386)
-```
-
-### Build
-```bash
-pnpm build            # Production
-pnpm build:staging    # Staging
-```
-
-### Test & Lint
-```bash
-pnpm test             # Run tests
-pnpm test:coverage    # Tests with coverage
-pnpm lint             # ESLint
-```
-
-## Xử lý sự cố
-
-| Vấn đề | Giải pháp |
-|-------|----------|
-| Không kết nối được MongoDB | Kiểm tra `MONGO_URI` trong `packages/api/.env.local` |
-| "Invalid Firebase token" | Kiểm tra `FIREBASE_SERVICE_ACCOUNT_PATH` trỏ đúng file JSON |
-| Đăng nhập Google thất bại | Kiểm tra cấu hình Firebase project và API keys |
-| Telegram không gửi | Kiểm tra `TELEGRAM_BOT_TOKEN` và `TELEGRAM_CHAT_ID` |
-| API không khởi động | Kiểm tra xung đột port 8386. Đặt `API_PORT` nếu cần |
-| Web không kết nối API | Kiểm tra `VITE_API_URL` trong `packages/web/.env.local` |
+---
 
 ## Tài liệu
 
-- **[Codebase Summary](./docs/codebase-summary.md)** — Tổng quan kỹ thuật chi tiết
-- **[Code Standards](./docs/code-standards.md)** — Quy ước đặt tên, mẫu thiết kế
-- **[Project Overview & PDR](./docs/project-overview-pdr.md)** — Tính năng, yêu cầu, lộ trình
-- **[System Architecture](./docs/system-architecture.md)** — Hạ tầng, luồng dữ liệu
+- [Codebase Summary](./docs/codebase-summary.md) — Tổng quan kỹ thuật
+- [Code Standards](./docs/code-standards.md) — Quy ước & patterns
+- [System Architecture](./docs/system-architecture.md) — Hạ tầng & luồng dữ liệu
+- [Project Overview](./docs/project-overview-pdr.md) — Tính năng & yêu cầu
 
-## Ghi chú phát triển
-
-- **Module system**: ESM (`"type": "module"`) cho cả API và Web
-- **TypeScript**: Strict mode, shared types qua `@repo/shared`
-- **Code Style**: 2 dấu cách, async/await, conventional commits
-- **Kích thước file**: Giữ dưới 200 LOC; tách nếu lớn hơn
-- **Xử lý lỗi**: Try-catch trong tất cả handler bất đồng bộ
-- **Bảo mật**: JWT trong httpOnly cookie; Firebase Admin SDK xác minh
+---
 
 ## Giấy phép
 
-Private
-
-## Hỗ trợ
-
-Nếu có vấn đề hoặc câu hỏi, liên hệ đội phát triển.
+[MIT](./LICENSE)

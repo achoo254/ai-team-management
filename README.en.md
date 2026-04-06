@@ -1,253 +1,198 @@
-# Claude Teams Management Dashboard
+<p align="center">
+  <img src="packages/web/public/logo.svg" alt="Claude Teams Manager" width="120" height="120" />
+</p>
 
-Internal dashboard for managing Claude Teams accounts. Centralizes seat allocation, usage tracking, scheduling, alerting, and Telegram notifications.
+<h1 align="center">Claude Teams Manager</h1>
 
-> [Phien ban tieng Viet (README.md)](./README.md)
+<p align="center">
+  <strong>Internal dashboard for managing Claude Teams accounts — seats, activity tracking, usage monitoring & alerts.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React 19" />
+  <img src="https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white" alt="Express 5" />
+  <img src="https://img.shields.io/badge/TypeScript-ESM-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/MongoDB-Mongoose_9-47A248?logo=mongodb&logoColor=white" alt="MongoDB" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS v4" />
+  <img src="https://img.shields.io/badge/Firebase-Auth_+_FCM-FFCA28?logo=firebase&logoColor=black" alt="Firebase" />
+</p>
+
+> [Phiên bản tiếng Việt (README.md)](./README.md)
+
+---
+
+## Overview
+
+Claude Teams Manager is a full-stack internal tool that centralizes the management of Claude Teams subscriptions. It provides real-time usage monitoring, automated seat activity tracking, per-user alerting, and multi-channel notifications — all behind Google SSO with role-based access.
+
+### Key Features
+
+- **Seat Management** — Create, assign, and track Claude Teams seats with per-owner encrypted OAuth credentials (AES-256-GCM)
+- **Seat Activity Tracking** — Real-time weekly activity heatmap, auto-detects active seats via 5-minute usage snapshots with delta intensity visualization
+- **Usage Monitoring** — Automated 5-minute usage snapshots, trend charts, day-over-day delta KPIs, and activity heatmaps
+- **Smart Alerts** — Per-user configurable thresholds for rate limits, extra credits, and token failures with 24h dedup
+- **Push Notifications** — Firebase Cloud Messaging (web push) + in-app notification feed
+- **Telegram Integration** — Personal hourly reminders (encrypted per-user bots) + weekly team summary (system bot)
+- **Admin Dashboard** — Team-wide analytics, session metrics, and administrative controls
+
+---
+
+## Tech Stack
+
+### Frontend
+
+| Technology | Purpose |
+|:---|:---|
+| **React 19** | UI framework with latest concurrent features |
+| **React Router v7** | Client-side routing (SPA) |
+| **TanStack React Query** | Server state management & caching |
+| **Tailwind CSS v4** | Utility-first styling via `@tailwindcss/vite` |
+| **shadcn/ui** (Radix UI) | Accessible, composable UI components |
+| **Recharts 3** | Data visualization & charts |
+| **Lucide** | Icon library |
+| **Vite** | Build tool with HMR & API proxy |
+
+### Backend
+
+| Technology | Purpose |
+|:---|:---|
+| **Express 5** | HTTP framework (async error handling) |
+| **TypeScript (ESM)** | Type-safe codebase, ES modules throughout |
+| **MongoDB + Mongoose 9** | Document database with schema validation |
+| **node-cron** | Scheduled jobs (usage collection, notifications, token refresh) |
+| **tsx** | Dev server with watch mode & env file support |
+
+### Security & Auth
+
+| Technology | Purpose |
+|:---|:---|
+| **Firebase Admin SDK** | Google ID token verification |
+| **JWT (httpOnly cookie)** | Stateless session tokens (24h expiry) |
+| **AES-256-GCM** | At-rest encryption for OAuth credentials & Telegram tokens |
+| **Role-based access** | Admin / Seat Owner / Member permission model |
+| **Firebase Cloud Messaging** | Encrypted web push notifications |
+
+### Infrastructure
+
+| Technology | Purpose |
+|:---|:---|
+| **pnpm workspaces** | Monorepo with 3 packages (api, web, shared) |
+| **ESM everywhere** | Consistent module system across all packages |
+| **Vitest** | Unit & integration testing |
+| **ESLint 9** | Code quality & consistency |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    pnpm monorepo                    │
+├──────────────┬──────────────────┬───────────────────┤
+│  packages/   │  packages/       │  packages/        │
+│  web         │  api             │  shared           │
+│              │                  │                   │
+│  React 19    │  Express 5       │  TypeScript types │
+│  Vite        │  MongoDB         │  Permission logic │
+│  Tailwind v4 │  Firebase Admin  │                   │
+│  shadcn/ui   │  node-cron       │                   │
+│              │  AES-256-GCM     │                   │
+└──────┬───────┴────────┬─────────┴───────────────────┘
+       │    /api proxy  │
+       └────────────────┘
+              │
+    ┌─────────┴─────────┐
+    │     MongoDB       │
+    │  7 collections    │
+    └───────────────────┘
+```
+
+### Auth Flow
+
+1. User signs in with Google via Firebase client SDK
+2. `POST /api/auth/google` verifies token via Firebase Admin → auto-provisions user → issues JWT cookie
+3. All subsequent requests authenticated via httpOnly cookie or Bearer token
+4. Admin actions gated by middleware; seat-scoped actions gated by ownership checks
+
+---
 
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js 18+
 - pnpm 9+
-- MongoDB (local or cloud)
-- Firebase project with service account JSON
-- (Optional) Telegram bot for notifications
+- MongoDB (local or Atlas)
+- Firebase project with service account
 
 ### Setup
 
-1. Clone the repository and install dependencies:
 ```bash
+# Install dependencies
 pnpm install
-```
 
-2. Create `.env.local` files for each package:
-```bash
+# Configure environment
 cp packages/api/.env.example packages/api/.env.local
 cp packages/web/.env.example packages/web/.env.local
-```
+# Edit .env.local files with your credentials
 
-3. Fill in the required environment variables (see Environment Variables section below).
-
-4. Start development servers:
-```bash
+# Start development
 pnpm dev
 ```
 
-- Frontend: `http://localhost:5173`
-- API: `http://localhost:8386`
+| Service | URL |
+|:---|:---|
+| Frontend | http://localhost:5173 |
+| API | http://localhost:8386 |
 
-## Commands
+### Commands
 
-| Command | Purpose |
-|---------|---------|
-| `pnpm install` | Install all workspace dependencies |
-| `pnpm dev` | Start both web + api in parallel (dev) |
-| `pnpm dev:web` | Start Vite dev server (port 5173) |
-| `pnpm dev:api` | Start Express API (port 8386) |
-| `pnpm build` | Build all packages |
-| `pnpm build:staging` | Build for staging |
-| `pnpm lint` | Run ESLint |
-| `pnpm test` | Run Vitest tests |
-| `pnpm test:coverage` | Run tests with coverage |
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Runtime** | Node.js 18+ |
-| **Package Manager** | pnpm workspaces (monorepo) |
-| **Backend** | Express 5, TypeScript (ESM), tsx |
-| **Database** | MongoDB (Mongoose 9) |
-| **Auth** | Firebase Admin SDK + JWT |
-| **Frontend** | React 19, React Router v7, Vite |
-| **State** | TanStack React Query |
-| **Styling** | Tailwind CSS v4 (`@tailwindcss/vite`) |
-| **UI Components** | shadcn/ui (Radix UI), Lucide icons |
-| **Charts** | Recharts 3 |
-| **Drag & Drop** | dnd-kit |
-| **Async Tasks** | node-cron |
-| **Notifications** | Telegram Bot API |
-| **Testing** | Vitest |
-| **Linting** | ESLint 9 |
-
-## Environment Variables
-
-Each package has its own `.env.local`. See `.env.example` in each package.
-
-### API (`packages/api/.env.local`)
-- `JWT_SECRET` — JWT signing key (min 32 characters)
-- `MONGO_URI` — MongoDB connection string
-- `FIREBASE_SERVICE_ACCOUNT_PATH` — Path to Firebase service account JSON file
-- `API_PORT` — API port (default: 8386)
-- `WEB_URL` — Frontend URL (default: http://localhost:5173)
-- `TELEGRAM_BOT_TOKEN` — Telegram bot token for notifications
-- `TELEGRAM_CHAT_ID` — Telegram chat ID for alerts
-- `TELEGRAM_TOPIC_ID` — Telegram topic ID (optional)
-- `ANTHROPIC_BASE_URL` — Anthropic API URL (default: https://api.anthropic.com)
-- `ANTHROPIC_ADMIN_KEY` — Anthropic admin key
-- `ANTHROPIC_VERSION` — Anthropic API version
-
-### Web (`packages/web/.env.local`)
-- `VITE_FIREBASE_API_KEY` — Firebase API key
-- `VITE_FIREBASE_AUTH_DOMAIN` — Firebase auth domain
-- `VITE_FIREBASE_PROJECT_ID` — Firebase project ID
-- `VITE_API_URL` — API backend URL (default: http://localhost:8386)
-
-## Architecture
-
-### Monorepo (pnpm workspaces)
-
-```
-packages/
-├── api/      — Express 5 + TypeScript backend (ESM)
-├── web/      — Vite + React 19 SPA
-└── shared/   — Shared TypeScript types
+```bash
+pnpm dev              # Start web + api in parallel
+pnpm build            # Production build
+pnpm build:staging    # Staging build
+pnpm lint             # ESLint
+pnpm test             # Run tests
+pnpm test:coverage    # Tests with coverage
 ```
 
-### Backend (`packages/api`)
-- **Auth**: Google sign-in via Firebase, JWT cookie (24h)
-- **API**: 8 route files with REST endpoints
-- **Models**: 6 Mongoose collections (seats, users, usage_logs, schedules, alerts, teams)
-- **Services**: alert-service, telegram-service, usage-sync-service, anthropic-service
-- **Cron Jobs**: Friday 15:00 & 17:00 Asia/Saigon
-- **Dev**: `tsx watch --env-file .env.local`
-
-### Frontend (`packages/web`)
-- React 19 SPA with React Router v7
-- 8 pages: dashboard, seats, teams, schedule, alerts, log-usage, admin, login
-- 20+ feature components + shadcn/ui components
-- 9 React Query hooks for data fetching
-- Recharts for charts, dnd-kit for drag-and-drop
-- Vite proxy `/api` → Express backend
-
-### Database (MongoDB)
-```
-Collections:
-  - seats: Claude Teams accounts with capacity (owner_id, oauth_credential)
-  - users: Team members with alert_settings, notification_settings
-  - usage_snapshots: Periodic usage snapshots
-  - schedules: Time-based assignments (day + start_hour/end_hour)
-  - alerts: High usage and token failure notifications
-  - teams: Team definitions with metadata
-  - active_sessions: Running sessions for budget tracking
-```
+---
 
 ## Project Structure
 
 ```
 ai-team-management/
 ├── packages/
-│   ├── api/                           # Express 5 backend
+│   ├── api/              # Express 5 backend
 │   │   ├── src/
-│   │   │   ├── index.ts               # App entry, CORS, cron jobs
-│   │   │   ├── config.ts              # Env config
-│   │   │   ├── db.ts                  # Mongoose connection
-│   │   │   ├── middleware.ts           # JWT auth, role checks
-│   │   │   ├── firebase-admin.ts      # Firebase Admin SDK
-│   │   │   ├── models/                # 8 Mongoose models
-│   │   │   ├── routes/                # 8 REST route files
-│   │   │   └── services/              # Business logic (5 services)
+│   │   │   ├── models/   # 7 Mongoose models
+│   │   │   ├── routes/   # 8+ REST endpoints
+│   │   │   ├── services/ # Business logic
+│   │   │   └── lib/      # Encryption utilities
 │   │   └── .env.example
-│   │
-│   ├── web/                           # Vite + React 19 SPA
+│   ├── web/              # React 19 SPA
 │   │   ├── src/
-│   │   │   ├── main.tsx               # Entry point
-│   │   │   ├── app.tsx                # Router + QueryClient
-│   │   │   ├── pages/                 # 8 page components
-│   │   │   ├── components/            # Feature + shadcn/ui components
-│   │   │   ├── hooks/                 # 9 React Query hooks
-│   │   │   └── lib/                   # api-client, firebase, theme, utils
-│   │   ├── vite.config.ts             # Vite + Tailwind + proxy config
+│   │   │   ├── pages/    # 8 page components
+│   │   │   ├── components/  # Feature + shadcn/ui
+│   │   │   ├── hooks/    # 10+ React Query hooks
+│   │   │   └── lib/      # API client, Firebase, utils
 │   │   └── .env.example
-│   │
-│   └── shared/                        # Shared TypeScript types
-│       └── types.ts
-│
-├── docs/                              # Documentation
-├── plans/                             # Implementation plans
-├── .env.example                       # Root env guide
-├── pnpm-workspace.yaml                # Workspace config
-├── package.json                       # Root scripts
-└── CLAUDE.md                          # Dev guidance
+│   └── shared/           # Shared types & permission logic
+├── docs/                 # Technical documentation
+└── plans/                # Implementation plans
 ```
 
-## Key Features
-
-### Seat Management
-Create, update, and delete Claude Teams seats. Assign to teams. Track seat capacity and current users.
-
-### Usage Logging
-Users log weekly usage percentage (0-100%) for all models and per-model breakdown. Stored per-user per-week with compound indexing.
-
-### Scheduling (Hourly)
-Define flexible hourly time slots (start_hour to end_hour). Assign users to day-of-week + hour ranges. Allocate usage budget per schedule. Prevents double-booking.
-
-### Real-time Alerts & Per-User Settings
-Each user configures own alert thresholds (rate_limit_pct, extra_credit_pct). Watch specific seats (watched_seat_ids). Auto-alert on high usage, token errors, budget overruns.
-
-### Seat Ownership & Management
-Create, edit, delete seats. Seat owner manages details; admin manages all (except credential export of others' seats). Track capacity and assigned users.
-
-### Telegram Notifications (Per-User)
-- **Every hour**: Report to user matching schedule (personal encrypted bot)
-- **Friday 17:00**: Weekly summary (system bot)
-
-### Authentication & Permissions
-Google sign-in via Firebase. JWT cookie (24h). Admin has all user permissions EXCEPT credential export of seats owned by others.
-
-## Common Tasks
-
-### Run dev servers
-```bash
-pnpm dev          # Both web + api
-pnpm dev:web      # Frontend only (port 5173)
-pnpm dev:api      # Backend only (port 8386)
-```
-
-### Build
-```bash
-pnpm build            # Production
-pnpm build:staging    # Staging
-```
-
-### Test & Lint
-```bash
-pnpm test             # Run tests
-pnpm test:coverage    # Tests with coverage
-pnpm lint             # ESLint
-```
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Cannot connect to MongoDB | Check `MONGO_URI` in `packages/api/.env.local` |
-| "Invalid Firebase token" | Verify `FIREBASE_SERVICE_ACCOUNT_PATH` points to correct JSON file |
-| Google sign-in fails | Check Firebase project configuration and API keys |
-| Telegram notifications not sent | Verify `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are set |
-| API won't start | Check for port conflicts on 8386. Set `API_PORT` env var if needed |
-| Web can't reach API | Check `VITE_API_URL` in `packages/web/.env.local` |
+---
 
 ## Documentation
 
-- **[Codebase Summary](./docs/codebase-summary.md)** — Technical deep dive with all API endpoints
-- **[Code Standards](./docs/code-standards.md)** — Naming conventions, patterns, best practices
-- **[Project Overview & PDR](./docs/project-overview-pdr.md)** — Features, requirements, roadmap
-- **[System Architecture](./docs/system-architecture.md)** — Infrastructure, data flow, components
+- [Codebase Summary](./docs/codebase-summary.md) — Technical overview
+- [Code Standards](./docs/code-standards.md) — Conventions & patterns
+- [System Architecture](./docs/system-architecture.md) — Infrastructure & data flow
+- [Project Overview](./docs/project-overview-pdr.md) — Features & requirements
 
-## Development Notes
-
-- **Module system**: ESM (`"type": "module"`) for both API and Web
-- **TypeScript**: Strict mode, shared types via `@repo/shared`
-- **Code Style**: 2-space indentation, async/await, conventional commits
-- **File Size**: Keep under 200 LOC; consider splitting if larger
-- **Error Handling**: Try-catch in all async handlers
-- **Security**: JWT in httpOnly cookie; Firebase Admin SDK for verification
+---
 
 ## License
 
-Private
-
-## Support
-
-For issues or questions, contact the development team.
+[MIT](./LICENSE)
