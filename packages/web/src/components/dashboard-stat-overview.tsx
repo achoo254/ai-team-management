@@ -1,4 +1,4 @@
-import { Monitor, Users, Zap, TrendingUp, AlertTriangle, Calendar } from "lucide-react";
+import { Monitor, Users, Zap, TrendingUp, AlertTriangle, Activity } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -153,11 +153,11 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
         accent={data?.unreadAlerts ? "bg-error-surface text-error-text" : "bg-muted text-muted-foreground"}
       />
       <MiniStat
-        label="Lịch hôm nay"
-        value={data?.todaySchedules?.length ?? 0}
-        sub="slots đã đặt"
-        icon={Calendar}
-        accent="bg-info-surface text-info-text"
+        label="Hoạt động hôm nay"
+        value={data?.todayActiveSeats ?? 0}
+        sub={`${data?.todayActiveSeats ?? 0}/${data?.totalSeats ?? 0} seats`}
+        icon={Activity}
+        accent={data?.todayActiveSeats ? "bg-success-surface text-success-text" : "bg-muted text-muted-foreground"}
       />
       </div>
     </div>

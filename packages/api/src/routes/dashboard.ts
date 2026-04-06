@@ -6,6 +6,7 @@ import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Alert } from '../models/alert.js'
 import { Schedule } from '../models/schedule.js'
+import { SeatActivityLog } from '../models/seat-activity-log.js'
 import { UsageWindow } from '../models/usage-window.js'
 import { computeAllSeatForecasts } from '../services/quota-forecast-service.js'
 
@@ -105,7 +106,6 @@ router.get('/enhanced', async (req, res) => {
       : querySeatIds
     const seatMatch = effectiveIds ? { _id: { $in: effectiveIds } } : {}
     const seatIdMatch = effectiveIds ? { seat_id: { $in: effectiveIds } } : {}
-    const dayOfWeek = new Date().getDay()
 
     // User/seat counts (scoped for non-admin)
     const seatCountFilter = effectiveIds ? { _id: { $in: effectiveIds } } : {}
@@ -117,21 +117,13 @@ router.get('/enhanced', async (req, res) => {
       Alert.countDocuments({ read_by: { $ne: req.user!._id }, ...seatIdMatch }),
     ])
 
-    // Today's schedules (scoped)
-    const scheduleFilter = effectiveIds
-      ? { day_of_week: dayOfWeek, seat_id: { $in: effectiveIds } }
-      : { day_of_week: dayOfWeek }
-    const schedules = await Schedule.find(scheduleFilter)
-      .populate('seat_id', 'label')
-      .sort({ seat_id: 1, start_hour: 1 })
-      .lean()
-
-    const todaySchedules = schedules.map((sc) => ({
-      start_hour: sc.start_hour,
-      end_hour: sc.end_hour,
-      source: sc.source,
-      seat_label: (sc.seat_id as { label?: string } | null)?.label,
-    }))
+    // Today's active seats count (from activity logs)
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const activityFilter = effectiveIds
+      ? { date: todayStart, is_active: true, seat_id: { $in: effectiveIds } }
+      : { date: todayStart, is_active: true }
+    const todayActiveSeats = await SeatActivityLog.distinct('seat_id', activityFilter).then(ids => ids.length)
 
     // Seats with unread usage_exceeded alerts (for OVER BUDGET badge)
     const budgetAlerts = await Alert.find(
@@ -282,7 +274,7 @@ router.get('/enhanced', async (req, res) => {
       unreadAlerts,
       tokenIssueCount,
       fullSeatCount,
-      todaySchedules,
+      todayActiveSeats,
       usagePerSeat,
       usageTrend,
       overBudgetSeats,

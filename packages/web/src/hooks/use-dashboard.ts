@@ -35,15 +35,6 @@ export interface UsageTrendPoint {
   avg_5h_pct: number;
 }
 
-// Today schedule entry
-export interface TodayScheduleItem {
-  start_hour: number;
-  end_hour: number;
-  usage_budget_pct: number | null;
-  name: string;
-  seat_label: string;
-}
-
 // Over-budget seat indicator
 export interface OverBudgetSeat {
   seat_id: string;
@@ -59,7 +50,7 @@ export interface EnhancedDashboardData {
   unreadAlerts: number;
   tokenIssueCount: number;
   fullSeatCount: number;
-  todaySchedules: TodayScheduleItem[];
+  todayActiveSeats: number;
   usagePerSeat: SeatUsageItem[];
   usageTrend: UsageTrendPoint[];
   overBudgetSeats: OverBudgetSeat[];
