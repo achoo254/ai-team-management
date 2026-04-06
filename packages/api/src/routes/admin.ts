@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticate, requireAdmin } from '../middleware.js'
 import { User } from '../models/user.js'
 import { checkSnapshotAlerts } from '../services/alert-service.js'
+import { logAudit } from '../models/audit-log.js'
 
 const router = Router()
 
@@ -68,6 +69,9 @@ router.put('/users/:id', async (req, res) => {
       return
     }
 
+    // Capture old role before update for audit trail
+    const oldUser = role !== undefined ? await User.findById(id, 'role email').lean() : null
+
     const update: Record<string, unknown> = {}
     if (name !== undefined) update.name = name
     if (email !== undefined) update.email = email
@@ -80,6 +84,12 @@ router.put('/users/:id', async (req, res) => {
       res.status(404).json({ error: 'User not found' })
       return
     }
+
+    // Audit role changes
+    if (role !== undefined && oldUser && oldUser.role !== role) {
+      logAudit('role_change', req.user!, { type: 'user', id }, { target_email: oldUser.email, old_role: oldUser.role, new_role: role }, req.ip)
+    }
+
     res.json(updated)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'

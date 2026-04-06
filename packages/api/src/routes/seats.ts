@@ -8,6 +8,8 @@ import { parseCredentialJson, type ParsedCredential } from '@repo/shared/credent
 import { fetchOAuthProfile, OAuthProfileError, toProfileCache, type OAuthProfile } from '../services/anthropic-service.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { cascadeHardDelete } from '../services/seat-cascade-delete.js'
+import { sendToUser } from '../services/telegram-service.js'
+import { logAudit } from '../models/audit-log.js'
 
 const router = Router()
 
@@ -125,13 +127,13 @@ router.get('/available-users', authenticate, async (_req, res) => {
 // GET /api/seats/:id/credentials/export — export single seat credential (owner only)
 router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requireSeatOwner(), async (req, res) => {
   try {
-    console.log(`[AUDIT] Single credential export seat=${req.params.id} by user=${req.user!.email} ip=${req.ip} at ${new Date().toISOString()}`)
-
     const seat = await Seat.findById(req.params.id).select('+oauth_credential').lean()
     if (!seat?.oauth_credential?.access_token) {
       res.status(404).json({ error: 'No credential found' })
       return
     }
+
+    logAudit('credential_export', req.user!, { type: 'seat', id: req.params.id }, { seat_label: seat.label }, req.ip)
 
     const cred = seat.oauth_credential
     res.json({
@@ -535,6 +537,7 @@ router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAd
     seat.token_active = false
     await seat.save()
 
+    logAudit('seat_delete', req.user!, { type: 'seat', id }, { seat_label: seat.label, delete_type: 'soft' }, req.ip)
     res.json({ message: 'Seat deleted' })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -658,6 +661,7 @@ router.put('/:id/token', authenticate, validateObjectId('id'), requireSeatOwnerO
       await Seat.findByIdAndUpdate(id, { profile: toProfileCache(oauthProfile) })
     } catch { /* profile will be fetched lazily */ }
 
+    logAudit('token_update', req.user!, { type: 'seat', id }, { seat_label: seat.label, has_credential: true }, req.ip)
     res.json({ message: 'Credential updated', seat })
   } catch (error) {
     if (error instanceof SyntaxError) {
@@ -683,6 +687,7 @@ router.delete('/:id/token', authenticate, validateObjectId('id'), requireSeatOwn
       return
     }
 
+    logAudit('token_delete', req.user!, { type: 'seat', id }, { seat_label: seat.label }, req.ip)
     res.json({ message: 'Token removed', seat })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
@@ -699,11 +704,25 @@ router.put('/:id/transfer', authenticate, requireAdmin, validateObjectId('id'), 
       return
     }
 
+    // Block admin from transferring seat to themselves (privilege escalation: would grant credential export)
+    if (new_owner_id === req.user!._id) {
+      res.status(403).json({ error: 'Cannot transfer seat ownership to yourself' })
+      return
+    }
+
     const newOwner = await User.findById(new_owner_id)
     if (!newOwner) {
       res.status(404).json({ error: 'New owner not found' })
       return
     }
+
+    // Capture old owner before transfer for notification
+    const seatBefore = await Seat.findById(req.params.id, 'owner_id label').lean()
+    if (!seatBefore) {
+      res.status(404).json({ error: 'Seat not found' })
+      return
+    }
+    const oldOwnerId = seatBefore.owner_id ? String(seatBefore.owner_id) : null
 
     const seat = await Seat.findByIdAndUpdate(
       req.params.id,
@@ -725,6 +744,19 @@ router.put('/:id/transfer', authenticate, requireAdmin, validateObjectId('id'), 
       })
     }
 
+    // Notify old owner about ownership transfer
+    if (oldOwnerId && oldOwnerId !== new_owner_id) {
+      const label = seatBefore.label ?? req.params.id
+      const msg = `🔄 <b>Ownership Transferred</b>\n`
+        + `Seat: <b>${label}</b>\n`
+        + `New owner: ${newOwner.name ?? newOwner.email}\n`
+        + `By: ${req.user!.name ?? req.user!.email}`
+      sendToUser(oldOwnerId, msg).catch((err) =>
+        console.error('[Transfer] Failed to notify old owner:', err),
+      )
+    }
+
+    logAudit('seat_transfer', req.user!, { type: 'seat', id: req.params.id }, { seat_label: seatBefore.label, from_owner_id: oldOwnerId, to_owner_id: new_owner_id }, req.ip)
     res.json({ message: 'Ownership transferred', seat })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
