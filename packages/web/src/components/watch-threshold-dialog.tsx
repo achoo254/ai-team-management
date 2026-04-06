@@ -20,9 +20,9 @@ interface Props {
   };
 }
 
-function clamp(n: number): number {
-  if (!Number.isFinite(n)) return 90;
-  return Math.max(1, Math.min(100, Math.floor(n)));
+function clamp(n: number, min = 1, max = 100, fallback = 90): number {
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
 }
 
 export function WatchThresholdDialog({ open, onOpenChange, seatId, seatLabel, current }: Props) {
@@ -51,11 +51,11 @@ export function WatchThresholdDialog({ open, onOpenChange, seatId, seatLabel, cu
 
   async function handleSave() {
     const body = {
-      threshold_5h_pct: clamp(th5h),
-      threshold_7d_pct: clamp(th7d),
-      burn_rate_threshold: burnRate,
-      eta_warning_hours: burnRate !== null ? etaWarning : null,
-      forecast_warning_hours: forecastWarning,
+      threshold_5h_pct: Math.floor(clamp(th5h)),
+      threshold_7d_pct: Math.floor(clamp(th7d)),
+      burn_rate_threshold: burnRate !== null ? Math.floor(clamp(burnRate, 5, 50, 15)) : null,
+      eta_warning_hours: burnRate !== null ? clamp(etaWarning ?? 1.5, 0.5, 4, 1.5) : null,
+      forecast_warning_hours: forecastWarning !== null ? Math.floor(clamp(forecastWarning, 6, 168, 48)) : null,
     };
     try {
       if (isEditing) {
