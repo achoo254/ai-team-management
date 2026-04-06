@@ -95,7 +95,7 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
         <div className="space-y-1.5 pt-2 border-t border-border/50">
           <UsageBar label="7d hiện" pct={Math.round(pct)} />
           <p className="text-[11px] text-muted-foreground">
-            Slope: {Number(slope).toFixed(1)}%/h
+            Tốc độ tăng: {Number(slope).toFixed(1)}%/h
             {hToThreshold != null && <> &middot; Chạm ngưỡng trong ~{Number(hToThreshold) < 24 ? `${Math.round(Number(hToThreshold))}h` : `${(Number(hToThreshold) / 24).toFixed(1)} ngày`}</>}
           </p>
           {hToReset != null && (
@@ -116,7 +116,7 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
         <div className="space-y-1.5 pt-2 border-t border-border/50">
           <UsageBar label="5h hiện" pct={Math.round(pct)} />
           <p className="text-[11px] text-muted-foreground">
-            Burn rate: {Math.round(Number(velocity))}%/h
+            Tiêu hao: {Math.round(Number(velocity))}%/h
             {etaStr && <> &middot; Còn ~{etaStr}</>}
           </p>
           {m.resets_at && (

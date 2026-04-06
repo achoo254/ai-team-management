@@ -48,7 +48,7 @@ export async function checkFastBurnAlerts(
       // Combined trigger: velocity high AND ETA short
       if (velocity >= burnThreshold && etaHours <= etaThreshold) {
         const etaStr = etaHours < 1 ? `${Math.round(etaHours * 60)} phút` : `${etaHours.toFixed(1)}h`
-        const msg = `⚡ Seat ${label}: cháy ${velocity.toFixed(0)}%/h, còn ~${etaStr} đến hết quota 5h (hiện ${fiveHourPct.toFixed(0)}%)`
+        const msg = `⚡ Seat ${label}: tiêu hao ${velocity.toFixed(0)}%/h, còn ~${etaStr} đến hết quota 5h (hiện ${fiveHourPct.toFixed(0)}%)`
         const metadata = {
           window: '5h' as const,
           pct: fiveHourPct,
@@ -109,7 +109,7 @@ export async function checkQuotaForecastAlerts(
         const etaStr = hoursToThreshold < 24
           ? `${Math.round(hoursToThreshold)}h`
           : `${(hoursToThreshold / 24).toFixed(1)} ngày`
-        const msg = `📊 Seat ${label}: dự đoán chạm ${userThreshold}% trong ~${etaStr} (hiện ${forecast.current_pct.toFixed(0)}%, slope ${forecast.slope_per_hour.toFixed(1)}%/h). Reset sau ${(hoursToReset / 24).toFixed(1)} ngày.`
+        const msg = `📊 Seat ${label}: dự đoán chạm ${userThreshold}% trong ~${etaStr} (hiện ${forecast.current_pct.toFixed(0)}%, tăng ${forecast.slope_per_hour.toFixed(1)}%/h). Reset sau ${(hoursToReset / 24).toFixed(1)} ngày.`
         const metadata = {
           window: '7d' as const,
           pct: forecast.current_pct,

@@ -114,7 +114,7 @@ export function QuotaForecastBar(props: SevenDayProps | FiveHourProps) {
       <p className="text-xs text-muted-foreground">
         <b className="text-foreground tabular-nums">{Math.round(d.current_pct)}%</b>
         {d.slope_per_hour > 0 && (
-          <> · pace +{d.slope_per_hour.toFixed(1)}%/h</>
+          <> · tăng +{d.slope_per_hour.toFixed(1)}%/h</>
         )}
         {d.status === "collecting" && <> · {emoji} {STATUS_LABEL[d.status]}</>}
         {d.status === "safe_decreasing" && <> · {emoji} {STATUS_LABEL[d.status]}</>}

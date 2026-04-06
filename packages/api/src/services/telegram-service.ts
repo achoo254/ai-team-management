@@ -307,7 +307,7 @@ export async function sendAlertToUser(
         : null
       msg = `📈 <b>Quota Forecast Warning</b>\n`
         + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Hiện: ${esc(String(metadata.pct ?? ''))}% | Slope: ${esc(slope)}%/h\n`
+        + `Hiện: ${esc(String(metadata.pct ?? ''))}% | Tăng: ${esc(slope)}%/h\n`
         + `Dự kiến chạm 100% trong ~${esc(daysFmt)} ngày`
         + (resetsIn ? `\nReset sau ${esc(resetsIn)} ngày` : '')
       break
@@ -317,7 +317,7 @@ export async function sendAlertToUser(
       const mins = metadata.minutes_to_full ?? (metadata.eta_hours != null ? Math.round(Number(metadata.eta_hours) * 60) : null)
       msg = `⚡ <b>Fast Burn Alert</b>\n`
         + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Burn rate: ${esc(String(rate ?? ''))}%/h\n`
+        + `Tiêu hao: ${esc(String(rate ?? ''))}%/h\n`
         + `Hiện: ${esc(String(metadata.pct ?? ''))}%`
         + (mins != null ? ` | Còn ~${esc(String(mins))} phút` : '')
       break
