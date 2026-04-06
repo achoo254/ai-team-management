@@ -33,7 +33,7 @@ function MiniStat({ label, value, sub, icon: Icon, accent }: MiniStatProps) {
           <div className="min-w-0">
             <p className="text-xs font-medium text-muted-foreground truncate">{label}</p>
             <p className="text-2xl font-bold tracking-tight mt-0.5">{value}</p>
-            {sub && <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sub}</p>}
+            {sub && <p className="text-[11px] text-muted-foreground mt-0.5 truncate" title={sub}>{sub}</p>}
           </div>
           <div className={`shrink-0 rounded-lg p-2 ${accent}`}>
             <Icon className="h-4 w-4" />

@@ -147,6 +147,7 @@ export interface EfficiencyCoverage {
   seats_with_data: number;
   seats_total: number;
   missing_seat_ids: string[];
+  missing_seat_labels: string[];
 }
 
 export interface EfficiencyPerUser {
@@ -226,6 +227,7 @@ export function useDashboardEnhanced(range: DashboardRange = "month", seatIds?: 
     queryKey: ["dashboard", "enhanced", range, key],
     queryFn: () =>
       fetchJson<EnhancedDashboardData>(`/api/dashboard/enhanced?${qs}`),
+    refetchInterval: 5 * 60_000, // sync with usage collector cron (5 min)
   });
 }
 

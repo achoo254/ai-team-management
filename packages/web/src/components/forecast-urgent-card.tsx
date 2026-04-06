@@ -54,6 +54,7 @@ export function ForecastUrgentCard({ forecasts }: Props) {
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
           Seats sắp cạn quota ({forecasts.length})
         </CardTitle>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Dự báo dựa trên tốc độ dùng hiện tại — không phụ thuộc bộ lọc thời gian</p>
       </CardHeader>
       <CardContent className="space-y-2">
         {forecasts.map((item) => (

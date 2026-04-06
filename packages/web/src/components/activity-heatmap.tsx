@@ -148,27 +148,49 @@ function HeatmapCellEl({ cell, delta, isActive, isNow, isWeekend, isFuture }: {
   return (
     <Tooltip>
       <TooltipTrigger>{cellDiv}</TooltipTrigger>
-      <TooltipContent side="top" className="!bg-card !text-card-foreground border border-border shadow-lg p-0 overflow-hidden w-40">
-        <div className="px-2.5 py-2 text-xs space-y-1">
-          {isNow && !isActive && (
-            <p className="text-[11px] text-muted-foreground">Hiện tại</p>
-          )}
+      <TooltipContent side="top" className="!bg-card !text-card-foreground border border-border shadow-xl p-0 overflow-hidden min-w-[200px]">
+        {/* Header with day + time range */}
+        <div className="px-3 py-1.5 border-b border-border/50 bg-muted/30">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] font-semibold text-foreground">
+              {ALL_DAYS.find((d) => d.day === cell?.day_of_week)?.label ?? ""} · {String(cell?.hour ?? 0).padStart(2, "0")}:00–{String((cell?.hour ?? 0) + 1).padStart(2, "0")}:00
+            </span>
+            {isNow && (
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">now</span>
+            )}
+          </div>
+        </div>
+        <div className="px-3 py-2 space-y-1.5 text-xs">
           {isActive ? (
             <>
+              {/* Activity intensity badge */}
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`inline-block h-2 w-2 rounded-full ${deltaColor(delta, true)}`} />
+                <span className="font-medium text-foreground">{deltaLabel(delta)}</span>
+              </div>
+              {/* Delta avg */}
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{deltaLabel(delta)}</span>
+                <span className="text-muted-foreground">TB biến động 5h</span>
                 <span className="font-semibold tabular-nums text-foreground">{delta.toFixed(1)}%</span>
               </div>
-              {cell && cell.max_delta > delta && (
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>Cao nhất</span>
+              {/* Delta max */}
+              {cell && cell.max_delta > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Cao nhất</span>
                   <span className="tabular-nums text-foreground/80">{cell.max_delta.toFixed(1)}%</span>
+                </div>
+              )}
+              {/* Activity rate */}
+              {cell && (
+                <div className="flex items-center justify-between border-t border-border/40 pt-1.5 mt-1">
+                  <span className="text-muted-foreground">Tần suất hoạt động</span>
+                  <span className="tabular-nums font-medium text-foreground">{Math.round(cell.activity_rate * 100)}%</span>
                 </div>
               )}
             </>
           ) : (
-            <p className="text-[11px] text-muted-foreground">
-              {isFuture ? "Chưa đến" : "Không hoạt động"}
+            <p className="text-[11px] text-muted-foreground py-0.5">
+              {isFuture ? "Chưa đến giờ này" : "Không ghi nhận hoạt động"}
             </p>
           )}
         </div>
@@ -179,16 +201,16 @@ function HeatmapCellEl({ cell, delta, isActive, isNow, isWeekend, isFuture }: {
 
 function HeatmapLegend() {
   const levels = [
-    { label: "Không", color: "bg-muted/30" },
-    { label: "Nhẹ", color: "bg-emerald-200/60 dark:bg-emerald-900/40" },
-    { label: "TB", color: "bg-emerald-300/70 dark:bg-emerald-700/50" },
-    { label: "Cao", color: "bg-emerald-400/70 dark:bg-emerald-600/60" },
-    { label: "Rất cao", color: "bg-emerald-600/80 dark:bg-emerald-500/70" },
+    { label: "Không (0%)", color: "bg-muted/30" },
+    { label: "Nhẹ (≤2%)", color: "bg-emerald-200/60 dark:bg-emerald-900/40" },
+    { label: "TB (2–5%)", color: "bg-emerald-300/70 dark:bg-emerald-700/50" },
+    { label: "Cao (5–10%)", color: "bg-emerald-400/70 dark:bg-emerald-600/60" },
+    { label: "Rất cao (>10%)", color: "bg-emerald-600/80 dark:bg-emerald-500/70" },
   ];
 
   return (
     <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground flex-wrap">
-      <span>Mức sử dụng:</span>
+      <span>Biến động 5h / 5 phút:</span>
       {levels.map((l) => (
         <div key={l.label} className="flex items-center gap-1">
           <div className={`w-3 h-3 rounded-sm ${l.color} border border-border`} />

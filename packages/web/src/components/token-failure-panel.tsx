@@ -51,6 +51,7 @@ export function TokenFailurePanel({ failures }: Props) {
           <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
           Token thất bại ({failures.length} seat{failures.length > 1 ? "s" : ""})
         </CardTitle>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Lỗi OAuth hiện tại — không phụ thuộc bộ lọc thời gian</p>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

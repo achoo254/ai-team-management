@@ -104,7 +104,7 @@ export function DashboardPersonalContext() {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Của bạn hôm nay</CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Lịch, seat và hiệu quả sử dụng cá nhân
+          Lịch, seat và hiệu quả sử dụng cá nhân — <span className="font-medium">chỉ hiển thị dữ liệu hôm nay</span>
         </p>
       </CardHeader>
       <CardContent>

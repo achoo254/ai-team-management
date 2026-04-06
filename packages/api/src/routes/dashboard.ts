@@ -515,11 +515,17 @@ router.get('/efficiency', async (req, res) => {
     const missingIds = effectiveIds
       ? effectiveIds.filter(id => !seatsWithDataStr.has(String(id))).map(String)
       : []
+    // Resolve missing seat labels for UI display
+    const missingSeats = missingIds.length > 0
+      ? await Seat.find({ _id: { $in: missingIds } }, 'label').lean()
+      : []
+    const missingSeatLabels = missingSeats.map(s => s.label)
     const coverage = {
       has_data: seatsWithData.length > 0,
       seats_with_data: seatsWithData.length,
       seats_total: totalSeatsInScope,
       missing_seat_ids: missingIds,
+      missing_seat_labels: missingSeatLabels,
     }
 
     // 7. Quota forecast (7d linear regression across in-scope seats)
