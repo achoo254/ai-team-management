@@ -1,55 +1,40 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePersonalDashboard, type MyScheduleItem, type MySeatItem } from "@/hooks/use-dashboard.js";
+import { usePersonalDashboard, type MyActivityItem, type MySeatItem } from "@/hooks/use-dashboard.js";
 
 // Format hour as HH:00 string
 function fmtHour(h: number): string {
   return `${String(h).padStart(2, "0")}:00`;
 }
 
-// Determine if a schedule slot is current, upcoming (next), or past
-function slotStatus(startHour: number, endHour: number): "current" | "next" | "past" | "future" {
-  const now = new Date();
-  const currentHour = now.getHours();
-  if (currentHour >= startHour && currentHour < endHour) return "current";
-  if (startHour === currentHour + 1 || (currentHour < startHour && startHour <= currentHour + 2)) return "next";
-  if (startHour < currentHour) return "past";
-  return "future";
-}
-
-function ScheduleList({ items }: { items: MyScheduleItem[] }) {
+function ActivityList({ items }: { items: MyActivityItem[] }) {
   if (!items.length) {
-    return <p className="text-sm text-muted-foreground">Hôm nay không có lịch</p>;
+    return <p className="text-sm text-muted-foreground">Chưa có hoạt động hôm nay</p>;
   }
+
+  const currentHour = new Date().getHours();
 
   return (
     <ul className="space-y-1.5">
       {items.map((item, i) => {
-        const status = slotStatus(item.start_hour, item.end_hour);
+        const isPast = item.hour < currentHour;
         return (
           <li key={i} className="flex items-center gap-2 text-sm">
-            <span className={`text-xs font-mono shrink-0 ${status === "past" ? "text-muted-foreground" : ""}`}>
-              {fmtHour(item.start_hour)}–{fmtHour(item.end_hour)}
+            <span className={`text-xs font-mono shrink-0 ${isPast ? "text-muted-foreground" : ""}`}>
+              {fmtHour(item.hour)}
             </span>
-            <span className={`truncate ${status === "past" ? "text-muted-foreground line-through" : ""}`}>
+            <span className={`truncate ${isPast ? "text-muted-foreground" : ""}`}>
               {item.seat_label}
             </span>
-            {status === "current" && (
+            {item.hour === currentHour && (
               <Badge className="text-[10px] px-1 py-0 h-4 shrink-0 bg-success-surface text-success-text border-0">
                 Đang chạy
               </Badge>
             )}
-            {status === "next" && (
-              <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">
-                Tiếp theo
-              </Badge>
-            )}
-            {item.usage_budget_pct !== null && (
-              <span className="text-[10px] text-muted-foreground shrink-0">
-                {item.usage_budget_pct}%
-              </span>
-            )}
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              +{item.delta_5h_pct.toFixed(1)}%
+            </span>
           </li>
         );
       })}
@@ -104,17 +89,17 @@ export function DashboardPersonalContext() {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Của bạn hôm nay</CardTitle>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Lịch, seat và hiệu quả sử dụng cá nhân — <span className="font-medium">chỉ hiển thị dữ liệu hôm nay</span>
+          Hoạt động, seat và hiệu quả sử dụng cá nhân — <span className="font-medium">chỉ hiển thị dữ liệu hôm nay</span>
         </p>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 sm:grid-cols-3">
-          {/* My Schedule Today */}
+          {/* My Activity Today */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Lịch hôm nay
+              Hoạt động hôm nay
             </p>
-            <ScheduleList items={data?.mySchedulesToday ?? []} />
+            <ActivityList items={data?.myActivityToday ?? []} />
           </div>
 
           {/* My Seats */}

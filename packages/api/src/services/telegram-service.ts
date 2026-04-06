@@ -297,16 +297,6 @@ export async function sendAlertToUser(
         + `Dự kiến: ${esc(String(metadata.projected ?? ''))}% (còn ${esc(String(metadata.remaining_sessions ?? ''))} sessions)\n`
         + `→ Cần giảm tải hoặc chuyển sang seat khác`
       break
-    case 'unexpected_activity':
-      msg = `🟡 <b>Hoạt động ngoài dự kiến</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Seat đang hoạt động ngoài giờ dự kiến`
-      break
-    case 'unexpected_idle':
-      msg = `🟡 <b>Rảnh ngoài dự kiến</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Seat không hoạt động trong giờ dự kiến`
-      break
   }
 
   const token = decrypt(user.telegram_bot_token)

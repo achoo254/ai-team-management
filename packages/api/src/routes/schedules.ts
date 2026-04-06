@@ -1,12 +1,10 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
 import { authenticate, requireAdmin } from '../middleware.js'
-import { Schedule } from '../models/schedule.js'
 import { SeatActivityLog } from '../models/seat-activity-log.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Seat } from '../models/seat.js'
 import { User } from '../models/user.js'
-import { generateAllPatterns } from '../services/activity-pattern-service.js'
 
 const router = Router()
 
@@ -19,70 +17,6 @@ async function getAllowedSeatIds(userId: string, role: string): Promise<string[]
   const ownedSeatIds = ownedSeats.map(s => String(s._id))
   return [...new Set([...memberSeatIds, ...ownedSeatIds])]
 }
-
-// GET /api/schedules — read auto-generated recurring patterns (read-only)
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const seatId = req.query.seatId as string | undefined
-    const filter: Record<string, unknown> = {}
-
-    const allowed = await getAllowedSeatIds(String(req.user!._id), req.user!.role)
-    if (allowed !== null) {
-      if (seatId) {
-        if (!allowed.includes(seatId)) { res.json({ schedules: [] }); return }
-        filter.seat_id = seatId
-      } else {
-        filter.seat_id = { $in: allowed }
-      }
-    } else if (seatId) {
-      filter.seat_id = seatId
-    }
-
-    const raw = await Schedule.find(filter)
-      .populate('seat_id', 'label')
-      .lean()
-
-    const schedules = raw.map((s) => {
-      const seat = s.seat_id as unknown as { _id: string; label: string } | null
-      return {
-        _id: s._id,
-        seat_id: seat?._id ?? s.seat_id,
-        seat_label: seat?.label ?? '',
-        day_of_week: s.day_of_week,
-        start_hour: s.start_hour,
-        end_hour: s.end_hour,
-        source: s.source,
-      }
-    })
-
-    res.json({ schedules })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    res.status(500).json({ error: message })
-  }
-})
-
-// GET /api/schedules/today — today's predicted patterns
-router.get('/today', authenticate, async (req, res) => {
-  try {
-    const day_of_week = new Date().getDay()
-    const filter: Record<string, unknown> = { day_of_week }
-
-    const allowed = await getAllowedSeatIds(String(req.user!._id), req.user!.role)
-    if (allowed !== null) {
-      filter.seat_id = { $in: allowed }
-    }
-
-    const schedules = await Schedule.find(filter)
-      .populate('seat_id', 'label email')
-      .lean()
-
-    res.json({ schedules })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    res.status(500).json({ error: message })
-  }
-})
 
 // GET /api/schedules/heatmap/:seatId — aggregated activity data for heatmap
 router.get('/heatmap/:seatId', authenticate, async (req, res) => {
@@ -251,17 +185,6 @@ router.get('/realtime', authenticate, async (req, res) => {
     }))
 
     res.json({ seats: results })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    res.status(500).json({ error: message })
-  }
-})
-
-// POST /api/schedules/regenerate — admin: force regenerate all patterns
-router.post('/regenerate', authenticate, requireAdmin, async (_req, res) => {
-  try {
-    const result = await generateAllPatterns()
-    res.json({ message: 'Patterns regenerated', ...result })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

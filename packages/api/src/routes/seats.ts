@@ -4,7 +4,6 @@ import { authenticate, requireAdmin, requireSeatOwner, requireSeatOwnerOrAdmin, 
 import { Seat } from '../models/seat.js'
 import { encrypt, decrypt } from '../lib/encryption.js'
 import { User } from '../models/user.js'
-import { Schedule } from '../models/schedule.js'
 import { parseCredentialJson, type ParsedCredential } from '@repo/shared/credential-parser'
 import { fetchOAuthProfile, OAuthProfileError, toProfileCache, type OAuthProfile } from '../services/anthropic-service.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
@@ -528,8 +527,7 @@ router.delete('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAd
       { $or: [{ seat_ids: id }, { 'watched_seats.seat_id': id }] },
       { $pull: { seat_ids: id, watched_seats: { seat_id: id } } },
     )
-    // Clear schedules + activity logs (runtime state — must stop for deleted seat)
-    await Schedule.deleteMany({ seat_id: id })
+    // Clear activity logs (runtime state — must stop for deleted seat)
     const { SeatActivityLog } = await import('../models/seat-activity-log.js')
     await SeatActivityLog.deleteMany({ seat_id: id })
     // Soft delete the seat — cleanup cron will cascade-delete usage/alerts after 30 days

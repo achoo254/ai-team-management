@@ -4,7 +4,6 @@ import { decrypt } from '../lib/encryption.js'
 import { parallelLimit } from '../utils/parallel-limit.js'
 import { applyWindowForSeat } from './usage-window-applier.js'
 import { recordSeatActivity } from './seat-activity-detector.js'
-import { checkActivityAnomalies } from './activity-anomaly-service.js'
 
 const API_URL = 'https://api.anthropic.com/api/oauth/usage'
 const CONCURRENCY = 3
@@ -81,11 +80,6 @@ async function fetchSeatUsage(seat: {
   ).sort({ fetched_at: -1 }).lean()
   await recordSeatActivity(seat._id, createdSnapshot, prevSnapshot).catch((err) => {
     console.error(`[ActivityDetector] record failed for ${seat.label}:`, err)
-  })
-
-  // Check activity anomalies (non-fatal — log and continue)
-  await checkActivityAnomalies(seat._id).catch((err) => {
-    console.error(`[Anomaly] check failed for ${seat.label}:`, err)
   })
 
   // Apply UsageWindow detection (non-fatal — log and continue)

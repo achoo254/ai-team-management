@@ -102,7 +102,7 @@ export interface RealtimeStatus {
   last_snapshot_at: string | null
 }
 
-export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk' | 'unexpected_activity' | 'unexpected_idle'
+export type AlertType = 'rate_limit' | 'token_failure' | 'usage_exceeded' | 'session_waste' | '7d_risk'
 export type AlertWindow = '5h' | '7d' | null
 
 export interface AlertMetadata {

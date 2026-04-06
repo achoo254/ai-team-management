@@ -223,11 +223,10 @@ export function useDashboardEnhanced(range: DashboardRange = "month", seatIds?: 
 }
 
 // Personal dashboard types
-export interface MyScheduleItem {
+export interface MyActivityItem {
   seat_label: string;
-  start_hour: number;
-  end_hour: number;
-  usage_budget_pct: number | null;
+  hour: number;
+  delta_5h_pct: number;
 }
 
 export interface MySeatItem {
@@ -260,7 +259,7 @@ export interface MyEfficiencyData {
 }
 
 export interface PersonalDashboardData {
-  mySchedulesToday: MyScheduleItem[];
+  myActivityToday: MyActivityItem[];
   mySeats: MySeatItem[];
   myUsageRank: MyUsageRank | null;
   myEfficiency: MyEfficiencyData | null;

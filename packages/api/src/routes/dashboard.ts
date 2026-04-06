@@ -5,7 +5,6 @@ import { Seat } from '../models/seat.js'
 import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { Alert } from '../models/alert.js'
-import { Schedule } from '../models/schedule.js'
 import { SeatActivityLog } from '../models/seat-activity-log.js'
 import { UsageWindow } from '../models/usage-window.js'
 import { computeAllSeatForecasts } from '../services/quota-forecast-service.js'
@@ -118,11 +117,12 @@ router.get('/enhanced', async (req, res) => {
     ])
 
     // Today's active seats count (from activity logs)
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
+    // Must use VN timezone midnight (UTC representation) to match seat-activity-detector storage
+    const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000) // UTC+7
+    const todayVn = new Date(Date.UTC(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate()))
     const activityFilter = effectiveIds
-      ? { date: todayStart, is_active: true, seat_id: { $in: effectiveIds } }
-      : { date: todayStart, is_active: true }
+      ? { date: todayVn, is_active: true, seat_id: { $in: effectiveIds } }
+      : { date: todayVn, is_active: true }
     const todayActiveSeats = await SeatActivityLog.distinct('seat_id', activityFilter).then(ids => ids.length)
 
     // Seats with unread usage_exceeded alerts (for OVER BUDGET badge)
@@ -641,27 +641,27 @@ router.get('/personal', async (req, res) => {
     // Aggregate $match does NOT auto-cast string → ObjectId (unlike Mongoose .find()).
     // Pre-cast once for all aggregate pipelines below.
     const userObjectId = new mongoose.Types.ObjectId(userId)
-    const todayDow = new Date().getDay() // 0=Sunday … 6=Saturday
-
-    // 1. Today's activity patterns for user's seats
+    // 1. Today's activity for user's seats (from SeatActivityLog)
     const userRecord0 = await User.findById(userId, 'seat_ids').lean()
     const userSeatIds = (userRecord0?.seat_ids ?? []).map(String)
     const ownedSeats0 = await Seat.find({ owner_id: userId }, '_id').lean()
     const allUserSeatIds = [...new Set([...userSeatIds, ...ownedSeats0.map(s => String(s._id))])]
 
-    const rawSchedules = await Schedule.find({
-      seat_id: { $in: allUserSeatIds },
-      day_of_week: todayDow,
+    const vnNowPersonal = new Date(Date.now() + 7 * 60 * 60 * 1000)
+    const todayVnPersonal = new Date(Date.UTC(vnNowPersonal.getUTCFullYear(), vnNowPersonal.getUTCMonth(), vnNowPersonal.getUTCDate()))
+    const activityLogs = await SeatActivityLog.find({
+      seat_id: { $in: allUserSeatIds.map(id => new mongoose.Types.ObjectId(id)) },
+      date: todayVnPersonal,
+      is_active: true,
     })
-      .populate<{ seat_id: { _id: unknown; label: string } }>('seat_id', 'label')
-      .sort({ start_hour: 1 })
+      .populate('seat_id', 'label')
+      .sort({ hour: 1 })
       .lean()
 
-    const mySchedulesToday = rawSchedules.map((sc) => ({
-      seat_label: (sc.seat_id as { label?: string } | null)?.label ?? '',
-      start_hour: sc.start_hour,
-      end_hour: sc.end_hour,
-      source: sc.source,
+    const myActivityToday = activityLogs.map((log) => ({
+      seat_label: (log.seat_id as unknown as { label?: string })?.label ?? '',
+      hour: log.hour,
+      delta_5h_pct: log.delta_5h_pct,
     }))
 
     // 2. Seats this user owns + seats they are assigned to (role distinction)
@@ -756,7 +756,7 @@ router.get('/personal', async (req, res) => {
         }
       : null
 
-    res.json({ mySchedulesToday, mySeats, myUsageRank, myEfficiency })
+    res.json({ myActivityToday, mySeats, myUsageRank, myEfficiency })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
     res.status(500).json({ error: message })

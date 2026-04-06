@@ -23,7 +23,6 @@ import { checkSnapshotAlerts } from './services/alert-service.js'
 import { checkAndRefreshExpiring } from './services/token-refresh-service.js'
 import { closeStaleUsageWindows } from './services/usage-window-applier.js'
 import { cleanupExpiredDeletedSeats } from './services/seat-cleanup-service.js'
-import { generateAllPatterns } from './services/activity-pattern-service.js'
 const app = express()
 
 // Middleware
@@ -83,12 +82,6 @@ async function start() {
   // Cron: Every 30 min — close stale UsageWindows
   cron.schedule('*/30 * * * *', () => {
     closeStaleUsageWindows().catch(console.error)
-  }, { timezone: 'Asia/Ho_Chi_Minh' })
-
-  // Cron: Daily 04:00 — generate activity patterns from seat_activity_log
-  cron.schedule('0 4 * * *', () => {
-    console.log('[Cron] Generating activity patterns...')
-    generateAllPatterns().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
   // Cron: Daily 03:00 — hard-delete seats soft-deleted > 30 days ago (+ cascade usage/alerts)
