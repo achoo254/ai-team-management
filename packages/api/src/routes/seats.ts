@@ -349,7 +349,7 @@ router.post('/', authenticate, async (req, res) => {
         restored = await Seat.findOneAndUpdate(
           { _id: restore_seat_id, deleted_at: { $ne: null } },
           { $set: updateFields },
-          { new: true },
+          { returnDocument: 'after' },
         )
       } catch (err: any) {
         // E11000 = active seat with same email already exists
@@ -648,7 +648,7 @@ router.put('/:id/token', authenticate, validateObjectId('id'), requireSeatOwnerO
     const seat = await Seat.findByIdAndUpdate(
       id,
       { oauth_credential, token_active: true, last_fetch_error: null },
-      { new: true },
+      { returnDocument: 'after' },
     )
     if (!seat) {
       res.status(404).json({ error: 'Seat not found' })
@@ -680,7 +680,7 @@ router.delete('/:id/token', authenticate, validateObjectId('id'), requireSeatOwn
     const seat = await Seat.findByIdAndUpdate(
       id,
       { oauth_credential: null, token_active: false, last_fetch_error: null, last_refreshed_at: null },
-      { new: true },
+      { returnDocument: 'after' },
     )
     if (!seat) {
       res.status(404).json({ error: 'Seat not found' })
@@ -727,7 +727,7 @@ router.put('/:id/transfer', authenticate, requireAdmin, validateObjectId('id'), 
     const seat = await Seat.findByIdAndUpdate(
       req.params.id,
       { owner_id: new_owner_id },
-      { new: true },
+      { returnDocument: 'after' },
     ).populate('owner_id', 'name email')
     if (!seat) {
       res.status(404).json({ error: 'Seat not found' })

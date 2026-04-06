@@ -79,7 +79,7 @@ router.put('/users/:id', async (req, res) => {
     if (seat_ids !== undefined) update.seat_ids = seat_ids || []
     if (active !== undefined) update.active = active
 
-    const updated = await User.findByIdAndUpdate(id, update, { new: true }).lean()
+    const updated = await User.findByIdAndUpdate(id, update, { returnDocument: 'after' }).lean()
     if (!updated) {
       res.status(404).json({ error: 'User not found' })
       return
