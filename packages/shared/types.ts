@@ -285,6 +285,7 @@ export interface UrgentForecastItem {
   hours_to_full: number | null
   forecast_at: string | null
   status: QuotaForecastStatus
+  resets_at: string | null
 }
 
 // ── Overview (Fleet Metrics) DTOs ─────────────────────────────────────────────

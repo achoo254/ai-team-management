@@ -99,9 +99,11 @@ export function QuotaForecastBar(props: SevenDayProps | FiveHourProps) {
   }
 
   const d = props.data;
-  const colorClass = STATUS_COLOR[d.status];
+  const depleted = d.current_pct >= 100;
+  // Depleted: faded bar, no pulse
+  const colorClass = depleted ? "bg-red-600/50" : STATUS_COLOR[d.status];
   const emoji = STATUS_EMOJI[d.status];
-  const showForecast = d.forecast_at && d.hours_to_full != null
+  const showForecast = !depleted && d.forecast_at && d.hours_to_full != null
     && d.status !== "safe" && d.status !== "safe_decreasing" && d.status !== "collecting"
     && d.status !== "reset_first";
 
@@ -111,16 +113,23 @@ export function QuotaForecastBar(props: SevenDayProps | FiveHourProps) {
         Quota 7d{d.seat_label ? ` (seat ${d.seat_label} sẽ hết sớm nhất)` : ""}
       </p>
       <ProgressBar pct={d.current_pct} colorClass={colorClass} />
-      <p className="text-xs text-muted-foreground">
-        <b className="text-foreground tabular-nums">{Math.round(d.current_pct)}%</b>
-        {d.slope_per_hour > 0 && (
-          <> · tăng +{d.slope_per_hour.toFixed(1)}%/h</>
-        )}
-        {d.status === "collecting" && <> · {emoji} {STATUS_LABEL[d.status]}</>}
-        {d.status === "safe_decreasing" && <> · {emoji} {STATUS_LABEL[d.status]}</>}
-        {d.status === "reset_first" && <> · {emoji} {STATUS_LABEL[d.status]}</>}
-        {d.status === "safe" && !showForecast && <> · {emoji} {STATUS_LABEL[d.status]}</>}
-      </p>
+      {depleted ? (
+        <p className="text-xs text-muted-foreground">
+          <b className="text-foreground tabular-nums">{Math.round(d.current_pct)}%</b>
+          {" · "}<span className="text-red-500 font-semibold">Đã cạn</span>
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          <b className="text-foreground tabular-nums">{Math.round(d.current_pct)}%</b>
+          {d.slope_per_hour > 0 && (
+            <> · tăng +{d.slope_per_hour.toFixed(1)}%/h</>
+          )}
+          {d.status === "collecting" && <> · {emoji} {STATUS_LABEL[d.status]}</>}
+          {d.status === "safe_decreasing" && <> · {emoji} {STATUS_LABEL[d.status]}</>}
+          {d.status === "reset_first" && <> · {emoji} {STATUS_LABEL[d.status]}</>}
+          {d.status === "safe" && !showForecast && <> · {emoji} {STATUS_LABEL[d.status]}</>}
+        </p>
+      )}
       {showForecast && (
         <p className="text-xs">
           {emoji} Dự báo hết: <b>{formatForecastDate(d.forecast_at!)}</b>

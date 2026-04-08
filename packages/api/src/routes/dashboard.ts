@@ -184,6 +184,14 @@ router.get('/enhanced', async (req, res) => {
       : []
     const ownerMap = new Map(ownerUsers.map((u) => [String(u._id), u.name]))
 
+    // Count usage windows (sessions) per seat in last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const recentSessions = await UsageWindow.aggregate([
+      { $match: { seat_id: { $in: seats.map((s) => s._id) }, window_start: { $gte: sevenDaysAgo } } },
+      { $group: { _id: '$seat_id', count: { $sum: 1 } } },
+    ])
+    const sessionCountMap = new Map(recentSessions.map((w) => [String(w._id), w.count as number]))
+
     const usagePerSeat = seats.map((s) => {
       const key = String(s._id)
       const snap = snapshotMap.get(key)
@@ -203,6 +211,7 @@ router.get('/enhanced', async (req, res) => {
         user_count: users.length,
         max_users: s.max_users,
         users,
+        session_count_7d: sessionCountMap.get(key) ?? 0,
       }
     })
 
@@ -265,6 +274,7 @@ router.get('/enhanced', async (req, res) => {
         hours_to_full: f.hours_to_full,
         forecast_at: f.forecast_at,
         status: f.status,
+        resets_at: f.resets_at ?? null,
       }))
 
     res.json({

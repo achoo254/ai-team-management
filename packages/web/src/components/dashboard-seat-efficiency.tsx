@@ -11,40 +11,48 @@ import { cssVar } from "@/lib/chart-colors";
 
 /* ---------- Data transform ---------- */
 
-function calcDensity(seat: SeatUsageItem) {
-  const occupancy = seat.max_users > 0 ? seat.user_count / seat.max_users : 0;
-  const occupancyPct = Math.round(occupancy * 100);
-  const usagePct = seat.seven_day_pct ?? 0;
+/** Compute 5h burn rate (%/h) from current pct and time into window */
+function calcBurnRate5h(seat: SeatUsageItem): number {
+  if (seat.five_hour_pct == null || seat.five_hour_pct <= 0) return 0;
+  if (!seat.five_hour_resets_at) return 0;
+
+  const resetsAt = new Date(seat.five_hour_resets_at).getTime();
+  const now = Date.now();
+  const windowStart = resetsAt - 5 * 60 * 60 * 1000;
+
+  // Guard: stale or future window → no meaningful burn rate
+  if (now < windowStart || now > resetsAt) return 0;
+
+  const hoursElapsed = Math.max(0.5, (now - windowStart) / (60 * 60 * 1000));
+  return Math.round((seat.five_hour_pct / hoursElapsed) * 10) / 10;
+}
+
+function calcChartData(seat: SeatUsageItem) {
+  const burnRate = calcBurnRate5h(seat);
   return {
     label: seat.label,
-    occupancy_pct: occupancyPct,
-    seven_day_pct: usagePct,
-    user_count: seat.user_count,
-    max_users: seat.max_users,
-    /* Risk score: weighted combo — high occupancy + high usage = bottleneck */
-    risk: occupancyPct * 0.4 + usagePct * 0.6,
+    burn_rate: burnRate,
+    sessions: seat.session_count_7d,
   };
 }
 
 /* ---------- Color helpers ---------- */
 
-/** Occupancy bar color — based on how full the seat is */
-function occupancyColor(pct: number): string {
-  if (pct >= 100) return cssVar("--chart-4");   // full
-  if (pct >= 75) return cssVar("--chart-3");    // nearly full
-  return cssVar("--chart-5");                   // ok
+/** Burn rate color — higher = consuming faster = more urgent */
+function burnRateColor(rate: number): string {
+  if (rate >= 30) return cssVar("--chart-4");   // critical: >30%/h
+  if (rate >= 15) return cssVar("--chart-3");   // warning: 15-30%/h
+  return cssVar("--chart-2");                   // healthy: <15%/h
 }
 
-/** Usage bar color — based on 7d consumption */
-function usageColor(pct: number): string {
-  if (pct >= 80) return cssVar("--chart-4");    // critical
-  if (pct >= 50) return cssVar("--chart-3");    // warning
-  return cssVar("--chart-2");                   // healthy
+/** Session count — neutral color, not severity-based */
+function sessionColor(): string {
+  return cssVar("--chart-5");
 }
 
 /* ---------- Value label at end of bar ---------- */
 
-function OccupancyLabel(props: any) {
+function BurnRateLabel(props: any) {
   const { x, y, width, height, value } = props;
   if (value == null || value === 0) return null;
   return (
@@ -53,14 +61,14 @@ function OccupancyLabel(props: any) {
       y={y + height / 2}
       dy={4}
       textAnchor="start"
-      style={{ fontSize: 10, fontWeight: 600, fill: occupancyColor(value) }}
+      style={{ fontSize: 10, fontWeight: 600, fill: burnRateColor(value) }}
     >
-      {value}%
+      {value}%/h
     </text>
   );
 }
 
-function UsageLabel(props: any) {
+function SessionLabel(props: any) {
   const { x, y, width, height, value } = props;
   if (value == null || value === 0) return null;
   return (
@@ -69,33 +77,26 @@ function UsageLabel(props: any) {
       y={y + height / 2}
       dy={4}
       textAnchor="start"
-      style={{ fontSize: 10, fontWeight: 600, fill: usageColor(value) }}
+      style={{ fontSize: 10, fontWeight: 600, fill: sessionColor() }}
     >
-      {value}%
+      {value}
     </text>
   );
 }
 
 /* ---------- Custom tooltip ---------- */
 
-function DensityTooltip({ active, payload }: any) {
+function ChartTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   if (!d) return null;
-
-  const riskLevel = d.risk >= 60 ? "Cao" : d.risk >= 35 ? "TB" : "Thấp";
-  const riskColor = d.risk >= 60 ? cssVar("--chart-4") : d.risk >= 35 ? cssVar("--chart-3") : cssVar("--chart-2");
 
   return (
     <div className="rounded-xl border border-border/60 bg-card/95 backdrop-blur-md p-3.5 text-sm shadow-xl min-w-[200px]">
       <p className="font-semibold text-foreground mb-2">{d.label}</p>
       <div className="space-y-1.5 text-xs">
-        <TRow label="Lấp đầy" value={`${d.user_count}/${d.max_users} (${d.occupancy_pct}%)`} color={occupancyColor(d.occupancy_pct)} />
-        <TRow label="Dùng 7 ngày" value={`${d.seven_day_pct}%`} color={usageColor(d.seven_day_pct)} />
-        <div className="flex justify-between gap-4 border-t border-border/40 pt-1.5 mt-2">
-          <span className="text-muted-foreground">Mức rủi ro</span>
-          <span className="font-bold" style={{ color: riskColor }}>{riskLevel}</span>
-        </div>
+        <TRow label="Burn rate 5h" value={`${d.burn_rate}%/h`} color={burnRateColor(d.burn_rate)} />
+        <TRow label="Sessions (7d)" value={`${d.sessions}`} color={sessionColor()} />
       </div>
     </div>
   );
@@ -112,16 +113,16 @@ function TRow({ label, value, color }: { label: string; value: string; color?: s
 
 /* ---------- Custom legend ---------- */
 
-function DensityLegend() {
+function ChartLegend() {
   return (
     <div className="flex items-center justify-center gap-5 pt-2 text-[10px] text-muted-foreground">
       <div className="flex items-center gap-1">
-        <span className="inline-block h-2 w-4 rounded-sm" style={{ backgroundColor: cssVar("--chart-5") }} />
-        <span>Lấp đầy %</span>
+        <span className="inline-block h-2 w-4 rounded-sm" style={{ backgroundColor: cssVar("--chart-2") }} />
+        <span>Burn rate 5h (%/h)</span>
       </div>
       <div className="flex items-center gap-1">
-        <span className="inline-block h-2 w-4 rounded-sm" style={{ backgroundColor: cssVar("--chart-2") }} />
-        <span>Dùng 7d %</span>
+        <span className="inline-block h-2 w-4 rounded-sm" style={{ backgroundColor: cssVar("--chart-5") }} />
+        <span>Sessions (7d)</span>
       </div>
     </div>
   );
@@ -134,8 +135,13 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
   const { data, isLoading } = useDashboardEnhanced(range, filter.effective);
 
   const chartData = (data?.usagePerSeat ?? [])
-    .map(calcDensity)
-    .sort((a, b) => b.risk - a.risk);
+    .map(calcChartData)
+    .sort((a, b) => b.burn_rate - a.burn_rate);
+
+  // Dynamic max for X axis (burn rate can vary widely)
+  const maxBurn = Math.max(...chartData.map((d) => d.burn_rate), 10);
+  const maxSessions = Math.max(...chartData.map((d) => d.sessions), 5);
+  const xMax = Math.max(maxBurn, maxSessions);
 
   const barSize = Math.min(16, Math.max(10, Math.floor(240 / Math.max(chartData.length, 1))));
 
@@ -144,9 +150,9 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <CardTitle className="text-base font-semibold">Mật độ sử dụng Seat</CardTitle>
+            <CardTitle className="text-base font-semibold">Tốc độ tiêu thụ Seat</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Tỷ lệ lấp đầy vs mức dùng 7 ngày · <span className="font-medium">{formatRangeDate(range)}</span>
+              Burn rate 5h và số sessions 7 ngày · <span className="font-medium">{formatRangeDate(range)}</span>
             </p>
           </div>
           <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
@@ -171,8 +177,7 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
                 />
                 <XAxis
                   type="number"
-                  domain={[0, 100]}
-                  tickFormatter={(v) => `${v}%`}
+                  domain={[0, Math.ceil(xMax * 1.2)]}
                   tick={{ fontSize: 11, fontWeight: 500, fill: cssVar("--muted-foreground") }}
                   axisLine={{ stroke: cssVar("--border"), strokeOpacity: 0.5 }}
                   tickLine={false}
@@ -186,36 +191,36 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
                   tickLine={false}
                 />
                 <Tooltip
-                  content={<DensityTooltip />}
+                  content={<ChartTooltip />}
                   cursor={{ fill: cssVar("--foreground"), opacity: 0.04 }}
                 />
-                {/* Occupancy bar */}
+                {/* Burn rate bar */}
                 <Bar
-                  dataKey="occupancy_pct"
-                  name="Lấp đầy %"
+                  dataKey="burn_rate"
+                  name="Burn rate 5h"
                   maxBarSize={barSize}
                   radius={[0, 4, 4, 0]}
                 >
                   {chartData.map((d, i) => (
-                    <Cell key={i} fill={occupancyColor(d.occupancy_pct)} fillOpacity={0.8} />
+                    <Cell key={i} fill={burnRateColor(d.burn_rate)} fillOpacity={0.8} />
                   ))}
-                  <LabelList content={<OccupancyLabel />} />
+                  <LabelList content={<BurnRateLabel />} />
                 </Bar>
-                {/* 7d usage bar */}
+                {/* Sessions bar */}
                 <Bar
-                  dataKey="seven_day_pct"
-                  name="Dùng 7d %"
+                  dataKey="sessions"
+                  name="Sessions 7d"
                   maxBarSize={barSize}
                   radius={[0, 4, 4, 0]}
                 >
                   {chartData.map((d, i) => (
-                    <Cell key={i} fill={usageColor(d.seven_day_pct)} fillOpacity={0.8} />
+                    <Cell key={i} fill={sessionColor()} fillOpacity={0.8} />
                   ))}
-                  <LabelList content={<UsageLabel />} />
+                  <LabelList content={<SessionLabel />} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            <DensityLegend />
+            <ChartLegend />
           </>
         )}
       </CardContent>

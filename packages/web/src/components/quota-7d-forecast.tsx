@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, AlertTriangle, TrendingDown, Minus, Clock3, RotateCcw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { formatResetTime } from "@/lib/format-reset";
 import type { QuotaForecastResult, QuotaForecastStatus } from "@repo/shared/types";
 import { formatForecastDate } from "@/components/quota-forecast-bar";
 
@@ -74,8 +76,12 @@ function forecastLabel(seat: QuotaForecastResult): string {
 }
 
 function SeatRow({ seat }: { seat: QuotaForecastResult }) {
-  const colorClass = BAR_COLOR[seat.status];
+  const depleted = seat.current_pct >= 100;
+  // Depleted: faded bar, no pulse
+  const colorClass = depleted ? "bg-red-600/50" : BAR_COLOR[seat.status];
   const isUrgent = URGENT_STATUSES.has(seat.status);
+  const resetLabel = depleted && seat.resets_at ? formatResetTime(seat.resets_at).label : null;
+
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(120px,1.2fr)_auto_minmax(0,1.6fr)] items-center gap-3 text-xs py-1.5 border-b border-border/30 last:border-0">
       <span className="font-medium truncate">{seat.seat_label}</span>
@@ -83,10 +89,21 @@ function SeatRow({ seat }: { seat: QuotaForecastResult }) {
         {Math.round(seat.current_pct)}%
       </span>
       <ProgressBar pct={seat.current_pct} colorClass={colorClass} />
-      <StatusIcon status={seat.status} />
-      <span className={`tabular-nums text-[11px] truncate text-right ${isUrgent ? "text-foreground" : "text-muted-foreground"}`}>
-        {forecastLabel(seat)}
-      </span>
+      {depleted ? (
+        <>
+          <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">Đã cạn</Badge>
+          <span className="text-[10px] tabular-nums text-muted-foreground truncate text-right">
+            {resetLabel ? `Reset ${resetLabel}` : ""}
+          </span>
+        </>
+      ) : (
+        <>
+          <StatusIcon status={seat.status} />
+          <span className={`tabular-nums text-[11px] truncate text-right ${isUrgent ? "text-foreground" : "text-muted-foreground"}`}>
+            {forecastLabel(seat)}
+          </span>
+        </>
+      )}
     </div>
   );
 }

@@ -26,6 +26,7 @@ export interface SeatUsageItem {
   user_count: number;
   max_users: number;
   users: string[];
+  session_count_7d: number;
 }
 
 // Daily usage trend point

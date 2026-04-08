@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1775464745069" clover="3.2.0">
-  <project timestamp="1775464745069" name="All files">
-    <metrics statements="498" coveredstatements="190" conditionals="340" coveredconditionals="118" methods="157" coveredmethods="53" elements="995" coveredelements="361" complexity="0" loc="498" ncloc="498" packages="7" files="16" classes="16"/>
+<coverage generated="1775666200600" clover="3.2.0">
+  <project timestamp="1775666200600" name="All files">
+    <metrics statements="554" coveredstatements="246" conditionals="408" coveredconditionals="168" methods="165" coveredmethods="61" elements="1127" coveredelements="475" complexity="0" loc="554" ncloc="554" packages="7" files="17" classes="17"/>
     <package name="packages.api.src.models">
       <metrics statements="28" coveredstatements="16" conditionals="6" coveredconditionals="0" methods="4" coveredmethods="0"/>
-      <file name="seat.ts" path="D:\CONG VIEC\ai-team-management\packages\api\src\models\seat.ts">
+      <file name="seat.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\api\src\models\seat.ts">
         <metrics statements="15" coveredstatements="8" conditionals="4" coveredconditionals="0" methods="2" coveredmethods="0"/>
         <line num="42" count="1" type="stmt"/>
         <line num="90" count="1" type="stmt"/>
@@ -22,7 +22,7 @@
         <line num="115" count="0" type="stmt"/>
         <line num="119" count="1" type="stmt"/>
       </file>
-      <file name="usage-snapshot.ts" path="D:\CONG VIEC\ai-team-management\packages\api\src\models\usage-snapshot.ts">
+      <file name="usage-snapshot.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\api\src\models\usage-snapshot.ts">
         <metrics statements="5" coveredstatements="5" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="0"/>
         <line num="23" count="1" type="stmt"/>
         <line num="44" count="1" type="stmt"/>
@@ -30,7 +30,7 @@
         <line num="51" count="1" type="stmt"/>
         <line num="56" count="1" type="stmt"/>
       </file>
-      <file name="user.ts" path="D:\CONG VIEC\ai-team-management\packages\api\src\models\user.ts">
+      <file name="user.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\api\src\models\user.ts">
         <metrics statements="8" coveredstatements="3" conditionals="2" coveredconditionals="0" methods="1" coveredmethods="0"/>
         <line num="46" count="1" type="stmt"/>
         <line num="93" count="1" type="stmt"/>
@@ -43,8 +43,8 @@
       </file>
     </package>
     <package name="packages.api.src.services">
-      <metrics statements="269" coveredstatements="67" conditionals="222" coveredconditionals="51" methods="61" coveredmethods="10"/>
-      <file name="bld-metrics-service.ts" path="D:\CONG VIEC\ai-team-management\packages\api\src\services\bld-metrics-service.ts">
+      <metrics statements="325" coveredstatements="123" conditionals="290" coveredconditionals="101" methods="69" coveredmethods="18"/>
+      <file name="bld-metrics-service.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\api\src\services\bld-metrics-service.ts">
         <metrics statements="158" coveredstatements="14" conditionals="113" coveredconditionals="6" methods="38" coveredmethods="2"/>
         <line num="30" count="1" type="stmt"/>
         <line num="33" count="8" type="stmt"/>
@@ -205,7 +205,66 @@
         <line num="399" count="0" type="stmt"/>
         <line num="412" count="0" type="stmt"/>
       </file>
-      <file name="quota-forecast-service.ts" path="D:\CONG VIEC\ai-team-management\packages\api\src\services\quota-forecast-service.ts">
+      <file name="predictive-alert-service.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\api\src\services\predictive-alert-service.ts">
+        <metrics statements="56" coveredstatements="56" conditionals="68" coveredconditionals="50" methods="8" coveredmethods="8"/>
+        <line num="12" count="9" type="stmt"/>
+        <line num="13" count="9" type="stmt"/>
+        <line num="15" count="9" type="stmt"/>
+        <line num="16" count="9" type="stmt"/>
+        <line num="17" count="9" type="cond" truecount="1" falsecount="1"/>
+        <line num="18" count="9" type="cond" truecount="1" falsecount="1"/>
+        <line num="20" count="9" type="stmt"/>
+        <line num="21" count="9" type="stmt"/>
+        <line num="22" count="9" type="cond" truecount="4" falsecount="0"/>
+        <line num="24" count="8" type="stmt"/>
+        <line num="25" count="8" type="stmt"/>
+        <line num="28" count="8" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="7" type="cond" truecount="2" falsecount="0"/>
+        <line num="30" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="32" count="5" type="stmt"/>
+        <line num="33" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="35" count="9" type="stmt"/>
+        <line num="36" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="39" count="9" type="stmt"/>
+        <line num="40" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="41" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="44" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="45" count="3" type="cond" truecount="1" falsecount="1"/>
+        <line num="46" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="49" count="5" type="cond" truecount="4" falsecount="0"/>
+        <line num="50" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="51" count="1" type="stmt"/>
+        <line num="52" count="1" type="stmt"/>
+        <line num="61" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="65" count="9" type="stmt"/>
+        <line num="75" count="7" type="stmt"/>
+        <line num="76" count="7" type="stmt"/>
+        <line num="78" count="7" type="stmt"/>
+        <line num="79" count="7" type="stmt"/>
+        <line num="80" count="7" type="cond" truecount="1" falsecount="1"/>
+        <line num="81" count="7" type="cond" truecount="1" falsecount="1"/>
+        <line num="84" count="7" type="stmt"/>
+        <line num="87" count="7" type="cond" truecount="4" falsecount="0"/>
+        <line num="88" count="6" type="cond" truecount="2" falsecount="0"/>
+        <line num="90" count="5" type="stmt"/>
+        <line num="91" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="94" count="5" type="stmt"/>
+        <line num="95" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="96" count="5" type="cond" truecount="1" falsecount="1"/>
+        <line num="98" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="99" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="101" count="5" type="stmt"/>
+        <line num="102" count="5" type="cond" truecount="2" falsecount="0"/>
+        <line num="104" count="3" type="stmt"/>
+        <line num="105" count="3" type="stmt"/>
+        <line num="108" count="3" type="cond" truecount="4" falsecount="0"/>
+        <line num="109" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="112" count="1" type="stmt"/>
+        <line num="113" count="1" type="stmt"/>
+        <line num="123" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="127" count="7" type="stmt"/>
+      </file>
+      <file name="quota-forecast-service.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\api\src\services\quota-forecast-service.ts">
         <metrics statements="58" coveredstatements="0" conditionals="55" coveredconditionals="0" methods="15" coveredmethods="0"/>
         <line num="28" count="0" type="stmt"/>
         <line num="29" count="0" type="cond" truecount="0" falsecount="4"/>
@@ -266,7 +325,7 @@
         <line num="196" count="0" type="stmt"/>
         <line num="197" count="0" type="stmt"/>
       </file>
-      <file name="usage-window-detector.ts" path="D:\CONG VIEC\ai-team-management\packages\api\src\services\usage-window-detector.ts">
+      <file name="usage-window-detector.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\api\src\services\usage-window-detector.ts">
         <metrics statements="53" coveredstatements="53" conditionals="54" coveredconditionals="45" methods="8" coveredmethods="8"/>
         <line num="67" count="1" type="stmt"/>
         <line num="68" count="1" type="stmt"/>
@@ -325,7 +384,7 @@
     </package>
     <package name="packages.shared">
       <metrics statements="7" coveredstatements="7" conditionals="22" coveredconditionals="22" methods="1" coveredmethods="1"/>
-      <file name="credential-parser.ts" path="D:\CONG VIEC\ai-team-management\packages\shared\credential-parser.ts">
+      <file name="credential-parser.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\shared\credential-parser.ts">
         <metrics statements="7" coveredstatements="7" conditionals="22" coveredconditionals="22" methods="1" coveredmethods="1"/>
         <line num="15" count="8" type="stmt"/>
         <line num="16" count="8" type="stmt"/>
@@ -338,7 +397,7 @@
     </package>
     <package name="packages.web.src.components">
       <metrics statements="21" coveredstatements="1" conditionals="8" coveredconditionals="0" methods="4" coveredmethods="0"/>
-      <file name="auth-provider.tsx" path="D:\CONG VIEC\ai-team-management\packages\web\src\components\auth-provider.tsx">
+      <file name="auth-provider.tsx" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\components\auth-provider.tsx">
         <metrics statements="21" coveredstatements="1" conditionals="8" coveredconditionals="0" methods="4" coveredmethods="0"/>
         <line num="17" count="1" type="stmt"/>
         <line num="20" count="0" type="stmt"/>
@@ -365,7 +424,7 @@
     </package>
     <package name="packages.web.src.hooks">
       <metrics statements="121" coveredstatements="51" conditionals="45" coveredconditionals="16" methods="73" coveredmethods="31"/>
-      <file name="use-admin.ts" path="D:\CONG VIEC\ai-team-management\packages\web\src\hooks\use-admin.ts">
+      <file name="use-admin.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\hooks\use-admin.ts">
         <metrics statements="27" coveredstatements="13" conditionals="2" coveredconditionals="0" methods="22" coveredmethods="11"/>
         <line num="11" count="1" type="stmt"/>
         <line num="14" count="4" type="stmt"/>
@@ -395,7 +454,7 @@
         <line num="61" count="1" type="stmt"/>
         <line num="62" count="0" type="stmt"/>
       </file>
-      <file name="use-alerts.ts" path="D:\CONG VIEC\ai-team-management\packages\web\src\hooks\use-alerts.ts">
+      <file name="use-alerts.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\hooks\use-alerts.ts">
         <metrics statements="12" coveredstatements="12" conditionals="6" coveredconditionals="5" methods="7" coveredmethods="7"/>
         <line num="9" count="6" type="stmt"/>
         <line num="10" count="6" type="cond" truecount="2" falsecount="0"/>
@@ -410,46 +469,46 @@
         <line num="34" count="1" type="stmt"/>
         <line num="36" count="1" type="stmt"/>
       </file>
-      <file name="use-auth.ts" path="D:\CONG VIEC\ai-team-management\packages\web\src\hooks\use-auth.ts">
+      <file name="use-auth.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\hooks\use-auth.ts">
         <metrics statements="3" coveredstatements="3" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
         <line num="7" count="5" type="stmt"/>
         <line num="8" count="5" type="cond" truecount="2" falsecount="0"/>
         <line num="9" count="3" type="stmt"/>
       </file>
-      <file name="use-dashboard.ts" path="D:\CONG VIEC\ai-team-management\packages\web\src\hooks\use-dashboard.ts">
+      <file name="use-dashboard.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\hooks\use-dashboard.ts">
         <metrics statements="30" coveredstatements="10" conditionals="31" coveredconditionals="7" methods="12" coveredmethods="4"/>
-        <line num="67" count="0" type="stmt"/>
         <line num="68" count="0" type="stmt"/>
         <line num="69" count="0" type="stmt"/>
-        <line num="71" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="73" count="0" type="stmt"/>
-        <line num="74" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="70" count="0" type="stmt"/>
+        <line num="72" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="74" count="0" type="stmt"/>
         <line num="75" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="76" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="77" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="79" count="0" type="stmt"/>
-        <line num="83" count="2" type="stmt"/>
-        <line num="84" count="2" type="cond" truecount="2" falsecount="0"/>
-        <line num="85" count="1" type="stmt"/>
-        <line num="189" count="0" type="stmt"/>
-        <line num="190" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="191" count="0" type="stmt"/>
-        <line num="193" count="0" type="stmt"/>
-        <line num="199" count="4" type="stmt"/>
-        <line num="200" count="4" type="cond" truecount="2" falsecount="2"/>
-        <line num="201" count="4" type="stmt"/>
-        <line num="205" count="0" type="stmt"/>
-        <line num="206" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="207" count="0" type="stmt"/>
-        <line num="209" count="0" type="stmt"/>
-        <line num="215" count="4" type="stmt"/>
-        <line num="216" count="4" type="cond" truecount="2" falsecount="2"/>
-        <line num="217" count="4" type="stmt"/>
-        <line num="220" count="2" type="stmt"/>
-        <line num="269" count="0" type="stmt"/>
-        <line num="271" count="0" type="stmt"/>
+        <line num="78" count="0" type="cond" truecount="0" falsecount="2"/>
+        <line num="80" count="0" type="stmt"/>
+        <line num="84" count="2" type="stmt"/>
+        <line num="85" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="86" count="1" type="stmt"/>
+        <line num="190" count="0" type="stmt"/>
+        <line num="191" count="0" type="cond" truecount="0" falsecount="4"/>
+        <line num="192" count="0" type="stmt"/>
+        <line num="194" count="0" type="stmt"/>
+        <line num="200" count="4" type="stmt"/>
+        <line num="201" count="4" type="cond" truecount="2" falsecount="2"/>
+        <line num="202" count="4" type="stmt"/>
+        <line num="206" count="0" type="stmt"/>
+        <line num="207" count="0" type="cond" truecount="0" falsecount="4"/>
+        <line num="208" count="0" type="stmt"/>
+        <line num="210" count="0" type="stmt"/>
+        <line num="216" count="4" type="stmt"/>
+        <line num="217" count="4" type="cond" truecount="2" falsecount="2"/>
+        <line num="218" count="4" type="stmt"/>
+        <line num="221" count="2" type="stmt"/>
+        <line num="270" count="0" type="stmt"/>
+        <line num="272" count="0" type="stmt"/>
       </file>
-      <file name="use-seats.ts" path="D:\CONG VIEC\ai-team-management\packages\web\src\hooks\use-seats.ts">
+      <file name="use-seats.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\hooks\use-seats.ts">
         <metrics statements="49" coveredstatements="13" conditionals="4" coveredconditionals="2" methods="31" coveredmethods="8"/>
         <line num="20" count="1" type="stmt"/>
         <line num="21" count="1" type="stmt"/>
@@ -504,7 +563,7 @@
     </package>
     <package name="packages.web.src.lib">
       <metrics statements="49" coveredstatements="45" conditionals="37" coveredconditionals="29" methods="12" coveredmethods="9"/>
-      <file name="api-client.ts" path="D:\CONG VIEC\ai-team-management\packages\web\src\lib\api-client.ts">
+      <file name="api-client.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\lib\api-client.ts">
         <metrics statements="15" coveredstatements="11" conditionals="16" coveredconditionals="9" methods="7" coveredmethods="4"/>
         <line num="3" count="14" type="stmt"/>
         <line num="8" count="14" type="cond" truecount="1" falsecount="1"/>
@@ -522,7 +581,7 @@
         <line num="27" count="0" type="cond" truecount="0" falsecount="2"/>
         <line num="29" count="2" type="cond" truecount="1" falsecount="1"/>
       </file>
-      <file name="format-reset.ts" path="D:\CONG VIEC\ai-team-management\packages\web\src\lib\format-reset.ts">
+      <file name="format-reset.ts" path="D:\CONG VIEC\quan-ly-team-claude\packages\web\src\lib\format-reset.ts">
         <metrics statements="34" coveredstatements="34" conditionals="21" coveredconditionals="20" methods="5" coveredmethods="5"/>
         <line num="3" count="1" type="stmt"/>
         <line num="13" count="6" type="stmt"/>
@@ -562,7 +621,7 @@
     </package>
     <package name="tests.helpers">
       <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
-      <file name="query-wrapper.tsx" path="D:\CONG VIEC\ai-team-management\tests\helpers\query-wrapper.tsx">
+      <file name="query-wrapper.tsx" path="D:\CONG VIEC\quan-ly-team-claude\tests\helpers\query-wrapper.tsx">
         <metrics statements="3" coveredstatements="3" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
         <line num="5" count="16" type="stmt"/>
         <line num="8" count="16" type="stmt"/>
