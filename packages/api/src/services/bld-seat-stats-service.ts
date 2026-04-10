@@ -16,7 +16,7 @@ import type {
   BurndownSeat,
   DegradationSeat,
   SeatStatsResponse,
-} from '../../../shared/types.js'
+} from '@repo/shared/types'
 
 const TZ = 'Asia/Ho_Chi_Minh'
 const BURNDOWN_THRESHOLD = 80

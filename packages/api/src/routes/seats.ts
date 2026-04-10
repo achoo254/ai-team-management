@@ -133,7 +133,7 @@ router.get('/:id/credentials/export', authenticate, validateObjectId('id'), requ
       return
     }
 
-    logAudit('credential_export', req.user!, { type: 'seat', id: req.params.id }, { seat_label: seat.label }, req.ip)
+    logAudit('credential_export', req.user!, { type: 'seat', id: String(req.params.id) }, { seat_label: seat.label }, req.ip)
 
     const cred = seat.oauth_credential
     res.json({
@@ -759,7 +759,7 @@ router.put('/:id/transfer', authenticate, requireAdmin, validateObjectId('id'), 
       )
     }
 
-    logAudit('seat_transfer', req.user!, { type: 'seat', id: req.params.id }, { seat_label: seatBefore.label, from_owner_id: oldOwnerId, to_owner_id: new_owner_id }, req.ip)
+    logAudit('seat_transfer', req.user!, { type: 'seat', id: String(req.params.id) }, { seat_label: seatBefore.label, from_owner_id: oldOwnerId, to_owner_id: new_owner_id }, req.ip)
     res.json({ message: 'Ownership transferred', seat })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error'
