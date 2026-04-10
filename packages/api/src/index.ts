@@ -16,6 +16,8 @@ import userSettingsRoutes from './routes/user-settings.js'
 import watchedSeatsRoutes from './routes/watched-seats.js'
 import bldMetricsRoutes from './routes/bld-metrics.js'
 import teamRoutes from './routes/teams.js'
+import deviceRoutes from './routes/devices.js'
+import webhookRoutes from './routes/webhook.js'
 import {
   checkAndSendScheduledReports,
 } from './services/telegram-service.js'
@@ -28,8 +30,15 @@ const app = express()
 
 // Middleware
 app.use(cors({ origin: config.webUrl, credentials: true }))
-app.use(express.json())
 app.use(cookieParser())
+
+// Webhook mounted BEFORE json parser — HMAC verification needs exact raw bytes
+// (JSON re-stringify changes whitespace and breaks the signature). The webhook
+// router installs its own scoped `express.raw()` parser.
+app.use('/api/webhook', webhookRoutes)
+
+// Global JSON parser for all other routes
+app.use(express.json())
 
 // Routes — all mounted under /api
 app.use('/api/auth', authRoutes)
@@ -43,6 +52,7 @@ app.use('/api/user', userSettingsRoutes)
 app.use('/api/user/watched-seats', watchedSeatsRoutes)
 app.use('/api/bld', bldMetricsRoutes)
 app.use('/api/teams', teamRoutes)
+app.use('/api/devices', deviceRoutes)
 
 // Global error handler — must be last
 app.use(errorHandler)
