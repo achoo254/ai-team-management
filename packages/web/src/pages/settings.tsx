@@ -3,12 +3,9 @@ import { AlertSettingsForm } from "@/components/alert-settings-form";
 import { NotificationScheduleForm } from "@/components/notification-schedule-form";
 import { WatchedSeatsSummary } from "@/components/watched-seats-summary";
 import { WatchEmptyStateBanner } from "@/components/watch-empty-state-banner";
-import { useAuth } from "@/hooks/use-auth";
+import { DevicesSection } from "@/components/devices-section";
 
 export default function SettingsPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-
   return (
     <div className="space-y-6">
       <div>
@@ -21,6 +18,7 @@ export default function SettingsPage() {
         <AlertSettingsForm />
         <NotificationScheduleForm />
         <WatchedSeatsSummary />
+        <DevicesSection />
       </div>
     </div>
   );

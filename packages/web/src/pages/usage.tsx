@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router'
 import { UsageSnapshotList } from '@/components/usage-snapshot-list'
+import { ClaudeSessionsSection } from '@/components/claude-sessions-section'
 
 export default function UsagePage() {
   const [searchParams] = useSearchParams()
@@ -14,6 +15,9 @@ export default function UsagePage() {
 
       {/* Latest snapshots grid */}
       <UsageSnapshotList highlightSeatId={highlightSeatId} />
+
+      {/* Desktop telemetry sessions */}
+      <ClaudeSessionsSection initialSeatId={highlightSeatId} />
     </div>
   )
 }

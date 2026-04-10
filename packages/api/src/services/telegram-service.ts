@@ -5,7 +5,7 @@ import { User, type IUser } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
 import { computeFleetKpis } from './bld-metrics-service.js'
-import type { FleetKpis } from '@repo/shared/types'
+import type { FleetKpis, FleetEfficiency } from '@repo/shared/types'
 // AlertType imported from shared (same type used by alert-service + fcm-service)
 type AlertType = import('@repo/shared/types').AlertType
 
@@ -51,6 +51,42 @@ interface SeatRow {
   extra_usage: { is_enabled: boolean; used_credits: number | null; monthly_limit: number | null; utilization: number | null } | null
 }
 
+/** Build efficiency section from FleetEfficiency data */
+function buildEfficiencySection(eff: FleetEfficiency): string {
+  if (eff.total_seats === 0) return ''
+
+  // All unknown → show collecting message
+  if (eff.unknown_count === eff.total_seats) {
+    return `── <b>HIỆU QUẢ SỬ DỤNG</b> ────\n⏸ Đang thu thập dữ liệu (${eff.total_seats} seats)\n`
+  }
+
+  let msg = `── <b>HIỆU QUẢ SỬ DỤNG</b> ────\n`
+  msg += `✅ Tối ưu:     ${eff.optimal_count} seats\n`
+
+  if (eff.overload.length > 0) {
+    const names = eff.overload
+      .slice(0, 3)
+      .map(o => `${esc(o.seat_label)} (cạn sớm ~${(o.hours_early / 24).toFixed(1)} ngày)`)
+      .join(', ')
+    const more = eff.overload.length > 3 ? ` +${eff.overload.length - 3}` : ''
+    msg += `🔴 Quá tải:    ${eff.overload.length} seat(s) — ${names}${more}\n`
+  } else {
+    msg += `🔴 Quá tải:    0 seats\n`
+  }
+
+  if (eff.waste.seats.length > 0) {
+    msg += `🟡 Lãng phí:   ${eff.waste.seats.length} seats — ~$${Math.round(eff.waste.total_waste_usd)}/chu kỳ không tận dụng\n`
+  } else {
+    msg += `🟡 Lãng phí:   0 seats\n`
+  }
+
+  if (eff.unknown_count > 0) {
+    msg += `⏸ Chưa đủ dữ liệu: ${eff.unknown_count} seats\n`
+  }
+
+  return msg
+}
+
 /** Build overview section from fleet KPIs */
 function buildOverviewSection(kpis: FleetKpis): string {
   let msg = `── <b>TỔNG QUAN</b> ──────────────\n`
@@ -62,11 +98,11 @@ function buildOverviewSection(kpis: FleetKpis): string {
   msg += `\n`
   msg += `💸 Lãng phí ước tính: <b>$${Math.round(kpis.wasteUsd)}</b>/$${Math.round(kpis.totalCostUsd)}/tháng\n`
   msg += `💺 Tổng: ${kpis.billableCount} seats\n`
-  if (kpis.worstForecast?.hours_to_full != null && kpis.worstForecast.hours_to_full > 0) {
-    const h = kpis.worstForecast.hours_to_full
-    const eta = h < 1 ? 'dưới 1h nữa' : h < 24 ? `~${Math.round(h)}h nữa` : `~${(h / 24).toFixed(1)} ngày nữa`
-    msg += `⚠️ <b>${esc(kpis.worstForecast.seat_label)}</b> sắp cạn quota 7 ngày (${eta}) — nên cân nhắc đổi tài khoản khác\n`
+
+  if (kpis.efficiency) {
+    msg += `\n` + buildEfficiencySection(kpis.efficiency)
   }
+
   return msg
 }
 
@@ -127,10 +163,6 @@ function buildReportHtml(
   msg += `🟢 Bình thường: ${total - high.length - mid.length} | `
   msg += `🟡 Trung bình: ${mid.length} | `
   msg += `🔴 Cao: ${high.length}\n`
-
-  if (high.length > 0) {
-    msg += `\n⚠️ <b>${high.length} seat(s) &gt; 80%</b> — cần giảm tải!`
-  }
 
   return msg
 }

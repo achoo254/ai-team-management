@@ -264,8 +264,9 @@ router.get('/enhanced', async (req, res) => {
       : seats.map((s) => String(s._id))
     const allForecasts = await computeAllSeatForecasts(forecastSeatIdsEnhanced)
     const urgentStatuses = new Set(['warning', 'critical', 'imminent'])
+    // Loại seat đã cạn (hours_to_full=0, pct>=100) — giữ semantic "sắp cạn".
     const urgentForecasts = allForecasts
-      .filter((f) => urgentStatuses.has(f.status))
+      .filter((f) => urgentStatuses.has(f.status) && (f.hours_to_full ?? 0) > 0)
       .slice(0, 3)
       .map((f) => ({
         seat_id: f.seat_id,

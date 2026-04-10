@@ -297,6 +297,17 @@ export interface BldWorstForecast {
   status: QuotaForecastStatus
 }
 
+export interface FleetEfficiency {
+  optimal_count: number
+  overload: Array<{ seat_id: string; seat_label: string; hours_early: number }>
+  waste: {
+    seats: Array<{ seat_id: string; seat_label: string; projected_pct: number; waste_pct: number; waste_usd: number }>
+    total_waste_usd: number
+  }
+  unknown_count: number
+  total_seats: number
+}
+
 export interface FleetKpis {
   utilPct: number
   wasteUsd: number
@@ -309,6 +320,8 @@ export interface FleetKpis {
   worstForecast: BldWorstForecast | null
   /** Số seat đã đạt pct>=100 (đã hết quota 7 ngày). Phân biệt với "sắp hết". */
   exhaustedSeatCount: number
+  /** 3-bucket efficiency classification (optimal/overload/waste) */
+  efficiency: FleetEfficiency | null
 }
 
 export interface WwHistoryPoint {

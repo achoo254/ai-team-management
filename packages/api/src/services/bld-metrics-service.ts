@@ -12,11 +12,12 @@ import { Seat, type ISeat } from '../models/seat.js'
 import { User } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { computeAllSeatForecasts } from './quota-forecast-service.js'
+import { computeFleetEfficiency } from './quota-efficiency-service.js'
 import type {
   FleetKpis,
   RebalanceSuggestion,
   WwHistoryPoint,
-} from '../../../shared/types.js'
+} from '@repo/shared/types'
 
 // ── Scope type ────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,7 @@ export async function computeFleetKpis(scope: MetricsScope = { type: 'admin' }):
       utilPct: 0, wasteUsd: 0, totalCostUsd: 0,
       monthlyCostUsd: MONTHLY_COST_USD, billableCount: 0,
       wwDelta: 0, ddDelta: null, worstForecast: null,
+      exhaustedSeatCount: 0, efficiency: null,
     }
   }
 
@@ -154,7 +156,15 @@ export async function computeFleetKpis(scope: MetricsScope = { type: 'admin' }):
     ? todayIntensity - yesterdayIntensity
     : null
 
-  const worstForecast = forecasts.find(f => f.hours_to_full != null) ?? null
+  // Bỏ qua seat đã cạn quota (hours_to_full=0, pct>=100) — đó là "đã hết"
+  // chứ không còn "sắp hết". Pick seat sắp cạn tiếp theo theo hours_to_full nhỏ nhất.
+  const worstForecast = forecasts.find(
+    f => f.hours_to_full != null && f.hours_to_full > 0,
+  ) ?? null
+  const exhaustedSeatCount = forecasts.filter(f => f.current_pct >= 100).length
+
+  // Reuse already-fetched forecasts — no extra DB round-trip
+  const efficiency = computeFleetEfficiency(forecasts)
 
   return {
     utilPct, wasteUsd, totalCostUsd,
@@ -169,6 +179,8 @@ export async function computeFleetKpis(scope: MetricsScope = { type: 'admin' }):
           status: worstForecast.status,
         }
       : null,
+    exhaustedSeatCount,
+    efficiency,
   }
 }
 

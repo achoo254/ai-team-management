@@ -18,6 +18,7 @@ import bldMetricsRoutes from './routes/bld-metrics.js'
 import teamRoutes from './routes/teams.js'
 import deviceRoutes from './routes/devices.js'
 import webhookRoutes from './routes/webhook.js'
+import claudeSessionsRoutes from './routes/claude-sessions.js'
 import {
   checkAndSendScheduledReports,
 } from './services/telegram-service.js'
@@ -53,6 +54,7 @@ app.use('/api/user/watched-seats', watchedSeatsRoutes)
 app.use('/api/bld', bldMetricsRoutes)
 app.use('/api/teams', teamRoutes)
 app.use('/api/devices', deviceRoutes)
+app.use('/api/claude-sessions', claudeSessionsRoutes)
 
 // Global error handler — must be last
 app.use(errorHandler)

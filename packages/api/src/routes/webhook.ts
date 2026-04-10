@@ -1,7 +1,7 @@
 // Desktop telemetry webhook ingest endpoint (HMAC-authenticated).
 // Uses raw body parser — HMAC must verify exact bytes the client signed.
 import { Router, type Request, type Response, raw as expressRaw } from 'express'
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { usageReportSchema } from '@repo/shared/webhook-schema'
 import { User } from '../models/user.js'
 import { ingestUsageReport } from '../services/webhook-ingest-service.js'
@@ -15,7 +15,7 @@ const webhookLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.headers['x-device-id'] as string) || req.ip || 'unknown',
+  keyGenerator: (req) => (req.headers['x-device-id'] as string) || ipKeyGenerator(req.ip ?? ''),
   message: { error: 'Rate limit exceeded' },
 })
 

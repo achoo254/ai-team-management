@@ -11,6 +11,7 @@
 import { Router } from 'express'
 import { authenticate } from '../middleware.js'
 import { User } from '../models/user.js'
+import { Seat } from '../models/seat.js'
 import {
   computeFleetKpis,
   computeWwHistory,
@@ -51,9 +52,14 @@ function setCache<T>(key: string, data: T): void {
 /** Derive MetricsScope from the authenticated request user. */
 async function resolveScope(userId: string, role: string): Promise<MetricsScope> {
   if (role === 'admin') return { type: 'admin' }
-  // Fetch seat_ids from DB — they are not included in JWT payload
-  const user = await User.findById(userId).select('seat_ids').lean()
-  const seatIds = (user?.seat_ids ?? []).map(String)
+  // Union seat_ids (member) + seats where user is owner_id
+  const [user, ownedSeats] = await Promise.all([
+    User.findById(userId).select('seat_ids').lean(),
+    Seat.find({ owner_id: userId }, '_id').lean(),
+  ])
+  const memberIds = (user?.seat_ids ?? []).map(String)
+  const ownedIds = ownedSeats.map(s => String(s._id))
+  const seatIds = [...new Set([...memberIds, ...ownedIds])]
   return { type: 'user', seatIds }
 }
 

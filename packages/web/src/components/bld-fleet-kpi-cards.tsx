@@ -31,7 +31,12 @@ function deltaColor(delta: number): string {
 }
 
 export function BldFleetKpiCards({ kpis }: Props) {
-  const { utilPct, wasteUsd, wwDelta, ddDelta, totalCostUsd, billableCount, worstForecast } = kpis;
+  const { utilPct, wasteUsd, wwDelta, ddDelta, totalCostUsd, billableCount, worstForecast, exhaustedSeatCount } = kpis;
+  const exhaustedBadge = exhaustedSeatCount > 0 ? (
+    <p className="mt-1 text-[11px] text-red-500/90">
+      {exhaustedSeatCount} seat đã đầy quota
+    </p>
+  ) : null;
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
@@ -166,7 +171,7 @@ export function BldFleetKpiCards({ kpis }: Props) {
           </p>
         </CardHeader>
         <CardContent>
-          {worstForecast && worstForecast.hours_to_full != null ? (
+          {worstForecast && worstForecast.hours_to_full != null && worstForecast.hours_to_full > 0 ? (
             <>
               <div className="flex items-center gap-1">
                 <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -179,12 +184,16 @@ export function BldFleetKpiCards({ kpis }: Props) {
               <p className="mt-1 truncate text-xs text-muted-foreground">
                 {worstForecast.seat_label}
               </p>
+              {exhaustedBadge}
             </>
           ) : (
-            <div className="flex items-center gap-1 text-green-600">
-              <Clock className="h-5 w-5" />
-              <span className="text-sm font-medium">Không có rủi ro</span>
-            </div>
+            <>
+              <div className="flex items-center gap-1 text-green-600">
+                <Clock className="h-5 w-5" />
+                <span className="text-sm font-medium">Không có rủi ro sắp tới</span>
+              </div>
+              {exhaustedBadge}
+            </>
           )}
         </CardContent>
       </Card>

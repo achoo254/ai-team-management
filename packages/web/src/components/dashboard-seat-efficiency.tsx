@@ -27,12 +27,27 @@ function calcBurnRate5h(seat: SeatUsageItem): number {
   return Math.round((seat.five_hour_pct / hoursElapsed) * 10) / 10;
 }
 
+/** Compute 7d burn rate (%/h) from current pct and time into 7-day window */
+function calcBurnRate7d(seat: SeatUsageItem): number {
+  if (seat.seven_day_pct == null || seat.seven_day_pct <= 0) return 0;
+  if (!seat.seven_day_resets_at) return 0;
+
+  const resetsAt = new Date(seat.seven_day_resets_at).getTime();
+  const now = Date.now();
+  const windowMs = 7 * 24 * 60 * 60 * 1000;
+  const windowStart = resetsAt - windowMs;
+
+  if (now < windowStart || now > resetsAt) return 0;
+
+  const hoursElapsed = Math.max(1, (now - windowStart) / (60 * 60 * 1000));
+  return Math.round((seat.seven_day_pct / hoursElapsed) * 10) / 10;
+}
+
 function calcChartData(seat: SeatUsageItem) {
-  const burnRate = calcBurnRate5h(seat);
   return {
     label: seat.label,
-    burn_rate: burnRate,
-    sessions: seat.session_count_7d,
+    burn_rate: calcBurnRate5h(seat),
+    burn_7d_avg: calcBurnRate7d(seat),
   };
 }
 
@@ -45,9 +60,9 @@ function burnRateColor(rate: number): string {
   return cssVar("--chart-2");                   // healthy: <15%/h
 }
 
-/** Session count — neutral color, not severity-based */
-function sessionColor(): string {
-  return cssVar("--chart-5");
+/** Baseline (7d avg) color — neutral muted, contrasts with current burn */
+function baselineColor(): string {
+  return cssVar("--muted-foreground");
 }
 
 /* ---------- Value label at end of bar ---------- */
@@ -68,7 +83,7 @@ function BurnRateLabel(props: any) {
   );
 }
 
-function SessionLabel(props: any) {
+function BaselineLabel(props: any) {
   const { x, y, width, height, value } = props;
   if (value == null || value === 0) return null;
   return (
@@ -77,9 +92,9 @@ function SessionLabel(props: any) {
       y={y + height / 2}
       dy={4}
       textAnchor="start"
-      style={{ fontSize: 10, fontWeight: 600, fill: sessionColor() }}
+      style={{ fontSize: 10, fontWeight: 600, fill: baselineColor() }}
     >
-      {value}
+      {value}%/h
     </text>
   );
 }
@@ -96,7 +111,7 @@ function ChartTooltip({ active, payload }: any) {
       <p className="font-semibold text-foreground mb-2">{d.label}</p>
       <div className="space-y-1.5 text-xs">
         <TRow label="Burn rate 5h" value={`${d.burn_rate}%/h`} color={burnRateColor(d.burn_rate)} />
-        <TRow label="Sessions (7d)" value={`${d.sessions}`} color={sessionColor()} />
+        <TRow label="Burn 7d avg" value={`${d.burn_7d_avg}%/h`} color={baselineColor()} />
       </div>
     </div>
   );
@@ -121,8 +136,8 @@ function ChartLegend() {
         <span>Burn rate 5h (%/h)</span>
       </div>
       <div className="flex items-center gap-1">
-        <span className="inline-block h-2 w-4 rounded-sm" style={{ backgroundColor: cssVar("--chart-5") }} />
-        <span>Sessions (7d)</span>
+        <span className="inline-block h-2 w-4 rounded-sm" style={{ backgroundColor: cssVar("--muted-foreground") }} />
+        <span>Burn 7d avg (%/h)</span>
       </div>
     </div>
   );
@@ -138,10 +153,10 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
     .map(calcChartData)
     .sort((a, b) => b.burn_rate - a.burn_rate);
 
-  // Dynamic max for X axis (burn rate can vary widely)
-  const maxBurn = Math.max(...chartData.map((d) => d.burn_rate), 10);
-  const maxSessions = Math.max(...chartData.map((d) => d.sessions), 5);
-  const xMax = Math.max(maxBurn, maxSessions);
+  // Dynamic max for X axis (both bars share %/h unit)
+  const maxBurn5h = Math.max(...chartData.map((d) => d.burn_rate), 10);
+  const maxBurn7d = Math.max(...chartData.map((d) => d.burn_7d_avg), 10);
+  const xMax = Math.max(maxBurn5h, maxBurn7d);
 
   const barSize = Math.min(16, Math.max(10, Math.floor(240 / Math.max(chartData.length, 1))));
 
@@ -152,7 +167,7 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
           <div className="min-w-0">
             <CardTitle className="text-base font-semibold">Tốc độ tiêu thụ Seat</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Burn rate 5h và số sessions 7 ngày · <span className="font-medium">{formatRangeDate(range)}</span>
+              Burn 5h hiện tại vs trung bình 7 ngày · <span className="font-medium">{formatRangeDate(range)}</span>
             </p>
           </div>
           <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
@@ -206,17 +221,17 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
                   ))}
                   <LabelList content={<BurnRateLabel />} />
                 </Bar>
-                {/* Sessions bar */}
+                {/* Burn 7d avg baseline bar */}
                 <Bar
-                  dataKey="sessions"
-                  name="Sessions 7d"
+                  dataKey="burn_7d_avg"
+                  name="Burn 7d avg"
                   maxBarSize={barSize}
                   radius={[0, 4, 4, 0]}
                 >
                   {chartData.map((d, i) => (
-                    <Cell key={i} fill={sessionColor()} fillOpacity={0.8} />
+                    <Cell key={i} fill={baselineColor()} fillOpacity={0.8} />
                   ))}
-                  <LabelList content={<SessionLabel />} />
+                  <LabelList content={<BaselineLabel />} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

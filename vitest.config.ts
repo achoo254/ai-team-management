@@ -33,6 +33,9 @@ export default defineConfig({
       "tests/api/devices-route.test.ts",
       "tests/api/webhook-route.test.ts",
       "tests/api/usage-report-per-cycle.test.ts",
+      "tests/api/claude-sessions-route.test.ts",
+      "tests/api/quota-efficiency-service.test.ts",
+      "tests/api/telegram-efficiency-section.test.ts",
     ],
     exclude: ["tests/ui/**", "tests/services/**"],
     // UI tests opt-in via // @vitest-environment jsdom comment

@@ -18,15 +18,15 @@ function generateApiKey(): string {
 
 export async function createDevice(params: {
   user_id: Types.ObjectId
-  device_name: string
-  hostname: string
+  device_name?: string
+  hostname?: string
 }): Promise<CreatedDevice> {
   const plaintext = generateApiKey()
   const device = await Device.create({
     device_id: randomUUID(),
     user_id: params.user_id,
-    device_name: params.device_name,
-    hostname: params.hostname,
+    device_name: params.device_name || 'Pending setup',
+    hostname: params.hostname || 'pending',
     system_info: {
       os_name: '',
       os_version: '',

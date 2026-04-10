@@ -19,25 +19,20 @@ router.use(authenticate)
  */
 router.post('/', async (req: Request, res: Response) => {
   const { device_name, hostname } = req.body ?? {}
-  if (
-    typeof device_name !== 'string' ||
-    !device_name.trim() ||
-    typeof hostname !== 'string' ||
-    !hostname.trim()
-  ) {
-    res.status(400).json({ error: 'device_name and hostname required' })
+  if (device_name != null && (typeof device_name !== 'string' || device_name.length > 200)) {
+    res.status(400).json({ error: 'device_name invalid or too long' })
     return
   }
-  if (device_name.length > 200 || hostname.length > 200) {
-    res.status(400).json({ error: 'device_name/hostname too long' })
+  if (hostname != null && (typeof hostname !== 'string' || hostname.length > 200)) {
+    res.status(400).json({ error: 'hostname invalid or too long' })
     return
   }
 
   const user_id = new mongoose.Types.ObjectId(req.user!._id)
   const { device, plaintext_api_key } = await createDevice({
     user_id,
-    device_name: device_name.trim(),
-    hostname: hostname.trim(),
+    device_name: device_name?.trim() || undefined,
+    hostname: hostname?.trim() || undefined,
   })
 
   res.status(201).json({
