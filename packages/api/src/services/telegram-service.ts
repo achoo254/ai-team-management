@@ -310,12 +310,13 @@ export async function getDueSeatsForUser(
 }
 
 /** Cron handler — for each user with report_enabled + Telegram bot, find seats whose
- *  7-day cycle resets in [now+1h, now+7h) and send a single digest covering all due seats.
+ *  7-day cycle resets in [now, now+2h) and send a single digest covering all due seats.
+ *  Dedup via cycle_reported[seat_id] = reset_at ensures each cycle sends exactly once.
  *  Updates `notification_settings.cycle_reported[seat_id] = reset_at` after successful send. */
 export async function checkAndSendScheduledReports() {
   const now = new Date()
-  const windowStart = new Date(now.getTime() + 1 * 3600_000) // +1h lead time
-  const windowEnd = new Date(now.getTime() + 7 * 3600_000)   // +7h (1h lead + 6h window)
+  const windowStart = new Date(now.getTime())                 // now
+  const windowEnd = new Date(now.getTime() + 2 * 3600_000)   // now + 2h (1h before reset avg)
 
   const users = await User.find({
     'notification_settings.report_enabled': true,
