@@ -111,20 +111,14 @@ router.put('/settings', async (req, res) => {
       }
     }
 
-    // Update notification settings
+    // Update notification settings (cycle-based: chỉ còn toggle report_enabled)
     if (notification_settings) {
       const ns = notification_settings
-      const days = Array.isArray(ns.report_days)
-        ? [...new Set((ns.report_days as unknown[]).filter((d): d is number => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6))]
-        : []
-      if (ns.report_enabled && days.length === 0) {
-        res.status(400).json({ error: 'Cần chọn ít nhất 1 ngày gửi báo cáo' })
-        return
-      }
+      // Preserve existing cycle_reported map khi update toggle
+      const existingCycle = user.notification_settings?.cycle_reported ?? new Map<string, Date>()
       user.notification_settings = {
         report_enabled: !!ns.report_enabled,
-        report_days: days,
-        report_hour: Math.max(0, Math.min(23, Math.floor(Number(ns.report_hour) || 0))),
+        cycle_reported: existingCycle,
       }
     }
 

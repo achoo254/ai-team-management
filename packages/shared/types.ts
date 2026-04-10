@@ -215,11 +215,10 @@ export interface ApiResponse<T> {
   message?: string
 }
 
-// Notification settings
+// Notification settings — cycle-based: reports auto-send before each seat's
+// 7-day quota reset (within a 6h window). No more day/hour controls.
 export interface NotificationSettings {
   report_enabled: boolean
-  report_days: number[]      // 0=Sun, 1=Mon, ..., 6=Sat
-  report_hour: number        // 0-23
 }
 
 // Schedule permissions (simplified: auto-detected activity, read-only for most users)
@@ -308,6 +307,8 @@ export interface FleetKpis {
   /** Day-over-day delta: avg peak 5h today minus avg peak 5h yesterday (pp) */
   ddDelta: number | null
   worstForecast: BldWorstForecast | null
+  /** Số seat đã đạt pct>=100 (đã hết quota 7 ngày). Phân biệt với "sắp hết". */
+  exhaustedSeatCount: number
 }
 
 export interface WwHistoryPoint {

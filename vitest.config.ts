@@ -26,6 +26,10 @@ export default defineConfig({
       "tests/api/usage-window-detector.test.ts",
       "tests/api/bld-metrics.test.ts",
       "tests/api/predictive-alert-service.test.ts",
+      "tests/api/webhook-schema.test.ts",
+      "tests/api/webhook-verify-service.test.ts",
+      "tests/api/device-service.test.ts",
+      "tests/api/usage-report-per-cycle.test.ts",
     ],
     exclude: ["tests/ui/**", "tests/services/**"],
     // UI tests opt-in via // @vitest-environment jsdom comment

@@ -1,3 +1,4 @@
+import { Types } from 'mongoose'
 import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
 import { User, type IUser } from '../models/user.js'
@@ -61,8 +62,10 @@ function buildOverviewSection(kpis: FleetKpis): string {
   msg += `\n`
   msg += `💸 Lãng phí ước tính: <b>$${Math.round(kpis.wasteUsd)}</b>/$${Math.round(kpis.totalCostUsd)}/tháng\n`
   msg += `💺 Tổng: ${kpis.billableCount} seats\n`
-  if (kpis.worstForecast?.hours_to_full != null) {
-    msg += `⚠️ <b>${esc(kpis.worstForecast.seat_label)}</b> sắp cạn quota 7 ngày (~${Math.round(kpis.worstForecast.hours_to_full)}h nữa)\n`
+  if (kpis.worstForecast?.hours_to_full != null && kpis.worstForecast.hours_to_full > 0) {
+    const h = kpis.worstForecast.hours_to_full
+    const eta = h < 1 ? 'dưới 1h nữa' : h < 24 ? `~${Math.round(h)}h nữa` : `~${(h / 24).toFixed(1)} ngày nữa`
+    msg += `⚠️ <b>${esc(kpis.worstForecast.seat_label)}</b> sắp cạn quota 7 ngày (${eta}) — nên cân nhắc đổi tài khoản khác\n`
   }
   return msg
 }
@@ -174,9 +177,15 @@ function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
   })
 }
 
-/** Send usage report for a specific user, filtered by their watched seats */
-export async function sendUserReport(userId: string) {
+/** Send usage report for a specific user, filtered by their watched seats.
+ * @param dueSeatIds — optional. If provided, only render seats whose id ∈ list (cycle-based digest).
+ *   When omitted (e.g. "Gửi thử"), renders all watched seats as before.
+ */
+export async function sendUserReport(userId: string, dueSeatIds?: string[]) {
   if (!isEncryptionConfigured()) return
+
+  // Empty filter list = nothing due → return early (no message sent)
+  if (dueSeatIds && dueSeatIds.length === 0) return
 
   const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id telegram_topic_id watched_seats name seat_ids')
   if (!user?.telegram_bot_token || !user?.telegram_chat_id) return
@@ -196,6 +205,12 @@ export async function sendUserReport(userId: string) {
     seats = Array.from(seatMap.values()).sort((a: any, b: any) => a.label.localeCompare(b.label))
   }
 
+  // Cycle-based filter: only include seats due in current window
+  if (dueSeatIds && dueSeatIds.length > 0) {
+    const dueSet = new Set(dueSeatIds)
+    seats = seats.filter((s: any) => dueSet.has(String(s._id)))
+  }
+
   if (seats.length === 0) return
 
   const seatIds = seats.map((s: any) => String(s._id))
@@ -210,31 +225,92 @@ export async function sendUserReport(userId: string) {
   await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined)
 }
 
-/** Check all users with enabled schedules and send if matching current day/hour */
+/** Result of due-seat lookup for one user. */
+interface DueSeatsResult {
+  dueSeatIds: string[]
+  /** seat_id (string) → reset_at to record in cycle_reported after successful send. */
+  resetMap: Map<string, Date>
+}
+
+/** Find seats whose 7-day quota will reset within [windowStart, windowEnd) for a user.
+ *  Skips seats already reported for the same cycle (dedup via cycle_reported map). */
+export async function getDueSeatsForUser(
+  user: IUser,
+  windowStart: Date,
+  windowEnd: Date,
+): Promise<DueSeatsResult> {
+  const watched = user.watched_seats ?? []
+  if (watched.length === 0) return { dueSeatIds: [], resetMap: new Map() }
+
+  const watchedObjectIds: Types.ObjectId[] = []
+  for (const w of watched) {
+    try { watchedObjectIds.push(new Types.ObjectId(String(w.seat_id))) } catch { /* skip invalid */ }
+  }
+
+  if (watchedObjectIds.length === 0) return { dueSeatIds: [], resetMap: new Map() }
+
+  // Latest snapshot per seat
+  const snaps = await UsageSnapshot.aggregate([
+    { $match: { seat_id: { $in: watchedObjectIds } } },
+    { $sort: { fetched_at: -1 } },
+    { $group: { _id: '$seat_id', seven_day_resets_at: { $first: '$seven_day_resets_at' } } },
+  ])
+
+  const cycleReported = user.notification_settings?.cycle_reported ?? new Map<string, Date>()
+  const dueSeatIds: string[] = []
+  const resetMap = new Map<string, Date>()
+
+  for (const snap of snaps) {
+    const resetAt: Date | null = snap.seven_day_resets_at
+    if (!resetAt) continue
+    const resetTime = new Date(resetAt).getTime()
+    if (resetTime < windowStart.getTime() || resetTime >= windowEnd.getTime()) continue
+
+    const seatIdStr = String(snap._id)
+    const lastReported = cycleReported.get(seatIdStr)
+    if (lastReported && new Date(lastReported).getTime() === resetTime) continue
+
+    dueSeatIds.push(seatIdStr)
+    resetMap.set(seatIdStr, new Date(resetAt))
+  }
+
+  return { dueSeatIds, resetMap }
+}
+
+/** Cron handler — for each user with report_enabled + Telegram bot, find seats whose
+ *  7-day cycle resets in [now+1h, now+7h) and send a single digest covering all due seats.
+ *  Updates `notification_settings.cycle_reported[seat_id] = reset_at` after successful send. */
 export async function checkAndSendScheduledReports() {
   const now = new Date()
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    hour: 'numeric', hour12: false,
-    weekday: 'short',
-  })
-  const parts = Object.fromEntries(fmt.formatToParts(now).map(p => [p.type, p.value]))
-  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  const currentDay = dayMap[parts.weekday] ?? now.getDay()
-  const currentHour = Number(parts.hour)
+  const windowStart = new Date(now.getTime() + 1 * 3600_000) // +1h lead time
+  const windowEnd = new Date(now.getTime() + 7 * 3600_000)   // +7h (1h lead + 6h window)
 
   const users = await User.find({
     'notification_settings.report_enabled': true,
-    'notification_settings.report_days': currentDay,
-    'notification_settings.report_hour': currentHour,
     telegram_bot_token: { $ne: null },
     telegram_chat_id: { $ne: null },
   })
 
   for (const user of users) {
     try {
-      await sendUserReport(String(user._id))
-      console.log(`[Scheduler] Sent report to ${user.name}`)
+      const { dueSeatIds, resetMap } = await getDueSeatsForUser(user, windowStart, windowEnd)
+      if (dueSeatIds.length === 0) continue
+
+      await sendUserReport(String(user._id), dueSeatIds)
+
+      // Mark each seat's reset_at as reported (dedup for next cron tick within window)
+      if (!user.notification_settings) {
+        user.notification_settings = { report_enabled: true, cycle_reported: new Map() }
+      }
+      if (!user.notification_settings.cycle_reported) {
+        user.notification_settings.cycle_reported = new Map()
+      }
+      for (const [seatId, resetAt] of resetMap) {
+        user.notification_settings.cycle_reported.set(seatId, resetAt)
+      }
+      user.markModified('notification_settings.cycle_reported')
+      await user.save()
+      console.log(`[Scheduler] Sent cycle report to ${user.name} for ${dueSeatIds.length} seat(s)`)
     } catch (err) {
       console.error(`[Scheduler] Failed for ${user.name}:`, err)
     }
