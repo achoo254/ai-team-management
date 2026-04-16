@@ -184,13 +184,19 @@ router.get('/enhanced', async (req, res) => {
       : []
     const ownerMap = new Map(ownerUsers.map((u) => [String(u._id), u.name]))
 
-    // Count usage windows (sessions) per seat in last 7 days
+    // Count usage windows (sessions) per seat in last 7 days + compute avg burn rate
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    const recentSessions = await UsageWindow.aggregate([
-      { $match: { seat_id: { $in: seats.map((s) => s._id) }, window_start: { $gte: sevenDaysAgo } } },
-      { $group: { _id: '$seat_id', count: { $sum: 1 } } },
+    const recentWindowStats = await UsageWindow.aggregate([
+      { $match: { seat_id: { $in: seats.map((s) => s._id) }, window_start: { $gte: sevenDaysAgo }, is_closed: true } },
+      { $group: {
+        _id: '$seat_id',
+        count: { $sum: 1 },
+        // avg burn rate = mean(utilization_pct / duration_hours) across closed 5h windows
+        avg_burn_rate: { $avg: { $cond: [{ $gt: ['$duration_hours', 0] }, { $divide: ['$utilization_pct', '$duration_hours'] }, 0] } },
+      } },
     ])
-    const sessionCountMap = new Map(recentSessions.map((w) => [String(w._id), w.count as number]))
+    const sessionCountMap = new Map(recentWindowStats.map((w) => [String(w._id), w.count as number]))
+    const burnRate7dMap = new Map(recentWindowStats.map((w) => [String(w._id), Math.round((w.avg_burn_rate as number) * 10) / 10]))
 
     const usagePerSeat = seats.map((s) => {
       const key = String(s._id)
@@ -212,6 +218,7 @@ router.get('/enhanced', async (req, res) => {
         max_users: s.max_users,
         users,
         session_count_7d: sessionCountMap.get(key) ?? 0,
+        burn_rate_7d_avg: burnRate7dMap.get(key) ?? 0,
       }
     })
 

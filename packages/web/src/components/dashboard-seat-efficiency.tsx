@@ -27,27 +27,11 @@ function calcBurnRate5h(seat: SeatUsageItem): number {
   return Math.round((seat.five_hour_pct / hoursElapsed) * 10) / 10;
 }
 
-/** Compute 7d burn rate (%/h) from current pct and time into 7-day window */
-function calcBurnRate7d(seat: SeatUsageItem): number {
-  if (seat.seven_day_pct == null || seat.seven_day_pct <= 0) return 0;
-  if (!seat.seven_day_resets_at) return 0;
-
-  const resetsAt = new Date(seat.seven_day_resets_at).getTime();
-  const now = Date.now();
-  const windowMs = 7 * 24 * 60 * 60 * 1000;
-  const windowStart = resetsAt - windowMs;
-
-  if (now < windowStart || now > resetsAt) return 0;
-
-  const hoursElapsed = Math.max(1, (now - windowStart) / (60 * 60 * 1000));
-  return Math.round((seat.seven_day_pct / hoursElapsed) * 10) / 10;
-}
-
 function calcChartData(seat: SeatUsageItem) {
   return {
     label: seat.label,
     burn_rate: calcBurnRate5h(seat),
-    burn_7d_avg: calcBurnRate7d(seat),
+    burn_7d_avg: seat.burn_rate_7d_avg ?? 0,
   };
 }
 
