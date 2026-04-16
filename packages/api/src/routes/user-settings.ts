@@ -111,14 +111,19 @@ router.put('/settings', async (req, res) => {
       }
     }
 
-    // Update notification settings (cycle-based: chỉ còn toggle report_enabled)
+    // Update notification settings (fixed schedule: days + hour)
     if (notification_settings) {
       const ns = notification_settings
-      // Preserve existing cycle_reported map khi update toggle
-      const existingCycle = user.notification_settings?.cycle_reported ?? new Map<string, Date>()
+      const existing = user.notification_settings
       user.notification_settings = {
-        report_enabled: !!ns.report_enabled,
-        cycle_reported: existingCycle,
+        report_enabled: ns.report_enabled != null ? !!ns.report_enabled : (existing?.report_enabled ?? false),
+        report_days: Array.isArray(ns.report_days)
+          ? ns.report_days.filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)
+          : (existing?.report_days ?? [5]),
+        report_hour: ns.report_hour != null && Number.isInteger(ns.report_hour) && ns.report_hour >= 0 && ns.report_hour <= 23
+          ? ns.report_hour
+          : (existing?.report_hour ?? 9),
+        last_report_sent_at: existing?.last_report_sent_at ?? null,
       }
     }
 

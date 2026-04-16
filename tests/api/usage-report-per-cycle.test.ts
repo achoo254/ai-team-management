@@ -1,169 +1,138 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Types } from "mongoose";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock UsageSnapshot.aggregate so getDueSeatsForUser doesn't need a real DB
-vi.mock("@/models/usage-snapshot", () => ({
-  UsageSnapshot: {
-    aggregate: vi.fn(),
+// Mock encryption (always configured)
+vi.mock("@/lib/encryption", () => ({
+  isEncryptionConfigured: () => true,
+  decrypt: (v: string) => v,
+}));
+
+// Mock Seat
+vi.mock("@/models/seat", () => ({
+  Seat: {
+    find: vi.fn().mockReturnValue({ sort: vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue([]) }) }),
   },
 }));
 
-import { UsageSnapshot } from "@/models/usage-snapshot";
-import { getDueSeatsForUser } from "@/services/telegram-service";
-import type { IUser } from "@/models/user";
+// Mock UsageSnapshot
+vi.mock("@/models/usage-snapshot", () => ({
+  UsageSnapshot: { aggregate: vi.fn().mockResolvedValue([]) },
+}));
 
-const mockAggregate = vi.mocked(UsageSnapshot.aggregate);
+// Mock bld-metrics-service
+vi.mock("@/services/bld-metrics-service", () => ({
+  computeFleetKpis: vi.fn().mockResolvedValue(null),
+}));
 
-/** Build a minimal IUser-like object with watched_seats + cycle_reported map. */
+// Mock User — will be controlled per test
+const mockSave = vi.fn().mockResolvedValue(undefined);
+const mockMarkModified = vi.fn();
+let mockUsers: any[] = [];
+vi.mock("@/models/user", () => ({
+  User: {
+    find: vi.fn().mockImplementation(() => mockUsers),
+    findById: vi.fn().mockImplementation(() => null),
+  },
+}));
+
+import { User } from "@/models/user";
+import { checkAndSendScheduledReports } from "@/services/telegram-service";
+
+/** Build a user with schedule settings. */
 function makeUser(opts: {
-  seatIds?: string[];
-  cycleReported?: Map<string, Date>;
-} = {}): IUser {
-  const watched = (opts.seatIds ?? []).map((id) => ({
-    seat_id: new Types.ObjectId(id),
-    threshold_5h_pct: 90,
-    threshold_7d_pct: 85,
-    burn_rate_threshold: 15,
-    eta_warning_hours: 1.5,
-    forecast_warning_hours: 48,
-  }));
+  id?: string;
+  name?: string;
+  reportDays?: number[];
+  reportHour?: number;
+  lastSentAt?: Date | null;
+}) {
   return {
-    _id: new Types.ObjectId(),
-    name: "Tester",
-    role: "user",
-    active: true,
-    fcm_tokens: [],
-    push_enabled: false,
-    watched_seats: watched,
+    _id: opts.id ?? "user-1",
+    name: opts.name ?? "Tester",
+    telegram_bot_token: "enc-token",
+    telegram_chat_id: "123",
+    telegram_topic_id: null,
     notification_settings: {
       report_enabled: true,
-      cycle_reported: opts.cycleReported ?? new Map(),
+      report_days: opts.reportDays ?? [5],
+      report_hour: opts.reportHour ?? 9,
+      last_report_sent_at: opts.lastSentAt ?? null,
     },
-  } as unknown as IUser;
+    save: mockSave,
+    markModified: mockMarkModified,
+  };
 }
 
-/** Stub aggregate result shape: { _id: ObjectId, seven_day_resets_at: Date|null } */
-function snap(seatId: string, resetAt: Date | null) {
-  return { _id: new Types.ObjectId(seatId), seven_day_resets_at: resetAt };
-}
-
-describe("getDueSeatsForUser", () => {
-  // Fixed reference time → window = [+1h, +7h)
-  const NOW = new Date("2026-04-10T00:00:00Z");
-  const windowStart = new Date(NOW.getTime() + 1 * 3600_000);
-  const windowEnd = new Date(NOW.getTime() + 7 * 3600_000);
-
+describe("checkAndSendScheduledReports — fixed schedule", () => {
   beforeEach(() => {
-    mockAggregate.mockReset();
+    vi.clearAllMocks();
+    mockUsers = [];
   });
 
-  it("returns empty when user has no watched seats", async () => {
-    mockAggregate.mockResolvedValue([]);
-    const user = makeUser({ seatIds: [] });
-
-    const result = await getDueSeatsForUser(user, windowStart, windowEnd);
-
-    expect(result.dueSeatIds).toEqual([]);
-    expect(result.resetMap.size).toBe(0);
-    expect(mockAggregate).not.toHaveBeenCalled();
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("excludes seat whose reset_at is past the window", async () => {
-    const seatId = new Types.ObjectId().toString();
-    // reset = +10h → after windowEnd (+7h) → excluded
-    const resetAt = new Date(NOW.getTime() + 10 * 3600_000);
-    mockAggregate.mockResolvedValue([snap(seatId, resetAt)]);
+  it("queries users matching current VN day + hour", async () => {
+    // Friday 9:00 VN = 02:00 UTC
+    vi.setSystemTime(new Date("2026-04-17T02:00:00Z"));
+    mockUsers = [];
 
-    const result = await getDueSeatsForUser(makeUser({ seatIds: [seatId] }), windowStart, windowEnd);
+    await checkAndSendScheduledReports();
 
-    expect(result.dueSeatIds).toEqual([]);
+    // Verify the query includes day=5 and hour=9
+    const findCall = vi.mocked(User.find).mock.calls[0];
+    expect(findCall[0]).toMatchObject({
+      "notification_settings.report_enabled": true,
+      "notification_settings.report_days": 5,
+      "notification_settings.report_hour": 9,
+    });
   });
 
-  it("excludes seat whose reset_at is before window start (already reset / too soon)", async () => {
-    const seatId = new Types.ObjectId().toString();
-    // reset = +0.5h → before windowStart (+1h) → excluded
-    const resetAt = new Date(NOW.getTime() + 0.5 * 3600_000);
-    mockAggregate.mockResolvedValue([snap(seatId, resetAt)]);
+  it("skips user already sent today (dedup via last_report_sent_at)", async () => {
+    vi.setSystemTime(new Date("2026-04-17T02:00:00Z")); // Fri 9AM VN
+    const user = makeUser({
+      lastSentAt: new Date("2026-04-17T01:00:00Z"), // same VN date
+    });
+    mockUsers = [user];
 
-    const result = await getDueSeatsForUser(makeUser({ seatIds: [seatId] }), windowStart, windowEnd);
+    await checkAndSendScheduledReports();
 
-    expect(result.dueSeatIds).toEqual([]);
+    // save() should NOT be called — user was skipped
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
-  it("includes seat whose reset_at falls inside the window", async () => {
-    const seatId = new Types.ObjectId().toString();
-    const resetAt = new Date(NOW.getTime() + 3 * 3600_000); // +3h ∈ [+1h, +7h)
-    mockAggregate.mockResolvedValue([snap(seatId, resetAt)]);
+  it("updates last_report_sent_at after successful send", async () => {
+    vi.setSystemTime(new Date("2026-04-17T02:00:00Z"));
+    // findById returns user with watched_seats for sendUserReport
+    const user = makeUser({ lastSentAt: null });
+    mockUsers = [user];
+    vi.mocked(User.findById).mockResolvedValueOnce(user as any);
 
-    const result = await getDueSeatsForUser(makeUser({ seatIds: [seatId] }), windowStart, windowEnd);
+    await checkAndSendScheduledReports();
 
-    expect(result.dueSeatIds).toEqual([seatId]);
-    expect(result.resetMap.get(seatId)?.getTime()).toBe(resetAt.getTime());
+    expect(mockSave).toHaveBeenCalled();
+    expect(user.notification_settings.last_report_sent_at).toBeInstanceOf(Date);
   });
 
-  it("dedup: skips seat already reported for the same cycle", async () => {
-    const seatId = new Types.ObjectId().toString();
-    const resetAt = new Date(NOW.getTime() + 3 * 3600_000);
-    mockAggregate.mockResolvedValue([snap(seatId, resetAt)]);
+  it("sends if last sent was a different VN date", async () => {
+    vi.setSystemTime(new Date("2026-04-17T02:00:00Z"));
+    const user = makeUser({
+      lastSentAt: new Date("2026-04-10T02:00:00Z"), // last Friday
+    });
+    mockUsers = [user];
+    vi.mocked(User.findById).mockResolvedValueOnce(user as any);
 
-    const cycleReported = new Map<string, Date>([[seatId, resetAt]]);
-    const result = await getDueSeatsForUser(
-      makeUser({ seatIds: [seatId], cycleReported }),
-      windowStart,
-      windowEnd,
-    );
+    await checkAndSendScheduledReports();
 
-    expect(result.dueSeatIds).toEqual([]);
+    expect(mockSave).toHaveBeenCalled();
   });
 
-  it("re-includes seat when reported reset_at differs (new cycle)", async () => {
-    const seatId = new Types.ObjectId().toString();
-    const newResetAt = new Date(NOW.getTime() + 3 * 3600_000);
-    const oldResetAt = new Date(NOW.getTime() - 7 * 24 * 3600_000); // last week's cycle
-    mockAggregate.mockResolvedValue([snap(seatId, newResetAt)]);
+  it("does nothing when User.find returns empty", async () => {
+    vi.setSystemTime(new Date("2026-04-17T02:00:00Z"));
+    mockUsers = [];
 
-    const cycleReported = new Map<string, Date>([[seatId, oldResetAt]]);
-    const result = await getDueSeatsForUser(
-      makeUser({ seatIds: [seatId], cycleReported }),
-      windowStart,
-      windowEnd,
-    );
+    await checkAndSendScheduledReports();
 
-    expect(result.dueSeatIds).toEqual([seatId]);
-    expect(result.resetMap.get(seatId)?.getTime()).toBe(newResetAt.getTime());
-  });
-
-  it("skips seats with no snapshot and seats with null reset_at", async () => {
-    const seatA = new Types.ObjectId().toString();
-    const seatB = new Types.ObjectId().toString();
-    // seatA missing entirely; seatB has null reset
-    mockAggregate.mockResolvedValue([snap(seatB, null)]);
-
-    const result = await getDueSeatsForUser(
-      makeUser({ seatIds: [seatA, seatB] }),
-      windowStart,
-      windowEnd,
-    );
-
-    expect(result.dueSeatIds).toEqual([]);
-  });
-
-  it("returns multiple due seats in one call", async () => {
-    const seatA = new Types.ObjectId().toString();
-    const seatB = new Types.ObjectId().toString();
-    const seatC = new Types.ObjectId().toString();
-    const resetA = new Date(NOW.getTime() + 2 * 3600_000); // due
-    const resetB = new Date(NOW.getTime() + 5 * 3600_000); // due
-    const resetC = new Date(NOW.getTime() + 9 * 3600_000); // outside window
-    mockAggregate.mockResolvedValue([snap(seatA, resetA), snap(seatB, resetB), snap(seatC, resetC)]);
-
-    const result = await getDueSeatsForUser(
-      makeUser({ seatIds: [seatA, seatB, seatC] }),
-      windowStart,
-      windowEnd,
-    );
-
-    expect(result.dueSeatIds.sort()).toEqual([seatA, seatB].sort());
-    expect(result.resetMap.size).toBe(2);
+    expect(mockSave).not.toHaveBeenCalled();
   });
 });

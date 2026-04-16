@@ -215,10 +215,11 @@ export interface ApiResponse<T> {
   message?: string
 }
 
-// Notification settings — cycle-based: reports auto-send before each seat's
-// 7-day quota reset (within a 6h window). No more day/hour controls.
+/** Notification settings — fixed schedule: user picks days + hour (VN timezone). */
 export interface NotificationSettings {
   report_enabled: boolean
+  report_days: number[]   // 0=Sun..6=Sat, e.g. [5] = Friday
+  report_hour: number     // 0-23 in Asia/Ho_Chi_Minh
 }
 
 // Schedule permissions (simplified: auto-detected activity, read-only for most users)

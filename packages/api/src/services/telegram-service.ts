@@ -1,4 +1,3 @@
-import { Types } from 'mongoose'
 import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
 import { User, type IUser } from '../models/user.js'
@@ -48,11 +47,19 @@ interface SeatRow {
   label: string
   five_hour_pct: number | null
   seven_day_pct: number | null
+  seven_day_resets_at: Date | null
   extra_usage: { is_enabled: boolean; used_credits: number | null; monthly_limit: number | null; utilization: number | null } | null
 }
 
+/** Format a Date to VN date string (dd/MM) */
+function fmtVnDate(d: Date): string {
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit',
+  }).format(d)
+}
+
 /** Build efficiency section from FleetEfficiency data */
-function buildEfficiencySection(eff: FleetEfficiency): string {
+function buildEfficiencySection(eff: FleetEfficiency, seatResetMap: Map<string, Date | null>): string {
   if (eff.total_seats === 0) return ''
 
   // All unknown → show collecting message
@@ -66,7 +73,15 @@ function buildEfficiencySection(eff: FleetEfficiency): string {
   if (eff.overload.length > 0) {
     const names = eff.overload
       .slice(0, 3)
-      .map(o => `${esc(o.seat_label)} (cạn sớm ~${(o.hours_early / 24).toFixed(1)} ngày)`)
+      .map(o => {
+        // Calculate specific exhaustion date from hours_early + reset date
+        const resetAt = seatResetMap.get(o.seat_id)
+        if (resetAt && o.hours_early > 0) {
+          const exhaustDate = new Date(resetAt.getTime() - o.hours_early * 3600_000)
+          return `${esc(o.seat_label)} (cạn ${fmtVnDate(exhaustDate)})`
+        }
+        return `${esc(o.seat_label)}`
+      })
       .join(', ')
     const more = eff.overload.length > 3 ? ` +${eff.overload.length - 3}` : ''
     msg += `🔴 Quá tải:    ${eff.overload.length} seat(s) — ${names}${more}\n`
@@ -75,7 +90,12 @@ function buildEfficiencySection(eff: FleetEfficiency): string {
   }
 
   if (eff.waste.seats.length > 0) {
-    msg += `🟡 Lãng phí:   ${eff.waste.seats.length} seats — ~$${Math.round(eff.waste.total_waste_usd)}/chu kỳ không tận dụng\n`
+    const names = eff.waste.seats
+      .slice(0, 3)
+      .map(w => `${esc(w.seat_label)} (${w.projected_pct}%)`)
+      .join(', ')
+    const more = eff.waste.seats.length > 3 ? ` +${eff.waste.seats.length - 3}` : ''
+    msg += `🟡 Lãng phí:   ${eff.waste.seats.length} seats — ${names}${more} (~$${Math.round(eff.waste.total_waste_usd)}/chu kỳ)\n`
   } else {
     msg += `🟡 Lãng phí:   0 seats\n`
   }
@@ -88,7 +108,7 @@ function buildEfficiencySection(eff: FleetEfficiency): string {
 }
 
 /** Build overview section from fleet KPIs */
-function buildOverviewSection(kpis: FleetKpis): string {
+function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | null>): string {
   let msg = `── <b>TỔNG QUAN</b> ──────────────\n`
   msg += `📈 Tận dụng TB 7 ngày: <b>${Math.round(kpis.utilPct)}%</b>`
   if (kpis.wwDelta !== 0) {
@@ -100,10 +120,19 @@ function buildOverviewSection(kpis: FleetKpis): string {
   msg += `💺 Tổng: ${kpis.billableCount} seats\n`
 
   if (kpis.efficiency) {
-    msg += `\n` + buildEfficiencySection(kpis.efficiency)
+    msg += `\n` + buildEfficiencySection(kpis.efficiency, seatResetMap)
   }
 
   return msg
+}
+
+/** Pick color emoji based on 7d usage: higher = better (green), lower = worse (red).
+ *  Goal: maximize quota utilization — high usage is efficient. */
+function usageColorEmoji(sevenDayPct: number | null): string {
+  const pct = sevenDayPct ?? 0
+  if (pct >= 70) return '🟢'  // Efficient: good utilization
+  if (pct >= 40) return '🟡'  // Moderate: could use more
+  return '🔴'                  // Low: wasting quota
 }
 
 /** Build HTML report from seat rows + optional fleet overview */
@@ -114,16 +143,21 @@ function buildReportHtml(
 ): string {
   let msg = `📊 <b>Báo cáo Usage — ${new Date().toLocaleDateString('vi-VN')}</b>\n\n`
 
+  // Build reset date map for efficiency section
+  const seatResetMap = new Map<string, Date | null>()
+  for (const r of rows) {
+    seatResetMap.set(String(r.seat_id), r.seven_day_resets_at)
+  }
+
   // Fleet overview section
   if (kpis) {
-    msg += buildOverviewSection(kpis)
+    msg += buildOverviewSection(kpis, seatResetMap)
     msg += `\n── <b>CHI TIẾT SEATS</b> ──────────\n\n`
   }
 
   for (const s of rows) {
-    const highest = Math.max(s.five_hour_pct ?? 0, s.seven_day_pct ?? 0)
-    const warn = highest >= 80 ? '🔴' : highest >= 50 ? '🟡' : '🟢'
-    msg += `${warn} <b>${esc(s.label)}</b> <code>${esc(s.email)}</code>\n`
+    const color = usageColorEmoji(s.seven_day_pct)
+    msg += `${color} <b>${esc(s.label)}</b> <code>${esc(s.email)}</code>\n`
 
     if (s.five_hour_pct !== null) {
       msg += `   5h:  ${buildProgressBar(s.five_hour_pct)} ${s.five_hour_pct}%\n`
@@ -133,6 +167,15 @@ function buildReportHtml(
     }
     if (s.five_hour_pct === null && s.seven_day_pct === null) {
       msg += `   <i>Chưa có dữ liệu</i>\n`
+    }
+
+    // Show 7d reset date
+    if (s.seven_day_resets_at) {
+      const resetStr = new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(s.seven_day_resets_at)
+      msg += `   🔄 Reset 7d: ${resetStr}\n`
     }
 
     if (s.extra_usage?.is_enabled && s.extra_usage.monthly_limit != null) {
@@ -152,17 +195,18 @@ function buildReportHtml(
     msg += '\n'
   }
 
-  // Summary
+  // Summary — color logic: high 7d = green (efficient), low 7d = red (wasteful)
   const total = rows.length
-  const high = rows.filter((r) => Math.max(r.five_hour_pct ?? 0, r.seven_day_pct ?? 0) >= 80)
-  const mid = rows.filter((r) => {
-    const h = Math.max(r.five_hour_pct ?? 0, r.seven_day_pct ?? 0)
-    return h >= 50 && h < 80
+  const efficient = rows.filter((r) => (r.seven_day_pct ?? 0) >= 70)
+  const moderate = rows.filter((r) => {
+    const pct = r.seven_day_pct ?? 0
+    return pct >= 40 && pct < 70
   })
+  const low = total - efficient.length - moderate.length
   msg += `<b>📋 Tổng kết:</b> ${total} seats\n`
-  msg += `🟢 Bình thường: ${total - high.length - mid.length} | `
-  msg += `🟡 Trung bình: ${mid.length} | `
-  msg += `🔴 Cao: ${high.length}\n`
+  msg += `🟢 Hiệu quả: ${efficient.length} | `
+  msg += `🟡 Trung bình: ${moderate.length} | `
+  msg += `🔴 Thấp: ${low}\n`
 
   return msg
 }
@@ -177,6 +221,7 @@ async function fetchReportData() {
       _id: '$seat_id',
       five_hour_pct: { $first: '$five_hour_pct' },
       seven_day_pct: { $first: '$seven_day_pct' },
+      seven_day_resets_at: { $first: '$seven_day_resets_at' },
       extra_usage: { $first: '$extra_usage' },
     }},
   ])
@@ -204,20 +249,15 @@ function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
       label: s.label,
       five_hour_pct: snap?.five_hour_pct ?? null,
       seven_day_pct: snap?.seven_day_pct ?? null,
+      seven_day_resets_at: snap?.seven_day_resets_at ? new Date(snap.seven_day_resets_at) : null,
       extra_usage: snap?.extra_usage ?? null,
     }
   })
 }
 
-/** Send usage report for a specific user, filtered by their watched seats.
- * @param dueSeatIds — optional. If provided, only render seats whose id ∈ list (cycle-based digest).
- *   When omitted (e.g. "Gửi thử"), renders all watched seats as before.
- */
-export async function sendUserReport(userId: string, dueSeatIds?: string[]) {
+/** Send usage report for a specific user covering all their watched seats. */
+export async function sendUserReport(userId: string) {
   if (!isEncryptionConfigured()) return
-
-  // Empty filter list = nothing due → return early (no message sent)
-  if (dueSeatIds && dueSeatIds.length === 0) return
 
   const user = await User.findById(userId, 'telegram_bot_token telegram_chat_id telegram_topic_id watched_seats name seat_ids')
   if (!user?.telegram_bot_token || !user?.telegram_chat_id) return
@@ -237,12 +277,6 @@ export async function sendUserReport(userId: string, dueSeatIds?: string[]) {
     seats = Array.from(seatMap.values()).sort((a: any, b: any) => a.label.localeCompare(b.label))
   }
 
-  // Cycle-based filter: only include seats due in current window
-  if (dueSeatIds && dueSeatIds.length > 0) {
-    const dueSet = new Set(dueSeatIds)
-    seats = seats.filter((s: any) => dueSet.has(String(s._id)))
-  }
-
   if (seats.length === 0) return
 
   const seatIds = seats.map((s: any) => String(s._id))
@@ -257,93 +291,42 @@ export async function sendUserReport(userId: string, dueSeatIds?: string[]) {
   await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined)
 }
 
-/** Result of due-seat lookup for one user. */
-interface DueSeatsResult {
-  dueSeatIds: string[]
-  /** seat_id (string) → reset_at to record in cycle_reported after successful send. */
-  resetMap: Map<string, Date>
-}
-
-/** Find seats whose 7-day quota will reset within [windowStart, windowEnd) for a user.
- *  Skips seats already reported for the same cycle (dedup via cycle_reported map). */
-export async function getDueSeatsForUser(
-  user: IUser,
-  windowStart: Date,
-  windowEnd: Date,
-): Promise<DueSeatsResult> {
-  const watched = user.watched_seats ?? []
-  if (watched.length === 0) return { dueSeatIds: [], resetMap: new Map() }
-
-  const watchedObjectIds: Types.ObjectId[] = []
-  for (const w of watched) {
-    try { watchedObjectIds.push(new Types.ObjectId(String(w.seat_id))) } catch { /* skip invalid */ }
-  }
-
-  if (watchedObjectIds.length === 0) return { dueSeatIds: [], resetMap: new Map() }
-
-  // Latest snapshot per seat
-  const snaps = await UsageSnapshot.aggregate([
-    { $match: { seat_id: { $in: watchedObjectIds } } },
-    { $sort: { fetched_at: -1 } },
-    { $group: { _id: '$seat_id', seven_day_resets_at: { $first: '$seven_day_resets_at' } } },
-  ])
-
-  const cycleReported = user.notification_settings?.cycle_reported ?? new Map<string, Date>()
-  const dueSeatIds: string[] = []
-  const resetMap = new Map<string, Date>()
-
-  for (const snap of snaps) {
-    const resetAt: Date | null = snap.seven_day_resets_at
-    if (!resetAt) continue
-    const resetTime = new Date(resetAt).getTime()
-    if (resetTime < windowStart.getTime() || resetTime >= windowEnd.getTime()) continue
-
-    const seatIdStr = String(snap._id)
-    const lastReported = cycleReported.get(seatIdStr)
-    if (lastReported && new Date(lastReported).getTime() === resetTime) continue
-
-    dueSeatIds.push(seatIdStr)
-    resetMap.set(seatIdStr, new Date(resetAt))
-  }
-
-  return { dueSeatIds, resetMap }
-}
-
-/** Cron handler — for each user with report_enabled + Telegram bot, find seats whose
- *  7-day cycle resets in [now, now+2h) and send a single digest covering all due seats.
- *  Dedup via cycle_reported[seat_id] = reset_at ensures each cycle sends exactly once.
- *  Updates `notification_settings.cycle_reported[seat_id] = reset_at` after successful send. */
+/** Cron handler — for each user with report_enabled + matching day/hour, send report.
+ *  Dedup via last_report_sent_at: skip if already sent today (same VN date). */
 export async function checkAndSendScheduledReports() {
   const now = new Date()
-  const windowStart = new Date(now.getTime())                 // now
-  const windowEnd = new Date(now.getTime() + 2 * 3600_000)   // now + 2h (1h before reset avg)
+  const { day, hour } = currentVnDayHour(now)
 
   const users = await User.find({
     'notification_settings.report_enabled': true,
+    'notification_settings.report_days': day,
+    'notification_settings.report_hour': hour,
     telegram_bot_token: { $ne: null },
     telegram_chat_id: { $ne: null },
   })
 
+  // Today's VN date string for dedup
+  const todayVn = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(now)
+
   for (const user of users) {
     try {
-      const { dueSeatIds, resetMap } = await getDueSeatsForUser(user, windowStart, windowEnd)
-      if (dueSeatIds.length === 0) continue
+      // Dedup: skip if already sent for today's VN date
+      const lastSent = user.notification_settings?.last_report_sent_at
+      if (lastSent) {
+        const lastVn = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(lastSent))
+        if (lastVn === todayVn) continue
+      }
 
-      await sendUserReport(String(user._id), dueSeatIds)
+      await sendUserReport(String(user._id))
 
-      // Mark each seat's reset_at as reported (dedup for next cron tick within window)
+      // Mark as sent
       if (!user.notification_settings) {
-        user.notification_settings = { report_enabled: true, cycle_reported: new Map() }
+        user.notification_settings = { report_enabled: true, report_days: [5], report_hour: 9, last_report_sent_at: now }
+      } else {
+        user.notification_settings.last_report_sent_at = now
       }
-      if (!user.notification_settings.cycle_reported) {
-        user.notification_settings.cycle_reported = new Map()
-      }
-      for (const [seatId, resetAt] of resetMap) {
-        user.notification_settings.cycle_reported.set(seatId, resetAt)
-      }
-      user.markModified('notification_settings.cycle_reported')
       await user.save()
-      console.log(`[Scheduler] Sent cycle report to ${user.name} for ${dueSeatIds.length} seat(s)`)
+      console.log(`[Scheduler] Sent report to ${user.name}`)
     } catch (err) {
       console.error(`[Scheduler] Failed for ${user.name}:`, err)
     }

@@ -2,8 +2,9 @@ import mongoose, { Schema, type Document, type Types } from 'mongoose'
 
 export interface INotificationSettings {
   report_enabled: boolean
-  /** Per-seat dedup map: seat_id (string) → reset_at đã gửi báo cáo cho cycle đó */
-  cycle_reported?: Map<string, Date>
+  report_days: number[]   // 0=Sun..6=Sat
+  report_hour: number     // 0-23 in Asia/Ho_Chi_Minh
+  last_report_sent_at?: Date | null
 }
 
 export interface IAlertSettings {
@@ -68,7 +69,9 @@ const userSchema = new Schema<IUser>(
     },
     notification_settings: {
       report_enabled: { type: Boolean, default: false },
-      cycle_reported: { type: Map, of: Date, default: () => new Map() },
+      report_days: { type: [Number], default: [5] },     // Friday
+      report_hour: { type: Number, default: 9 },          // 9 AM VN
+      last_report_sent_at: { type: Date, default: null },
     },
     alert_settings: {
       enabled: { type: Boolean, default: false },
@@ -94,9 +97,9 @@ userSchema.set('toJSON', {
     const hasToken = !!ret.telegram_bot_token
     delete ret.telegram_bot_token
     delete ret.fcm_tokens
-    // Strip dedup map from API responses (internal state)
+    // Strip internal state from API responses
     if (ret.notification_settings) {
-      delete ret.notification_settings.cycle_reported
+      delete ret.notification_settings.last_report_sent_at
     }
     ret.has_telegram_bot = hasToken && !!ret.telegram_chat_id
     return ret
