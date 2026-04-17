@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api-client'
 import { toast } from 'sonner'
-import type { UsageSnapshot } from '@repo/shared'
+import type { UsageSnapshot, PreResetEntry } from '@repo/shared'
 
 const SNAPSHOTS_KEY = ['usage-snapshots']
 const LATEST_KEY = ['usage-snapshots', 'latest']
+const PRE_RESET_KEY = ['usage-snapshots', 'pre-reset-history']
 
 export function useLatestSnapshots() {
   return useQuery<{ snapshots: UsageSnapshot[] }>({
@@ -30,6 +31,13 @@ export function useUsageSnapshots(params: {
   return useQuery<{ snapshots: UsageSnapshot[]; total: number }>({
     queryKey: [...SNAPSHOTS_KEY, params],
     queryFn: () => api.get(`/api/usage-snapshots?${query.toString()}`),
+  })
+}
+
+export function usePreResetHistory(weeks = 8) {
+  return useQuery<{ history: PreResetEntry[] }>({
+    queryKey: [...PRE_RESET_KEY, weeks],
+    queryFn: () => api.get(`/api/usage-snapshots/pre-reset-history?weeks=${weeks}`),
   })
 }
 

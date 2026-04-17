@@ -397,3 +397,12 @@ export type RebalanceSuggestion =
       underusedSeatLabel: string
       reason: string
     }
+
+// Pre-reset 7d usage history — snapshot taken just before each weekly quota reset
+export interface PreResetEntry {
+  seat_id: string
+  seven_day_pct: number | null
+  seven_day_sonnet_pct: number | null
+  seven_day_opus_pct: number | null
+  fetched_at: string       // ISO — snapshot taken right before 7d quota reset to 0%
+}

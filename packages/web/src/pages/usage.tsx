@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router'
 import { UsageSnapshotList } from '@/components/usage-snapshot-list'
 import { ClaudeSessionsSection } from '@/components/claude-sessions-section'
+import { PreResetHistoryTable } from '@/components/pre-reset-history-table'
 
 export default function UsagePage() {
   const [searchParams] = useSearchParams()
@@ -15,6 +16,9 @@ export default function UsagePage() {
 
       {/* Latest snapshots grid */}
       <UsageSnapshotList highlightSeatId={highlightSeatId} />
+
+      {/* Weekly pre-reset usage history */}
+      <PreResetHistoryTable />
 
       {/* Desktop telemetry sessions */}
       <ClaudeSessionsSection initialSeatId={highlightSeatId} />

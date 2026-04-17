@@ -110,4 +110,87 @@ router.get('/latest', authenticate, async (req, res) => {
   }
 })
 
+// GET /api/usage-snapshots/pre-reset-history — peak 7d usage per reset cycle
+// Detects usage "cycles" (continuous >0% periods between resets to 0%).
+// Returns the MAX seven_day_pct per cycle per seat — the true peak before reset.
+// Query: ?weeks=8 (default 8 weeks of history)
+router.get('/pre-reset-history', authenticate, async (req, res) => {
+  try {
+    const allowed = await getAllowedSeatIds(req.user!, true)
+    const weeks = Math.min(Number(req.query.weeks) || 8, 26)
+    const since = new Date(Date.now() - weeks * 7 * 24 * 60 * 60 * 1000)
+
+    const matchFilter: Record<string, unknown> = { fetched_at: { $gte: since } }
+    if (allowed) matchFilter.seat_id = { $in: allowed }
+
+    const results = await UsageSnapshot.aggregate([
+      { $match: matchFilter },
+      { $sort: { seat_id: 1, fetched_at: 1 } },
+      // Normalize null → 0 for cycle detection
+      { $addFields: { pct: { $ifNull: ['$seven_day_pct', 0] } } },
+      // Peek at prev/next pct per seat
+      {
+        $setWindowFields: {
+          partitionBy: '$seat_id',
+          sortBy: { fetched_at: 1 },
+          output: {
+            prev_pct: { $shift: { output: '$pct', by: -1, default: 0 } },
+            next_pct: { $shift: { output: '$pct', by: 1, default: -1 } },
+          },
+        },
+      },
+      // Mark cycle start: pct goes from 0 → >0
+      {
+        $addFields: {
+          is_cycle_start: {
+            $cond: [{ $and: [{ $gt: ['$pct', 0] }, { $lte: ['$prev_pct', 0] }] }, 1, 0],
+          },
+        },
+      },
+      // Assign cycle_id via running sum of cycle starts
+      {
+        $setWindowFields: {
+          partitionBy: '$seat_id',
+          sortBy: { fetched_at: 1 },
+          output: {
+            cycle_id: { $sum: '$is_cycle_start', window: { documents: ['unbounded', 'current'] } },
+          },
+        },
+      },
+      // Only non-zero snapshots
+      { $match: { pct: { $gt: 0 } } },
+      // Group by (seat, cycle): peak usage + check if cycle completed (next was 0)
+      {
+        $group: {
+          _id: { seat_id: '$seat_id', cycle_id: '$cycle_id' },
+          seven_day_pct: { $max: '$seven_day_pct' },
+          seven_day_sonnet_pct: { $max: '$seven_day_sonnet_pct' },
+          seven_day_opus_pct: { $max: '$seven_day_opus_pct' },
+          fetched_at: { $last: '$fetched_at' },
+          // A cycle is completed if any snapshot in it has next_pct = 0
+          is_completed: { $max: { $cond: [{ $eq: ['$next_pct', 0] }, 1, 0] } },
+        },
+      },
+      // Only completed cycles with meaningful usage — exclude noise blips (≤5%) and ongoing cycle
+      { $match: { is_completed: 1, seven_day_pct: { $gt: 5 } } },
+      {
+        $project: {
+          _id: 0,
+          seat_id: '$_id.seat_id',
+          seven_day_pct: 1,
+          seven_day_sonnet_pct: 1,
+          seven_day_opus_pct: 1,
+          fetched_at: 1,
+        },
+      },
+      { $sort: { fetched_at: -1 } },
+    ])
+
+    res.json({ history: results })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    res.status(500).json({ error: message })
+  }
+})
+
 export default router
