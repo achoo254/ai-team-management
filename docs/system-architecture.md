@@ -140,7 +140,6 @@ Subsequent requests: JWT read from cookie or Authorization header
   email: String (required, unique per non-deleted seat),
   label: String (required),
   owner_id: ObjectId | null (ref: User, index: true),
-  max_users: Number (default: 3),
   oauth_credential: {
     access_token: String | null (encrypted AES-256-GCM),
     refresh_token: String | null (encrypted),
@@ -524,7 +523,7 @@ Response: { account, organization, duplicate_seat_id, restorable_seat? }
     ↓
 User: If restorable_seat exists, show Vietnamese choice banner (restore vs. create new)
     ↓
-User: POST /api/seats { credential_json, max_users, restore_seat_id? OR force_new? }
+User: POST /api/seats { credential_json, restore_seat_id? OR force_new? }
     ↓
 Backend: If restore_seat_id — undelete seat via atomic findOneAndUpdate (set deleted_at: null)
     ↓

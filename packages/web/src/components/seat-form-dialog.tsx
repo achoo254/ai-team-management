@@ -12,7 +12,7 @@ import { SeatRestoreBanner } from "@/components/seat-restore-banner";
 
 export type SeatFormSubmit =
   | { mode: "create"; data: CreateSeatPayload }
-  | { mode: "edit"; data: { email: string; label: string; max_users: number; include_in_overview: boolean } };
+  | { mode: "edit"; data: { email: string; label: string; include_in_overview: boolean } };
 
 interface Props {
   open: boolean;
@@ -37,14 +37,12 @@ function EditMode({ open, onClose, onSubmit, loading, initial }: Props & { initi
   const [form, setForm] = useState({
     email: initial.email,
     label: initial.label,
-    max_users: initial.max_users,
     include_in_overview: initial.include_in_overview ?? false,
   });
   useEffect(() => {
     setForm({
       email: initial.email,
       label: initial.label,
-      max_users: initial.max_users,
       include_in_overview: initial.include_in_overview ?? false,
     });
   }, [initial, open]);
@@ -64,11 +62,6 @@ function EditMode({ open, onClose, onSubmit, loading, initial }: Props & { initi
           <div className="grid gap-1.5">
             <Label>Label</Label>
             <Input value={form.label} onChange={e => set("label", e.target.value)} placeholder="Seat A" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Số user tối đa</Label>
-            <Input type="number" min={1} max={10} value={form.max_users}
-              onChange={e => set("max_users", Number(e.target.value))} />
           </div>
           {/* include_in_overview toggle — visible to all managers (admin or owner via requireSeatOwnerOrAdmin) */}
           <div className="flex items-start gap-3 rounded-md border p-3">
@@ -113,7 +106,6 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
   const [manualMode, setManualMode] = useState(false);
   const [manualEmail, setManualEmail] = useState("");
   const [labelOverride, setLabelOverride] = useState("");
-  const [maxUsers, setMaxUsers] = useState(2);
   const [includeInOverview, setIncludeInOverview] = useState(true);
   const [restorableSeat, setRestorableSeat] = useState<PreviewTokenResponse['restorable_seat']>(null);
 
@@ -124,7 +116,7 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
     if (!open) {
       setRawJson(""); setParsed(null); setParseInvalid(false);
       setProfile(null); setProfileError(null);
-      setManualMode(false); setManualEmail(""); setLabelOverride(""); setMaxUsers(2);
+      setManualMode(false); setManualEmail(""); setLabelOverride("");
       setIncludeInOverview(true); setRestorableSeat(null);
     }
   }, [open]);
@@ -164,7 +156,7 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
   const effectiveEmail = manualMode ? manualEmail : profile?.account.email;
   const effectiveLabelDefault = manualMode ? labelOverride : profile?.account.full_name ?? "";
   const canSubmit =
-    parsed && !duplicate && !restorableSeat && !preview.isPending && !loading && maxUsers >= 1 && (
+    parsed && !duplicate && !restorableSeat && !preview.isPending && !loading && (
       manualMode ? !!manualEmail.trim() && !!labelOverride.trim() : !!profile
     );
 
@@ -172,7 +164,6 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
     if (!parsed) return;
     const payload: CreateSeatPayload = {
       credential_json: rawJson.trim(),
-      max_users: maxUsers,
       include_in_overview: includeInOverview,
       ...(labelOverride ? { label: labelOverride } : {}),
       ...(manualMode ? { manual_mode: true, email: manualEmail } : {}),
@@ -261,7 +252,6 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
                   mode: "create",
                   data: {
                     credential_json: rawJson.trim(),
-                    max_users: maxUsers,
                     include_in_overview: includeInOverview,
                     ...(labelOverride ? { label: labelOverride } : {}),
                     restore_seat_id: restorableSeat._id,
@@ -274,7 +264,6 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
                   mode: "create",
                   data: {
                     credential_json: rawJson.trim(),
-                    max_users: maxUsers,
                     include_in_overview: includeInOverview,
                     ...(labelOverride ? { label: labelOverride } : {}),
                     force_new: true,
@@ -300,7 +289,7 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
             </div>
           )}
 
-          {/* Label + max_users */}
+          {/* Label */}
           {parsed && (
             <div className="grid gap-3 pt-1">
               <div className="grid gap-1.5">
@@ -310,11 +299,6 @@ function CreateMode({ open, onClose, onSubmit, loading }: Props) {
                   onChange={e => setLabelOverride(e.target.value)}
                   placeholder={manualMode ? "Nhập label" : "Auto từ profile"}
                 />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Số user tối đa</Label>
-                <Input type="number" min={1} max={10} value={maxUsers}
-                  onChange={e => setMaxUsers(Number(e.target.value))} />
               </div>
               {effectiveEmail && (
                 <div className="text-xs text-muted-foreground">

@@ -31,7 +31,6 @@ export interface Seat {
   _id: string
   email: string
   label: string
-  max_users: number
   owner_id: string | null
   owner?: { _id: string; name: string; email: string } | null
   has_token?: boolean

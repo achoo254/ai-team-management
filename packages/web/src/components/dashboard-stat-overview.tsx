@@ -83,16 +83,11 @@ export function DashboardStatOverview({ range, seatIds }: { range: DashboardRang
   const soonest7d = soonestIso(seats.map((s) => s.seven_day_resets_at));
   const sub5h = soonest5h ? `Reset sớm nhất: ${formatResetTime(soonest5h).label}` : "chu kỳ cuốn chiếu 5 giờ";
   const sub7d = soonest7d ? `Reset sớm nhất: ${formatResetTime(soonest7d).label}` : "chu kỳ cuốn chiếu 7 ngày";
-  const totalOccupancy = seats.reduce((a, s) => a + s.user_count, 0);
-  const totalCapacity = seats.reduce((a, s) => a + s.max_users, 0);
+  const totalMembers = seats.reduce((a, s) => a + s.user_count, 0);
 
   const tokenIssueCount = data?.tokenIssueCount ?? 0;
-  const fullSeatCount = data?.fullSeatCount ?? 0;
 
-  // Build seats sub text: slot occupancy + "X full" if any seats are full
-  const seatsSub = fullSeatCount > 0
-    ? `${totalOccupancy}/${totalCapacity} slot · ${fullSeatCount} full`
-    : `${totalOccupancy}/${totalCapacity} slot đã dùng`;
+  const seatsSub = `${totalMembers} thành viên`;
 
   return (
     <div className="space-y-2">

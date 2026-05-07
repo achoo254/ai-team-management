@@ -43,7 +43,7 @@ async function createWatcher(watches: WatchEntry[], options: {
 describe("alert-service: checkSnapshotAlerts()", () => {
   describe("rate_limit (per-user dedup)", () => {
     it("creates 5h alert when snapshot pct >= user's threshold_5h_pct", async () => {
-      const seat = await Seat.create({ email: "high@test.com", label: "High", max_users: 2 });
+      const seat = await Seat.create({ email: "high@test.com", label: "High" });
       const user = await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 80 }]);
       await UsageSnapshot.create({
         seat_id: seat._id, raw_response: {},
@@ -59,7 +59,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
     });
 
     it("creates 7d alert using max of 3 variants", async () => {
-      const seat = await Seat.create({ email: "multi@test.com", label: "Multi", max_users: 2 });
+      const seat = await Seat.create({ email: "multi@test.com", label: "Multi" });
       const user = await createWatcher([{ seat_id: String(seat._id), threshold_7d_pct: 85 }]);
       await UsageSnapshot.create({
         seat_id: seat._id, raw_response: {},
@@ -75,7 +75,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
     });
 
     it("2 users watching same seat with different thresholds → each gets alerted at their own threshold", async () => {
-      const seat = await Seat.create({ email: "shared@test.com", label: "Shared", max_users: 2 });
+      const seat = await Seat.create({ email: "shared@test.com", label: "Shared" });
       const userA = await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 80 }]);
       const userB = await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 95 }]);
       await UsageSnapshot.create({
@@ -92,7 +92,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
     });
 
     it("does NOT create duplicate for same user within 24h cooldown", async () => {
-      const seat = await Seat.create({ email: "dup@test.com", label: "Dup", max_users: 2 });
+      const seat = await Seat.create({ email: "dup@test.com", label: "Dup" });
       const user = await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 80 }]);
       // Seed recent notified alert
       await Alert.create({
@@ -108,7 +108,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
     });
 
     it("does NOT create alert when alerts disabled for user", async () => {
-      const seat = await Seat.create({ email: "off@test.com", label: "Off", max_users: 2 });
+      const seat = await Seat.create({ email: "off@test.com", label: "Off" });
       await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 50 }], { alerts_enabled: false });
       await UsageSnapshot.create({
         seat_id: seat._id, raw_response: {}, five_hour_pct: 90, fetched_at: new Date(),
@@ -122,7 +122,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
   describe("token_failure (per-user)", () => {
     it("creates token_failure alert per watcher with token_failure_enabled", async () => {
       const seat = await Seat.create({
-        email: "fail@test.com", label: "Fail", max_users: 2,
+        email: "fail@test.com", label: "Fail",
         token_active: true, last_fetch_error: "invalid_grant",
       });
       const user = await createWatcher([{ seat_id: String(seat._id) }]);
@@ -136,7 +136,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
 
     it("skips user when token_failure_enabled=false", async () => {
       const seat = await Seat.create({
-        email: "skip@test.com", label: "Skip", max_users: 2,
+        email: "skip@test.com", label: "Skip",
         token_active: true, last_fetch_error: "boom",
       });
       await createWatcher([{ seat_id: String(seat._id) }], { token_failure_enabled: false });

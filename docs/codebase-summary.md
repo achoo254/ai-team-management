@@ -132,7 +132,6 @@ quan-ly-team-claude/
   email: String (required, unique),
   label: String (required),
   owner_id: ObjectId | null (reference to User, index: true),
-  max_users: Number (default: 3),
   oauth_credential: {
     access_token: String | null (encrypted AES-256-GCM),
     refresh_token: String | null (encrypted),
@@ -302,7 +301,7 @@ quan-ly-team-claude/
 - `GET /api/auth/me` — Current authenticated user
 
 ### Dashboard
-- `GET /api/dashboard/enhanced` — Overview stats (tokenIssueCount, fullSeatCount, owner_name per seat)
+- `GET /api/dashboard/enhanced` — Overview stats (tokenIssueCount, owner_name per seat)
 - `GET /api/dashboard/personal` — Current user's schedule today, my seats with role, usage rank (auth required, any user)
 - `GET /api/dashboard/weekly-summary` — Weekly usage summary
 - `GET /api/dashboard/alerts` — Recent alerts

@@ -10,7 +10,6 @@ const mockSeat: Seat = {
   email: "seat1@example.com",
   label: "Seat Alpha",
   team: "dev",
-  max_users: 3,
   users: [
     { id: "u-1", name: "Alice", email: "alice@example.com" },
     { id: "u-2", name: "Bob", email: "bob@example.com" },
@@ -42,7 +41,7 @@ describe("SeatCard", () => {
         onUnassign={vi.fn()}
       />
     );
-    expect(screen.getByText("2/3 người dùng")).toBeDefined();
+    expect(screen.getByText("2 members")).toBeDefined();
     expect(screen.getByText("Alice")).toBeDefined();
     expect(screen.getByText("Bob")).toBeDefined();
   });

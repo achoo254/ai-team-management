@@ -24,7 +24,6 @@ export interface SeatUsageItem {
   extra_usage: SeatExtraUsage | null;
   last_fetched_at: string | null;
   user_count: number;
-  max_users: number;
   users: string[];
   session_count_7d: number;
   burn_rate_7d_avg: number;
@@ -53,7 +52,6 @@ export interface EnhancedDashboardData {
   totalSeats: number;
   unreadAlerts: number;
   tokenIssueCount: number;
-  fullSeatCount: number;
   todayActiveSeats: number;
   usagePerSeat: SeatUsageItem[];
   usageTrend: UsageTrendPoint[];

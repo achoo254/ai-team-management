@@ -12,7 +12,6 @@ export interface IOAuthCredential {
 export interface ISeat extends Document {
   email: string
   label: string
-  max_users: number
   owner_id: Types.ObjectId | null
   oauth_credential: IOAuthCredential | null
   token_active: boolean
@@ -43,7 +42,6 @@ const seatSchema = new Schema<ISeat>(
   {
     email: { type: String, required: true },
     label: { type: String, required: true },
-    max_users: { type: Number, default: 3 },
     owner_id: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     oauth_credential: {
       type: {

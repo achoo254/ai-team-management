@@ -6,6 +6,39 @@ All notable changes to the Claude Teams Management Dashboard project are documen
 
 ---
 
+## [2026-05-07] Remove Seat Capacity Limit (`max_users`)
+
+### Breaking Changes
+
+**Removed `max_users` field — seats now allow unlimited members**
+
+- **Seat model** (`packages/api/src/models/seat.ts`): field `max_users` xoá khỏi schema + interface
+- **API routes**:
+  - `POST /api/seats` no longer accepts/validates `max_users` in request body
+  - `PUT /api/seats/:id` no longer accepts `max_users` (removed from allowed PATCH fields)
+  - `POST /api/seats/:id/assign` no longer enforces capacity check — assignment always succeeds
+- **Dashboard response** (`GET /api/dashboard/enhanced`): removed `fullSeatCount` and per-seat `max_users` fields
+- **Shared DTO** (`packages/shared/types.ts`): `Seat.max_users` removed
+- **Frontend**:
+  - `SeatFormDialog`: removed "Số user tối đa" inputs (create + edit)
+  - `SeatCard`: badge changed from `X/Y members` → `X members` with users icon
+  - `DashboardStatOverview`: replaced `totalCapacity`/`fullSeatCount` with `totalMembers`
+  - `DashboardDetailTable`: occupancy badge replaced with sortable plain count
+  - `DashboardSeatUsageChart`: tooltip "Thành viên: X" (no `/Y`)
+
+### DB Migration
+
+No active migration required — Mongoose schema removal causes existing `max_users` field to be ignored on read. Optional cleanup:
+```js
+db.seats.updateMany({}, { $unset: { max_users: "" } })
+```
+
+### Rationale
+
+Seat capacity limit no longer reflects business need. Owners requested unlimited member assignment per seat.
+
+---
+
 ## [2026-04-06] Predictive Alert System (Fast Burn + Quota Forecast)
 
 ### Major Changes

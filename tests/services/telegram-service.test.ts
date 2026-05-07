@@ -21,7 +21,7 @@ import { sendWeeklyReport } from "@/services/telegram-service";
 /** Seed minimal data: team, seat, user */
 async function seedBaseData() {
   const team = await Team.create({ name: "dev", label: "Dev", color: "#3b82f6" });
-  const seat = await Seat.create({ email: "seat@telegram.com", label: "TG Seat", team: "dev", max_users: 2 });
+  const seat = await Seat.create({ email: "seat@telegram.com", label: "TG Seat", team: "dev" });
   const user = await User.create({
     name: "TG User",
     email: "tguser@test.com",

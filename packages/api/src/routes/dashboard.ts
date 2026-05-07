@@ -215,15 +215,11 @@ router.get('/enhanced', async (req, res) => {
         extra_usage: snap?.extra_usage ?? null,
         last_fetched_at: snap?.last_fetched_at ?? null,
         user_count: users.length,
-        max_users: s.max_users,
         users,
         session_count_7d: sessionCountMap.get(key) ?? 0,
         burn_rate_7d_avg: burnRate7dMap.get(key) ?? 0,
       }
     })
-
-    // Compute fullSeatCount from usagePerSeat (no extra query)
-    const fullSeatCount = usagePerSeat.filter((s) => s.user_count >= s.max_users).length
 
     // Usage trend filtered by selected range — per-seat lines (no averaging)
     // For "day" range: from start of today (VN timezone) instead of rolling 24h,
@@ -310,7 +306,6 @@ router.get('/enhanced', async (req, res) => {
       totalSeats,
       unreadAlerts,
       tokenIssueCount,
-      fullSeatCount,
       todayActiveSeats,
       usagePerSeat,
       usageTrend,

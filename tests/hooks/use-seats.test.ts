@@ -12,7 +12,6 @@ const mockSeat = {
   _id: "seat-1",
   email: "seat1@example.com",
   label: "Seat 1",
-  max_users: 3,
   users: [{ id: "u-1", name: "Alice", email: "alice@example.com" }],
 };
 
@@ -62,8 +61,7 @@ describe("useCreateSeat", () => {
       result.current.mutate({
         email: "seat1@example.com",
         label: "Seat 1",
-        max_users: 3,
-      });
+      } as any);
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));

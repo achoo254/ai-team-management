@@ -38,7 +38,7 @@ function CustomTooltip({ active, payload, label }: any) {
         <TooltipRow label="Opus 7d" value={seat?.seven_day_opus_pct} color={cssVar("--muted-foreground")} />
         <div className="border-t border-border/40 pt-1.5 mt-2">
           <p className="text-muted-foreground">
-            Thành viên: {seat?.user_count}/{seat?.max_users}
+            Thành viên: {seat?.user_count}
             {seat?.users?.length ? ` — ${seat.users.join(", ")}` : ""}
           </p>
         </div>

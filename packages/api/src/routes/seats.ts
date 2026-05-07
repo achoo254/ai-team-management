@@ -284,25 +284,21 @@ router.post('/preview-token', authenticate, async (req, res) => {
 })
 
 // POST /api/seats — create seat token-first (any authenticated user becomes owner).
-// Required: credential_json + max_users. Auto-fetches profile to fill email + default label.
+// Required: credential_json. Auto-fetches profile to fill email + default label.
 // manual_mode=true skips profile API and requires email+label in body.
 // restore_seat_id: restore a soft-deleted seat instead of creating new.
 // force_new: cascade-delete soft-deleted seat with same email, then create fresh.
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { credential_json, max_users, label, manual_mode, email: bodyEmail,
+    const { credential_json, label, manual_mode, email: bodyEmail,
             include_in_overview, restore_seat_id, force_new } = req.body as {
-      credential_json?: string; max_users?: number; label?: string
+      credential_json?: string; label?: string
       manual_mode?: boolean; email?: string; include_in_overview?: boolean
       restore_seat_id?: string; force_new?: boolean
     }
 
     if (!credential_json || typeof credential_json !== 'string') {
       res.status(400).json({ error: 'credential_json is required' })
-      return
-    }
-    if (typeof max_users !== 'number' || max_users < 1) {
-      res.status(400).json({ error: 'max_users is required' })
       return
     }
 
@@ -330,7 +326,6 @@ router.post('/', authenticate, async (req, res) => {
         oauth_credential: toCredentialDoc(parsed),
         owner_id: req.user!._id,
         token_active: true,
-        max_users,
         last_fetch_error: null,
       }
       if (label) updateFields.label = label
@@ -466,7 +461,6 @@ router.post('/', authenticate, async (req, res) => {
     const seat = await Seat.create({
       email,
       label: label || defaultLabel,
-      max_users,
       owner_id: req.user!._id,
       oauth_credential: toCredentialDoc(parsed),
       token_active: true,
@@ -489,7 +483,7 @@ router.put('/:id', authenticate, validateObjectId('id'), requireSeatOwnerOrAdmin
   try {
     const id = req.params.id as string
     // owner_id intentionally excluded — ownership transfer uses PUT /:id/transfer (admin only)
-    const allowed = ['email', 'label', 'max_users', 'include_in_overview']
+    const allowed = ['email', 'label', 'include_in_overview']
     const update: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in req.body) update[key] = req.body[key]
@@ -571,13 +565,6 @@ router.post('/:id/assign', authenticate, validateObjectId('id'), requireSeatOwne
     const user = await User.findById(userId)
     if (!user) {
       res.status(404).json({ error: 'User not found' })
-      return
-    }
-
-    // Check seat capacity
-    const currentCount = await User.countDocuments({ seat_ids: id, active: true })
-    if (currentCount >= seat.max_users) {
-      res.status(400).json({ error: 'Seat is at maximum capacity' })
       return
     }
 

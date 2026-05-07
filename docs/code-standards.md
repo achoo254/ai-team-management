@@ -320,7 +320,7 @@ const session = await mongoose.startSession();
 try {
   await session.withTransaction(async () => {
     const user = await User.create([{ name, email }], { session });
-    await Seat.updateOne({ _id: seatId }, { $inc: { max_users: 1 } }, { session });
+    await Seat.updateOne({ _id: seatId }, { $set: { label: 'updated' } }, { session });
     return user;
   });
 } finally {

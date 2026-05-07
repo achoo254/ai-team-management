@@ -6,13 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCardSeatOverride } from "@/hooks/use-card-seat-override";
 import { DashboardSeatFilter } from "@/components/dashboard-seat-filter";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDashboardEnhanced, formatRangeDate, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
+import { useDashboardEnhanced, type SeatUsageItem, type DashboardRange } from "@/hooks/use-dashboard";
 import { cssVar } from "@/lib/chart-colors";
 
 /* ---------- Data transform ---------- */
 
-/** Compute burn rate (%/h) for a window: pct consumed divided by hours elapsed since window start */
-function calcBurnRate(pct: number | null, resetsAt: string | null, windowMs: number): number {
+const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
+const SEVEN_DAY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Burn rate hiện tại của window: pct đã dùng / số giờ kể từ lần reset gần nhất */
+function calcCurrentBurnRate(pct: number | null, resetsAt: string | null, windowMs: number): number {
   if (pct == null || pct <= 0) return 0;
   if (!resetsAt) return 0;
 
@@ -20,21 +23,17 @@ function calcBurnRate(pct: number | null, resetsAt: string | null, windowMs: num
   const now = Date.now();
   const windowStart = resetsAtMs - windowMs;
 
-  // Guard: stale or future window → no meaningful burn rate
   if (now < windowStart || now > resetsAtMs) return 0;
 
   const hoursElapsed = Math.max(0.5, (now - windowStart) / (60 * 60 * 1000));
   return Math.round((pct / hoursElapsed) * 10) / 10;
 }
 
-const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
-const SEVEN_DAY_MS = 7 * 24 * 60 * 60 * 1000;
-
 function calcChartData(seat: SeatUsageItem) {
   return {
     label: seat.label,
-    burn_rate_5h: calcBurnRate(seat.five_hour_pct, seat.five_hour_resets_at, FIVE_HOUR_MS),
-    burn_rate_7d: calcBurnRate(seat.seven_day_pct, seat.seven_day_resets_at, SEVEN_DAY_MS),
+    burn_rate_5h: calcCurrentBurnRate(seat.five_hour_pct, seat.five_hour_resets_at, FIVE_HOUR_MS),
+    burn_rate_7d: calcCurrentBurnRate(seat.seven_day_pct, seat.seven_day_resets_at, SEVEN_DAY_MS),
   };
 }
 
@@ -154,10 +153,15 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
           <div className="min-w-0">
             <CardTitle className="text-base font-semibold">Tốc độ tiêu thụ Seat</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Burn rate 5h vs Burn rate 7d hiện tại · <span className="font-medium">{formatRangeDate(range)}</span>
+              Burn rate 5h vs Burn rate 7d hiện tại
             </p>
           </div>
-          <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted-foreground/70 italic hidden sm:inline">
+              Không chịu ảnh hưởng bởi filter thời gian
+            </span>
+            <DashboardSeatFilter compact value={filter.effective} onChange={filter.setOverride} isOverride={filter.isOverride} onReset={filter.resetToGlobal} />
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
@@ -208,7 +212,7 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
                   ))}
                   <LabelList content={<BurnRateLabel />} />
                 </Bar>
-                {/* Burn rate 7d baseline bar */}
+                {/* Burn rate 7d bar */}
                 <Bar
                   dataKey="burn_rate_7d"
                   name="Burn rate 7d"

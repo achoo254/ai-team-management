@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Pencil, Trash2, X, UserPlus, Download, ArrowRightLeft, BarChart2 } from "lucide-react";
+import { Pencil, Trash2, X, UserPlus, Download, ArrowRightLeft, BarChart2, Users } from "lucide-react";
 import { type Seat } from "@/hooks/use-seats";
 import { WatchSeatButton } from "./watch-seat-button";
 
@@ -30,7 +30,6 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
   const isOwner = seat.owner_id === currentUserId;
   const assignedIds = new Set(seat.users.map((u) => u.id));
   const availableUsers = allUsers.filter((u) => u.active && !assignedIds.has(u.id));
-  const isFull = seat.users.length >= seat.max_users;
 
   return (
     <Card>
@@ -75,8 +74,9 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
       </CardHeader>
       <CardContent className="pt-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            {seat.users.length}/{seat.max_users} members
+          <p className="text-xs text-muted-foreground inline-flex items-center gap-1">
+            <Users className="h-3 w-3" />
+            {seat.users.length} members
           </p>
           <WatchSeatButton seatId={seat._id} seatLabel={seat.label || seat.email} />
         </div>
@@ -97,7 +97,7 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
         </div>
 
         {/* Assign member */}
-        {canManage && !isFull && (
+        {canManage && (
           showPicker ? (
             <div className="space-y-1">
               <div className="max-h-32 overflow-y-auto rounded border bg-popover p-1">

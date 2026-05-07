@@ -26,12 +26,6 @@ function pctCell(pct: number | null, resetsAt?: string | null) {
   );
 }
 
-function occupancyBadge(count: number, max: number) {
-  const pct = max > 0 ? Math.round((count / max) * 100) : 0;
-  const variant = pct >= 100 ? "destructive" : pct >= 67 ? "default" : "secondary";
-  return <Badge variant={variant}>{count}/{max}</Badge>;
-}
-
 function formatTime(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
@@ -94,7 +88,9 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
                 <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("label")}>
                   Seat{arrow("label")}
                 </TableHead>
-                <TableHead>Thành viên</TableHead>
+                <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("user_count")}>
+                  Members{arrow("user_count")}
+                </TableHead>
                 <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("five_hour_pct")}>
                   5h %{arrow("five_hour_pct")}
                 </TableHead>
@@ -140,7 +136,7 @@ export function DashboardDetailTable({ range, seatIds }: { range: DashboardRange
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>{occupancyBadge(s.user_count, s.max_users)}</TableCell>
+                  <TableCell className="text-right">{s.user_count}</TableCell>
                   <TableCell className="text-right">{pctCell(s.five_hour_pct, s.five_hour_resets_at)}</TableCell>
                   <TableCell className="text-right">{pctCell(s.seven_day_pct, s.seven_day_resets_at)}</TableCell>
                   <TableCell className="text-right">{pctCell(s.seven_day_sonnet_pct)}</TableCell>

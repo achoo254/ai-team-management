@@ -8,7 +8,7 @@ export interface SeatUser { id: string; name: string; email: string; }
 export interface SeatOwner { _id: string; name: string; email: string; }
 export interface Seat {
   _id: string; email: string; label: string;
-  max_users: number; users: SeatUser[];
+  users: SeatUser[];
   owner_id: string | null;
   owner?: SeatOwner | null;
   has_token?: boolean; token_active?: boolean;
@@ -26,7 +26,6 @@ export function useSeats() {
 
 export interface CreateSeatPayload {
   credential_json: string;
-  max_users: number;
   include_in_overview?: boolean;
   label?: string;
   manual_mode?: boolean;

@@ -10,7 +10,6 @@ const mockDashboard = {
   totalSeats: 4,
   unreadAlerts: 2,
   tokenIssueCount: 0,
-  fullSeatCount: 1,
   todaySchedules: 3,
   usagePerSeat: [{ label: "Seat 1", owner_name: "John", five_hour_pct: 40, seven_day_pct: 60 }],
   usageTrend: [{ date: "2026-03-23", seat_id: "s1", seat_label: "Seat 1", five_hour_pct: 40, seven_day_pct: 55 }],
