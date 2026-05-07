@@ -226,7 +226,11 @@ router.get('/enhanced', async (req, res) => {
     const fullSeatCount = usagePerSeat.filter((s) => s.user_count >= s.max_users).length
 
     // Usage trend filtered by selected range — per-seat lines (no averaging)
-    const rangeStart = new Date(Date.now() - RANGE_MS[range])
+    // For "day" range: from start of today (VN timezone) instead of rolling 24h,
+    // so the chart only shows hours of the current calendar day.
+    const rangeStart = range === 'day'
+      ? new Date(Date.UTC(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate()) - 7 * 60 * 60 * 1000)
+      : new Date(Date.now() - RANGE_MS[range])
     // For "day" range, group by hour instead of day for more granular view
     const dateGroupFormat = range === 'day' ? '%Y-%m-%d %H:00' : '%Y-%m-%d'
     const trendRaw = await UsageSnapshot.aggregate([
