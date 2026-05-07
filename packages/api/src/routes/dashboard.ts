@@ -225,24 +225,39 @@ router.get('/enhanced', async (req, res) => {
     // Compute fullSeatCount from usagePerSeat (no extra query)
     const fullSeatCount = usagePerSeat.filter((s) => s.user_count >= s.max_users).length
 
-    // Usage trend filtered by selected range
+    // Usage trend filtered by selected range — per-seat lines (no averaging)
     const rangeStart = new Date(Date.now() - RANGE_MS[range])
     // For "day" range, group by hour instead of day for more granular view
     const dateGroupFormat = range === 'day' ? '%Y-%m-%d %H:00' : '%Y-%m-%d'
-    const usageTrend = await UsageSnapshot.aggregate([
+    const trendRaw = await UsageSnapshot.aggregate([
       { $match: { fetched_at: { $gte: rangeStart }, ...seatIdMatch } },
+      { $sort: { fetched_at: 1 } },
       { $group: {
-        _id: { $dateToString: { format: dateGroupFormat, date: '$fetched_at', timezone: 'Asia/Ho_Chi_Minh' } },
-        avg_7d_pct: { $avg: { $ifNull: ['$seven_day_pct', null] } },
-        avg_5h_pct: { $avg: { $ifNull: ['$five_hour_pct', null] } },
+        _id: {
+          date: { $dateToString: { format: dateGroupFormat, date: '$fetched_at', timezone: 'Asia/Ho_Chi_Minh' } },
+          seat_id: '$seat_id',
+        },
+        // $last after $sort = most recent snapshot in bucket (true value, not averaged)
+        five_hour_pct: { $last: '$five_hour_pct' },
+        seven_day_pct: { $last: '$seven_day_pct' },
       }},
-      { $sort: { _id: 1 } },
       { $project: {
-        date: '$_id', _id: 0,
-        avg_7d_pct: { $round: [{ $ifNull: ['$avg_7d_pct', 0] }, 1] },
-        avg_5h_pct: { $round: [{ $ifNull: ['$avg_5h_pct', 0] }, 1] },
+        _id: 0,
+        date: '$_id.date',
+        seat_id: '$_id.seat_id',
+        five_hour_pct: { $round: [{ $ifNull: ['$five_hour_pct', 0] }, 1] },
+        seven_day_pct: { $round: [{ $ifNull: ['$seven_day_pct', 0] }, 1] },
       }},
+      { $sort: { date: 1 } },
     ])
+    const seatLabelMap = new Map(seats.map((s) => [String(s._id), s.label]))
+    const usageTrend = trendRaw.map((r) => ({
+      date: r.date as string,
+      seat_id: String(r.seat_id),
+      seat_label: seatLabelMap.get(String(r.seat_id)) ?? String(r.seat_id),
+      five_hour_pct: r.five_hour_pct as number,
+      seven_day_pct: r.seven_day_pct as number,
+    }))
 
     // Data quality: stale seats (last_fetched_at older than 6h)
     const SIX_HOURS_MS = 6 * 60 * 60 * 1000

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
 import { User, type IUser } from '../models/user.js'
@@ -41,14 +42,24 @@ function buildProgressBar(pct: number): string {
 }
 
 /** Shared data types for report building */
+interface YesterdaySnap {
+  five_hour_pct: number | null
+  five_hour_resets_at: Date | null
+  seven_day_pct: number | null
+  seven_day_resets_at: Date | null
+  fetched_at: Date | null
+}
+
 interface SeatRow {
   seat_id: unknown
   email: string
   label: string
   five_hour_pct: number | null
+  five_hour_resets_at: Date | null
   seven_day_pct: number | null
   seven_day_resets_at: Date | null
   extra_usage: { is_enabled: boolean; used_credits: number | null; monthly_limit: number | null; utilization: number | null } | null
+  yesterday: YesterdaySnap | null
 }
 
 /** Format a Date to VN date string (dd/MM) */
@@ -126,6 +137,26 @@ function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | 
   return msg
 }
 
+/** Format diff suffix vs yesterday's last snapshot.
+ *  Detects reset window changes (resets_at differs OR yesterday > current) and shows ↻ instead of negative diff. */
+function buildDiffSuffix(
+  current: number | null,
+  currentResetsAt: Date | null,
+  yesterdayPct: number | null,
+  yesterdayResetsAt: Date | null,
+): string {
+  if (current === null || yesterdayPct === null) return ''
+  const explicitReset = currentResetsAt && yesterdayResetsAt
+    && currentResetsAt.getTime() !== yesterdayResetsAt.getTime()
+  const implicitReset = yesterdayPct > current
+  if (explicitReset || implicitReset) {
+    return ` <i>(hôm qua ${yesterdayPct}%, ↻ đã reset)</i>`
+  }
+  const delta = current - yesterdayPct
+  const sign = delta > 0 ? '+' : ''
+  return ` <i>(hôm qua ${yesterdayPct}%, ${sign}${delta}%)</i>`
+}
+
 /** Pick color emoji based on 7d usage: higher = better (green), lower = worse (red).
  *  Goal: maximize quota utilization — high usage is efficient. */
 function usageColorEmoji(sevenDayPct: number | null): string {
@@ -160,10 +191,18 @@ function buildReportHtml(
     msg += `${color} <b>${esc(s.label)}</b> <code>${esc(s.email)}</code>\n`
 
     if (s.five_hour_pct !== null) {
-      msg += `   5h:  ${buildProgressBar(s.five_hour_pct)} ${s.five_hour_pct}%\n`
+      const diff = buildDiffSuffix(
+        s.five_hour_pct, s.five_hour_resets_at,
+        s.yesterday?.five_hour_pct ?? null, s.yesterday?.five_hour_resets_at ?? null,
+      )
+      msg += `   5h:  ${buildProgressBar(s.five_hour_pct)} ${s.five_hour_pct}%${diff}\n`
     }
     if (s.seven_day_pct !== null) {
-      msg += `   7d:  ${buildProgressBar(s.seven_day_pct)} ${s.seven_day_pct}%\n`
+      const diff = buildDiffSuffix(
+        s.seven_day_pct, s.seven_day_resets_at,
+        s.yesterday?.seven_day_pct ?? null, s.yesterday?.seven_day_resets_at ?? null,
+      )
+      msg += `   7d:  ${buildProgressBar(s.seven_day_pct)} ${s.seven_day_pct}%${diff}\n`
     }
     if (s.five_hour_pct === null && s.seven_day_pct === null) {
       msg += `   <i>Chưa có dữ liệu</i>\n`
@@ -211,21 +250,49 @@ function buildReportHtml(
   return msg
 }
 
-/** Fetch common report data: snapshots map, users by seat */
-async function fetchReportData() {
-  const users = await User.find({ active: true }, 'name seat_ids').lean()
+/** Compute UTC instant equivalent to today's 00:00 in Asia/Ho_Chi_Minh.
+ *  Used as upper-bound to find "yesterday's last snapshot" for diff. */
+function startOfTodayVnUtc(now: Date): Date {
+  const todayVn = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(now)
+  return new Date(`${todayVn}T00:00:00+07:00`)
+}
 
-  const snapshots = await UsageSnapshot.aggregate([
-    { $sort: { fetched_at: -1 } },
-    { $group: {
-      _id: '$seat_id',
-      five_hour_pct: { $first: '$five_hour_pct' },
-      seven_day_pct: { $first: '$seven_day_pct' },
-      seven_day_resets_at: { $first: '$seven_day_resets_at' },
-      extra_usage: { $first: '$extra_usage' },
-    }},
+/** Fetch common report data: snapshots map (current + yesterday's last), users by seat */
+async function fetchReportData(seatIds: string[], now: Date) {
+  const users = await User.find({ active: true }, 'name seat_ids').lean()
+  const seatObjectIds = seatIds.map(id => new mongoose.Types.ObjectId(id))
+
+  const dayCutoff = startOfTodayVnUtc(now)
+
+  const [snapshots, yesterdaySnapshots] = await Promise.all([
+    UsageSnapshot.aggregate([
+      { $match: { seat_id: { $in: seatObjectIds } } },
+      { $sort: { fetched_at: -1 } },
+      { $group: {
+        _id: '$seat_id',
+        five_hour_pct: { $first: '$five_hour_pct' },
+        five_hour_resets_at: { $first: '$five_hour_resets_at' },
+        seven_day_pct: { $first: '$seven_day_pct' },
+        seven_day_resets_at: { $first: '$seven_day_resets_at' },
+        extra_usage: { $first: '$extra_usage' },
+      }},
+    ]),
+    UsageSnapshot.aggregate([
+      { $match: { seat_id: { $in: seatObjectIds }, fetched_at: { $lt: dayCutoff } } },
+      { $sort: { fetched_at: -1 } },
+      { $group: {
+        _id: '$seat_id',
+        five_hour_pct: { $first: '$five_hour_pct' },
+        five_hour_resets_at: { $first: '$five_hour_resets_at' },
+        seven_day_pct: { $first: '$seven_day_pct' },
+        seven_day_resets_at: { $first: '$seven_day_resets_at' },
+        fetched_at: { $first: '$fetched_at' },
+      }},
+    ]),
   ])
+
   const snapMap = new Map(snapshots.map(s => [String(s._id), s]))
+  const yesterdaySnapMap = new Map(yesterdaySnapshots.map(s => [String(s._id), s]))
 
   const usersBySeat: Record<string, string[]> = {}
   for (const u of users) {
@@ -236,21 +303,35 @@ async function fetchReportData() {
     }
   }
 
-  return { snapMap, usersBySeat }
+  return { snapMap, yesterdaySnapMap, usersBySeat }
 }
 
-/** Build seat rows from seats + snapshot map */
-function buildSeatRows(seats: any[], snapMap: Map<string, any>): SeatRow[] {
+/** Build seat rows from seats + snapshot maps */
+function buildSeatRows(
+  seats: any[],
+  snapMap: Map<string, any>,
+  yesterdaySnapMap: Map<string, any>,
+): SeatRow[] {
   return seats.map((s) => {
     const snap = snapMap.get(String(s._id))
+    const yest = yesterdaySnapMap.get(String(s._id))
+    const yesterday: YesterdaySnap | null = yest ? {
+      five_hour_pct: yest.five_hour_pct ?? null,
+      five_hour_resets_at: yest.five_hour_resets_at ? new Date(yest.five_hour_resets_at) : null,
+      seven_day_pct: yest.seven_day_pct ?? null,
+      seven_day_resets_at: yest.seven_day_resets_at ? new Date(yest.seven_day_resets_at) : null,
+      fetched_at: yest.fetched_at ? new Date(yest.fetched_at) : null,
+    } : null
     return {
       seat_id: s._id,
       email: s.email,
       label: s.label,
       five_hour_pct: snap?.five_hour_pct ?? null,
+      five_hour_resets_at: snap?.five_hour_resets_at ? new Date(snap.five_hour_resets_at) : null,
       seven_day_pct: snap?.seven_day_pct ?? null,
       seven_day_resets_at: snap?.seven_day_resets_at ? new Date(snap.seven_day_resets_at) : null,
       extra_usage: snap?.extra_usage ?? null,
+      yesterday,
     }
   })
 }
@@ -280,11 +361,11 @@ export async function sendUserReport(userId: string) {
   if (seats.length === 0) return
 
   const seatIds = seats.map((s: any) => String(s._id))
-  const [{ snapMap, usersBySeat }, kpis] = await Promise.all([
-    fetchReportData(),
+  const [{ snapMap, yesterdaySnapMap, usersBySeat }, kpis] = await Promise.all([
+    fetchReportData(seatIds, new Date()),
     computeFleetKpis({ type: 'user', seatIds }).catch(() => null),
   ])
-  const rows = buildSeatRows(seats, snapMap)
+  const rows = buildSeatRows(seats, snapMap, yesterdaySnapMap)
   const msg = buildReportHtml(rows, usersBySeat, kpis)
 
   const token = decrypt(user.telegram_bot_token)

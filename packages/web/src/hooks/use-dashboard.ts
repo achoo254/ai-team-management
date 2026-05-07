@@ -30,11 +30,13 @@ export interface SeatUsageItem {
   burn_rate_7d_avg: number;
 }
 
-// Daily usage trend point
+// Per-seat usage trend point (one row per seat per time bucket)
 export interface UsageTrendPoint {
   date: string;
-  avg_7d_pct: number;
-  avg_5h_pct: number;
+  seat_id: string;
+  seat_label: string;
+  five_hour_pct: number;
+  seven_day_pct: number;
 }
 
 // Over-budget seat indicator

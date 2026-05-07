@@ -13,7 +13,7 @@ const mockDashboard = {
   fullSeatCount: 1,
   todaySchedules: 3,
   usagePerSeat: [{ label: "Seat 1", owner_name: "John", five_hour_pct: 40, seven_day_pct: 60 }],
-  usageTrend: [{ date: "2026-03-23", avg_7d_pct: 55, avg_5h_pct: 40 }],
+  usageTrend: [{ date: "2026-03-23", seat_id: "s1", seat_label: "Seat 1", five_hour_pct: 40, seven_day_pct: 55 }],
   overBudgetSeats: [],
 };
 

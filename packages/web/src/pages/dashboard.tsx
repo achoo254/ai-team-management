@@ -12,7 +12,6 @@ import { DashboardTrendChart } from "@/components/dashboard-trend-chart";
 import { DashboardSeatEfficiency } from "@/components/dashboard-seat-efficiency";
 import { DashboardDetailTable } from "@/components/dashboard-detail-table";
 import { DashboardEfficiency } from "@/components/dashboard-efficiency";
-import { DashboardRealtime5h } from "@/components/dashboard-realtime-5h";
 import { DashboardPeakHoursHeatmap } from "@/components/dashboard-peak-hours-heatmap";
 import { DashboardWelcome } from "@/components/dashboard-welcome";
 import { DashboardPersonalContext } from "@/components/dashboard-personal-context";
@@ -158,10 +157,7 @@ export default function DashboardPage() {
           {/* Row 4: Seat efficiency */}
           <DashboardSeatEfficiency range={range} seatIds={seatIds} />
 
-          {/* Row 5: Realtime 5h sessions */}
-          <DashboardRealtime5h range={range} seatIds={seatIds} />
-
-          {/* Row 6: Usage efficiency summary */}
+          {/* Row 5: Usage efficiency summary */}
           <DashboardEfficiency range={range} seatIds={seatIds} />
 
           {/* Peak hours heatmap */}

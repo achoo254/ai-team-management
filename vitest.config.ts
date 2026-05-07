@@ -36,6 +36,7 @@ export default defineConfig({
       "tests/api/claude-sessions-route.test.ts",
       "tests/api/quota-efficiency-service.test.ts",
       "tests/api/telegram-efficiency-section.test.ts",
+      "tests/api/telegram-yesterday-diff.test.ts",
     ],
     exclude: ["tests/ui/**", "tests/services/**"],
     // UI tests opt-in via // @vitest-environment jsdom comment

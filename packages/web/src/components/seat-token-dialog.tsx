@@ -81,12 +81,12 @@ export function SeatTokenDialog({ seat, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]">
         <DialogHeader>
           <DialogTitle>Credential — {seat.label}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto -mx-4 px-4">
           {/* Status badges */}
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={seat.has_token ? 'default' : 'secondary'}>
