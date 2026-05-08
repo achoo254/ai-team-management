@@ -198,6 +198,34 @@ router.get('/enhanced', async (req, res) => {
     const sessionCountMap = new Map(recentWindowStats.map((w) => [String(w._id), w.count as number]))
     const burnRate7dMap = new Map(recentWindowStats.map((w) => [String(w._id), Math.round((w.avg_burn_rate as number) * 10) / 10]))
 
+    // Burn rate 7d trong cycle 5h hiện tại — đồng bộ cửa sổ quan sát với burn rate 5h
+    // để 2 chỉ số apples-to-apples: cùng khoảng thời gian, khác tử số (5h quota vs 7d quota).
+    // Khi seat idle (5h_pct=0) → trả 0 thay vì pha loãng theo trung bình.
+    const FIVE_HOUR_MS_LOCAL = 5 * 60 * 60 * 1000
+    const nowMs = Date.now()
+    const burnRate7dCycleMap = new Map<string, number>()
+    const seatsForCycle = seats.filter((s) => {
+      const snap = snapshotMap.get(String(s._id))
+      return !!snap?.five_hour_resets_at && (snap?.five_hour_pct ?? 0) > 0 && snap?.seven_day_pct != null
+    })
+    if (seatsForCycle.length > 0) {
+      const lookups = seatsForCycle.map(async (s) => {
+        const snap = snapshotMap.get(String(s._id))!
+        const resetsAtMs = new Date(snap.five_hour_resets_at as Date).getTime()
+        const windowStartMs = resetsAtMs - FIVE_HOUR_MS_LOCAL
+        const hoursIntoWindow = Math.max(0.5, (nowMs - windowStartMs) / (60 * 60 * 1000))
+        const prev = await UsageSnapshot.findOne(
+          { seat_id: s._id, fetched_at: { $lte: new Date(windowStartMs) }, seven_day_pct: { $ne: null } },
+          'seven_day_pct',
+        ).sort({ fetched_at: -1 }).lean()
+        const pctNow = snap.seven_day_pct as number
+        const pctAtStart = prev?.seven_day_pct ?? 0
+        const rate = Math.max(0, (pctNow - pctAtStart) / hoursIntoWindow)
+        burnRate7dCycleMap.set(String(s._id), Math.round(rate * 10) / 10)
+      })
+      await Promise.all(lookups)
+    }
+
     const usagePerSeat = seats.map((s) => {
       const key = String(s._id)
       const snap = snapshotMap.get(key)
@@ -218,6 +246,7 @@ router.get('/enhanced', async (req, res) => {
         users,
         session_count_7d: sessionCountMap.get(key) ?? 0,
         burn_rate_7d_avg: burnRate7dMap.get(key) ?? 0,
+        burn_rate_7d_current_cycle: burnRate7dCycleMap.get(key) ?? 0,
       }
     })
 

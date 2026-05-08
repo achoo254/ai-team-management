@@ -27,6 +27,7 @@ export interface SeatUsageItem {
   users: string[];
   session_count_7d: number;
   burn_rate_7d_avg: number;
+  burn_rate_7d_current_cycle: number;
 }
 
 // Per-seat usage trend point (one row per seat per time bucket)

@@ -12,16 +12,15 @@ import { cssVar } from "@/lib/chart-colors";
 /* ---------- Data transform ---------- */
 
 const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
-const SEVEN_DAY_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Burn rate hiện tại của window: pct đã dùng / số giờ kể từ lần reset gần nhất */
-function calcCurrentBurnRate(pct: number | null, resetsAt: string | null, windowMs: number): number {
+/** Burn rate 5h: % quota 5h đã dùng / số giờ kể từ lần reset 5h gần nhất */
+function calcBurnRate5h(pct: number | null, resetsAt: string | null): number {
   if (pct == null || pct <= 0) return 0;
   if (!resetsAt) return 0;
 
   const resetsAtMs = new Date(resetsAt).getTime();
   const now = Date.now();
-  const windowStart = resetsAtMs - windowMs;
+  const windowStart = resetsAtMs - FIVE_HOUR_MS;
 
   if (now < windowStart || now > resetsAtMs) return 0;
 
@@ -32,8 +31,10 @@ function calcCurrentBurnRate(pct: number | null, resetsAt: string | null, window
 function calcChartData(seat: SeatUsageItem) {
   return {
     label: seat.label,
-    burn_rate_5h: calcCurrentBurnRate(seat.five_hour_pct, seat.five_hour_resets_at, FIVE_HOUR_MS),
-    burn_rate_7d: calcCurrentBurnRate(seat.seven_day_pct, seat.seven_day_resets_at, SEVEN_DAY_MS),
+    burn_rate_5h: calcBurnRate5h(seat.five_hour_pct, seat.five_hour_resets_at),
+    // Burn rate 7d đo trong cùng cửa sổ "cycle 5h hiện tại" (do backend tính sẵn)
+    // → idle ⇒ 0%/h, apples-to-apples với burn_rate_5h.
+    burn_rate_7d: seat.burn_rate_7d_current_cycle,
   };
 }
 
@@ -99,6 +100,9 @@ function ChartTooltip({ active, payload }: any) {
         <TRow label="Burn rate 5h" value={`${d.burn_rate_5h}%/h`} color={burnRateColor(d.burn_rate_5h)} />
         <TRow label="Burn rate 7d" value={`${d.burn_rate_7d}%/h`} color={baselineColor()} />
       </div>
+      <p className="mt-2 text-[10px] leading-tight text-muted-foreground/80">
+        Cùng cửa sổ 5h hiện tại — quota 5h vs quota 7d. Idle ⇒ 0%/h.
+      </p>
     </div>
   );
 }
@@ -153,7 +157,7 @@ export function DashboardSeatEfficiency({ range, seatIds }: { range: DashboardRa
           <div className="min-w-0">
             <CardTitle className="text-base font-semibold">Tốc độ tiêu thụ Seat</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Burn rate 5h vs Burn rate 7d hiện tại
+              Cùng cửa sổ 5h hiện tại — trên quota 5h vs trên quota 7d
             </p>
           </div>
           <div className="flex items-center gap-2">
