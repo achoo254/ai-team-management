@@ -137,8 +137,12 @@ function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | 
   return msg
 }
 
-/** Format diff suffix vs yesterday's last snapshot.
- *  Detects reset window changes (resets_at differs OR yesterday > current) and shows ↻ instead of negative diff. */
+/** Format diff suffix showing yesterday's PEAK (max %) within VN-day window.
+ *  When the cycle reset between yesterday's peak and current snapshot
+ *  (different resets_at), append ↻ flag so user knows the peak belongs to the
+ *  previous cycle. Implicit "yesterdayPct > current" check is intentionally
+ *  removed: with peak semantics, peak can legitimately exceed current within
+ *  the same cycle. */
 function buildDiffSuffix(
   current: number | null,
   currentResetsAt: Date | null,
@@ -146,15 +150,13 @@ function buildDiffSuffix(
   yesterdayResetsAt: Date | null,
 ): string {
   if (current === null || yesterdayPct === null) return ''
-  const explicitReset = currentResetsAt && yesterdayResetsAt
-    && currentResetsAt.getTime() !== yesterdayResetsAt.getTime()
-  const implicitReset = yesterdayPct > current
-  if (explicitReset || implicitReset) {
-    return ` <i>(hôm qua ${yesterdayPct}%, ↻ đã reset)</i>`
-  }
-  const delta = current - yesterdayPct
-  const sign = delta > 0 ? '+' : ''
-  return ` <i>(hôm qua ${yesterdayPct}%, ${sign}${delta}%)</i>`
+  // Anthropic API returns resets_at with ms-level drift across calls within
+  // the same cycle. Use a 60s tolerance — a real reset shifts the boundary by
+  // hours/days, so this won't mask actual cycle changes.
+  const cycleReset = currentResetsAt && yesterdayResetsAt
+    && Math.abs(currentResetsAt.getTime() - yesterdayResetsAt.getTime()) > 60_000
+  const resetTag = cycleReset ? ', ↻ đã reset' : ''
+  return ` <i>(hôm qua cao nhất ${yesterdayPct}%${resetTag})</i>`
 }
 
 /** Pick color emoji based on 7d usage: higher = better (green), lower = worse (red).
@@ -251,10 +253,16 @@ function buildReportHtml(
 }
 
 /** Compute UTC instant equivalent to today's 00:00 in Asia/Ho_Chi_Minh.
- *  Used as upper-bound to find "yesterday's last snapshot" for diff. */
+ *  Used as upper-bound for the "yesterday VN-day" peak window. */
 function startOfTodayVnUtc(now: Date): Date {
   const todayVn = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(now)
   return new Date(`${todayVn}T00:00:00+07:00`)
+}
+
+/** UTC instant equivalent to yesterday's 00:00 in Asia/Ho_Chi_Minh.
+ *  Lower-bound for the "yesterday VN-day" peak window. */
+function startOfYesterdayVnUtc(now: Date): Date {
+  return new Date(startOfTodayVnUtc(now).getTime() - 24 * 60 * 60 * 1000)
 }
 
 /** Fetch common report data: snapshots map (current + yesterday's last), users by seat */
@@ -263,7 +271,12 @@ async function fetchReportData(seatIds: string[], now: Date) {
   const seatObjectIds = seatIds.map(id => new mongoose.Types.ObjectId(id))
 
   const dayCutoff = startOfTodayVnUtc(now)
+  const yesterdayStart = startOfYesterdayVnUtc(now)
 
+  // Yesterday window groups by PEAK pct within the VN day. Resets_at for each
+  // metric is taken from the snapshot that produced the peak (via $top), so
+  // cycle-reset detection in buildDiffSuffix correctly flags ↻ when the peak
+  // belongs to a now-expired cycle.
   const [snapshots, yesterdaySnapshots] = await Promise.all([
     UsageSnapshot.aggregate([
       { $match: { seat_id: { $in: seatObjectIds } } },
@@ -278,15 +291,30 @@ async function fetchReportData(seatIds: string[], now: Date) {
       }},
     ]),
     UsageSnapshot.aggregate([
-      { $match: { seat_id: { $in: seatObjectIds }, fetched_at: { $lt: dayCutoff } } },
-      { $sort: { fetched_at: -1 } },
+      { $match: {
+        seat_id: { $in: seatObjectIds },
+        fetched_at: { $gte: yesterdayStart, $lt: dayCutoff },
+      }},
       { $group: {
         _id: '$seat_id',
-        five_hour_pct: { $first: '$five_hour_pct' },
-        five_hour_resets_at: { $first: '$five_hour_resets_at' },
-        seven_day_pct: { $first: '$seven_day_pct' },
-        seven_day_resets_at: { $first: '$seven_day_resets_at' },
-        fetched_at: { $first: '$fetched_at' },
+        five_hour_pct: { $max: '$five_hour_pct' },
+        five_hour_top: { $top: {
+          sortBy: { five_hour_pct: -1, fetched_at: -1 },
+          output: { resets_at: '$five_hour_resets_at', fetched_at: '$fetched_at' },
+        }},
+        seven_day_pct: { $max: '$seven_day_pct' },
+        seven_day_top: { $top: {
+          sortBy: { seven_day_pct: -1, fetched_at: -1 },
+          output: { resets_at: '$seven_day_resets_at', fetched_at: '$fetched_at' },
+        }},
+        last_fetched_at: { $max: '$fetched_at' },
+      }},
+      { $project: {
+        five_hour_pct: 1,
+        five_hour_resets_at: '$five_hour_top.resets_at',
+        seven_day_pct: 1,
+        seven_day_resets_at: '$seven_day_top.resets_at',
+        fetched_at: '$last_fetched_at',
       }},
     ]),
   ])
