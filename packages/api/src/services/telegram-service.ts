@@ -139,15 +139,21 @@ function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | 
 
 /** Format diff suffix showing yesterday's PEAK (max %) within VN-day window.
  *  When the cycle reset between yesterday's peak and current snapshot
- *  (different resets_at), append ↻ flag so user knows the peak belongs to the
- *  previous cycle. Implicit "yesterdayPct > current" check is intentionally
- *  removed: with peak semantics, peak can legitimately exceed current within
- *  the same cycle. */
+ *  (different resets_at), append "↻ đã reset" so user knows the peak belongs to
+ *  the previous cycle.
+ *
+ *  For the 7d window only (isSevenDay): utilization is monotonic within a weekly
+ *  cycle, so a current value BELOW yesterday's peak while the reset boundary is
+ *  unchanged means the counter was cleared mid-cycle (upstream incident / silent
+ *  reset), not natural growth — append "↻ đã đặt lại". For the 5h window this is
+ *  skipped on purpose: a VN day spans several 5h cycles, so peak > current is
+ *  normal and must not be flagged. */
 function buildDiffSuffix(
   current: number | null,
   currentResetsAt: Date | null,
   yesterdayPct: number | null,
   yesterdayResetsAt: Date | null,
+  isSevenDay = false,
 ): string {
   if (current === null || yesterdayPct === null) return ''
   // Anthropic API returns resets_at with ms-level drift across calls within
@@ -155,7 +161,16 @@ function buildDiffSuffix(
   // hours/days, so this won't mask actual cycle changes.
   const cycleReset = currentResetsAt && yesterdayResetsAt
     && Math.abs(currentResetsAt.getTime() - yesterdayResetsAt.getTime()) > 60_000
-  const resetTag = cycleReset ? ', ↻ đã reset' : ''
+  let resetTag = ''
+  if (cycleReset) {
+    resetTag = ', ↻ đã reset'
+  } else if (
+    isSevenDay && currentResetsAt !== null && yesterdayResetsAt !== null
+    && current < yesterdayPct
+  ) {
+    // Both boundaries known + same cycle + below peak → mid-cycle clear.
+    resetTag = ', ↻ đã đặt lại'
+  }
   return ` <i>(hôm qua cao nhất ${yesterdayPct}%${resetTag})</i>`
 }
 
@@ -203,6 +218,7 @@ function buildReportHtml(
       const diff = buildDiffSuffix(
         s.seven_day_pct, s.seven_day_resets_at,
         s.yesterday?.seven_day_pct ?? null, s.yesterday?.seven_day_resets_at ?? null,
+        true,
       )
       msg += `   7d:  ${buildProgressBar(s.seven_day_pct)} ${s.seven_day_pct}%${diff}\n`
     }

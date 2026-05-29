@@ -20,13 +20,26 @@ function parseBucket(bucket: unknown): { pct: number | null; resetsAt: Date | nu
   }
 }
 
+/** Detect an "empty" usage response — Anthropic occasionally returns every
+ *  window with null resets_at (and 0/null utilization) during a transient
+ *  incident. A live window always carries a resets_at, so null on both primary
+ *  windows is the reliable signature. Storing these as real 0s creates phantom
+ *  dips that corrupt peak/average metrics, so the caller skips them when the
+ *  seat already has real data. Exported for unit testing. */
+export function isEmptyUsageResponse(
+  fiveHour: { resetsAt: Date | null },
+  sevenDay: { resetsAt: Date | null },
+): boolean {
+  return fiveHour.resetsAt === null && sevenDay.resetsAt === null
+}
+
 /** Fetch usage for a single seat using oauth_credential */
 async function fetchSeatUsage(seat: {
   _id: import('mongoose').Types.ObjectId
   oauth_credential: { access_token: string }
   label: string
   owner_id?: import('mongoose').Types.ObjectId | null
-}) {
+}): Promise<'skipped' | void> {
   const token = decrypt(seat.oauth_credential.access_token)
 
   const res = await fetch(API_URL, {
@@ -49,6 +62,20 @@ async function fetchSeatUsage(seat: {
   const sevenDay = parseBucket(raw.seven_day)
   const sevenDaySonnet = parseBucket(raw.seven_day_sonnet)
   const sevenDayOpus = parseBucket(raw.seven_day_opus)
+
+  // Skip a transient empty response (all windows null) when the seat already has
+  // real data — prevents phantom 0-dips from corrupting peak/average metrics. A
+  // genuinely unused seat (no prior real snapshot) is still recorded so it shows.
+  if (isEmptyUsageResponse(fiveHour, sevenDay)) {
+    const prev = await UsageSnapshot.findOne({ seat_id: seat._id })
+      .sort({ fetched_at: -1 }).lean()
+    const prevHadData = !!prev && (prev.five_hour_resets_at != null || prev.seven_day_resets_at != null)
+    if (prevHadData) {
+      console.warn(`[Collector] ⚠ ${seat.label}: empty usage response, skipped (transient)`)
+      await Seat.findByIdAndUpdate(seat._id, { last_fetched_at: new Date(), last_fetch_error: null })
+      return 'skipped'
+    }
+  }
 
   const createdSnapshot = await UsageSnapshot.create({
     seat_id: seat._id,
@@ -104,12 +131,13 @@ let isCollecting = false
 /** Collect usage for all active seats */
 export async function collectAllUsage(): Promise<{
   success: number
+  skipped: number
   errors: number
   failedSeats: Array<{ id: string; label: string; error: string }>
 }> {
   if (isCollecting) {
     console.log('[Collector] Already running, skipping')
-    return { success: 0, errors: 0, failedSeats: [] }
+    return { success: 0, skipped: 0, errors: 0, failedSeats: [] }
   }
 
   isCollecting = true
@@ -121,18 +149,20 @@ export async function collectAllUsage(): Promise<{
 
     if (seats.length === 0) {
       console.log('[Collector] No active seats with tokens')
-      return { success: 0, errors: 0, failedSeats: [] }
+      return { success: 0, skipped: 0, errors: 0, failedSeats: [] }
     }
 
     console.log(`[Collector] Fetching usage for ${seats.length} seats...`)
     let success = 0
+    let skipped = 0
     let errors = 0
     const failedSeats: Array<{ id: string; label: string; error: string }> = []
 
     await parallelLimit(seats, CONCURRENCY, async (seat) => {
       try {
-        await fetchSeatUsage(seat as any)
-        success++
+        const outcome = await fetchSeatUsage(seat as any)
+        if (outcome === 'skipped') skipped++
+        else success++
       } catch (err) {
         errors++
         const message = err instanceof Error ? err.message : String(err)
@@ -143,8 +173,8 @@ export async function collectAllUsage(): Promise<{
       }
     })
 
-    console.log(`[Collector] Done: ${success} success, ${errors} errors`)
-    return { success, errors, failedSeats }
+    console.log(`[Collector] Done: ${success} success, ${skipped} skipped, ${errors} errors`)
+    return { success, skipped, errors, failedSeats }
   } finally {
     isCollecting = false
   }
@@ -170,6 +200,7 @@ export async function collectSeatUsage(seatId: string): Promise<{ skipped?: bool
       return { skipped: true, reason: `rate_limited:${waitSec}` }
     }
   }
-  await fetchSeatUsage(seat as any)
+  const outcome = await fetchSeatUsage(seat as any)
+  if (outcome === 'skipped') return { skipped: true, reason: 'empty_response' }
   return {}
 }
