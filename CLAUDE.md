@@ -52,7 +52,7 @@ Run single test file: `pnpm vitest run tests/api/auth.test.ts`
 - `types.ts` — API DTOs
 - `schedule-permissions.ts` — **pure permission resolver** (no DB calls, runs in both Node + browser). Single source of truth for schedule edit/delete/swap/clear authorization. Always use this instead of re-implementing permission logic.
 
-**MongoDB collections:** seats, users, usage_snapshots, schedules, alerts, active_sessions, session_metrics
+**MongoDB collections:** seats, users, usagesnapshots, schedules, alerts, activesessions, sessionmetrics (Mongoose default pluralization — no underscores)
 
 ## Auth Flow
 
@@ -70,7 +70,7 @@ Any Google account can log in. Admin role must be granted manually (DB flip).
 - **Seat credentials are encrypted at rest** via `lib/encryption.ts` AES-256-GCM. Same for personal Telegram bot tokens.
 - **User Telegram bots are per-user** (hourly personal reminders on schedule match); system bot is used for Friday 17:00 weekly summary.
 - **Schedule permissions** — always resolve via `@repo/shared/schedule-permissions.resolveSchedulePermissions()`. Rules: admin has all, seat owner can create/swap/edit-for-others, members can self-edit, clearAll is admin-only.
-- **Usage collection runs every 5 min** via cron; snapshots stored in `usage_snapshots`. Session metrics track active budgets.
+- **Usage collection runs every 5 min** via cron; snapshots stored in `usagesnapshots`. Session metrics track active budgets.
 
 ## Testing
 
