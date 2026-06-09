@@ -1,3 +1,4 @@
+import { config } from '../config.js'
 import { Seat } from '../models/seat.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { decrypt } from '../lib/encryption.js'
@@ -48,6 +49,7 @@ async function fetchSeatUsage(seat: {
       'Authorization': `Bearer ${token}`,
       'anthropic-beta': 'oauth-2025-04-20',
       'content-type': 'application/json',
+      'user-agent': config.anthropic.oauthUserAgent,
     },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   })
@@ -62,6 +64,8 @@ async function fetchSeatUsage(seat: {
   const sevenDay = parseBucket(raw.seven_day)
   const sevenDaySonnet = parseBucket(raw.seven_day_sonnet)
   const sevenDayOpus = parseBucket(raw.seven_day_opus)
+  const sevenDayOauthApps = parseBucket(raw.seven_day_oauth_apps)
+  const sevenDayCowork = parseBucket(raw.seven_day_cowork)
 
   // Skip a transient empty response (all windows null) when the seat already has
   // real data — prevents phantom 0-dips from corrupting peak/average metrics. A
@@ -88,11 +92,17 @@ async function fetchSeatUsage(seat: {
     seven_day_sonnet_resets_at: sevenDaySonnet.resetsAt,
     seven_day_opus_pct: sevenDayOpus.pct,
     seven_day_opus_resets_at: sevenDayOpus.resetsAt,
+    seven_day_oauth_apps_pct: sevenDayOauthApps.pct,
+    seven_day_oauth_apps_resets_at: sevenDayOauthApps.resetsAt,
+    seven_day_cowork_pct: sevenDayCowork.pct,
+    seven_day_cowork_resets_at: sevenDayCowork.resetsAt,
     extra_usage: {
       is_enabled: raw.extra_usage?.is_enabled ?? false,
       monthly_limit: raw.extra_usage?.monthly_limit ?? null,
       used_credits: raw.extra_usage?.used_credits ?? null,
       utilization: raw.extra_usage?.utilization ?? null,
+      currency: raw.extra_usage?.currency ?? null,
+      disabled_reason: raw.extra_usage?.disabled_reason ?? null,
     },
   })
 

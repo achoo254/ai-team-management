@@ -10,13 +10,22 @@ export interface OAuthCredentialMeta {
 export interface SeatProfile {
   account_name: string | null
   display_name: string | null
+  account_uuid?: string | null
+  account_created_at?: string | null         // ISO string on wire
   org_name: string | null
+  org_uuid?: string | null
   org_type: string | null
   billing_type: string | null
   rate_limit_tier: string | null
+  seat_tier?: string | null
   subscription_status: string | null
+  subscription_created_at?: string | null     // ISO string on wire
   has_claude_max: boolean
   has_claude_pro: boolean
+  has_extra_usage_enabled?: boolean
+  trial_ends_at?: string | null               // ISO string on wire
+  trial_duration_days?: number | null
+  enabled_plugins?: unknown[]
   fetched_at: string | null  // ISO string on wire
 }
 
@@ -180,11 +189,17 @@ export interface UsageSnapshot {
   seven_day_sonnet_resets_at: string | null
   seven_day_opus_pct: number | null
   seven_day_opus_resets_at: string | null
+  seven_day_oauth_apps_pct?: number | null
+  seven_day_oauth_apps_resets_at?: string | null
+  seven_day_cowork_pct?: number | null
+  seven_day_cowork_resets_at?: string | null
   extra_usage: {
     is_enabled: boolean
     monthly_limit: number | null
     used_credits: number | null
     utilization: number | null
+    currency?: string | null
+    disabled_reason?: string | null
   }
   fetched_at: string
 }

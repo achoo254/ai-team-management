@@ -62,11 +62,15 @@ export interface OAuthProfile {
     organization_type: string
     billing_type: string
     rate_limit_tier: string
+    seat_tier?: string | null
     has_extra_usage_enabled: boolean
     subscription_status: string
     subscription_created_at: string
+    claude_code_trial_ends_at?: string | null
+    claude_code_trial_duration_days?: number | null
   }
   application: { uuid: string; name: string; slug: string }
+  enabled_plugins?: unknown[]
 }
 
 /** Error thrown by fetchOAuthProfile — preserves HTTP status + body for caller handling. */
@@ -77,18 +81,32 @@ export class OAuthProfileError extends Error {
   }
 }
 
+/** Parse an ISO timestamp string → Date, guarding null/empty (avoids new Date(null)=epoch). */
+function toDateOrNull(s: string | null | undefined): Date | null {
+  return s ? new Date(s) : null
+}
+
 /** Map OAuthProfile API response → flat profile cache object for Seat.profile */
 export function toProfileCache(p: OAuthProfile) {
   return {
     account_name: p.account.full_name,
     display_name: p.account.display_name,
+    account_uuid: p.account.uuid ?? null,
+    account_created_at: toDateOrNull(p.account.created_at),
     org_name: p.organization.name,
+    org_uuid: p.organization.uuid ?? null,
     org_type: p.organization.organization_type,
     billing_type: p.organization.billing_type,
     rate_limit_tier: p.organization.rate_limit_tier,
+    seat_tier: p.organization.seat_tier ?? null,
     subscription_status: p.organization.subscription_status,
+    subscription_created_at: toDateOrNull(p.organization.subscription_created_at),
     has_claude_max: p.account.has_claude_max,
     has_claude_pro: p.account.has_claude_pro,
+    has_extra_usage_enabled: p.organization.has_extra_usage_enabled ?? false,
+    trial_ends_at: toDateOrNull(p.organization.claude_code_trial_ends_at),
+    trial_duration_days: p.organization.claude_code_trial_duration_days ?? null,
+    enabled_plugins: p.enabled_plugins ?? [],
     fetched_at: new Date(),
   }
 }
@@ -101,6 +119,7 @@ export async function fetchOAuthProfile(accessToken: string): Promise<OAuthProfi
       'Authorization': `Bearer ${accessToken}`,
       'anthropic-beta': 'oauth-2025-04-20',
       'content-type': 'application/json',
+      'user-agent': config.anthropic.oauthUserAgent,
     },
     signal: AbortSignal.timeout(10_000),
   })

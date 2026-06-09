@@ -19,7 +19,10 @@ async function refreshTokenForSeat(seat: {
 
   const res = await fetch(REFRESH_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'user-agent': config.anthropic.oauthUserAgent,
+    },
     body: JSON.stringify({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,

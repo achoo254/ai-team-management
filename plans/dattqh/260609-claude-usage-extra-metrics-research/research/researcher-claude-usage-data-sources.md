@@ -13,9 +13,90 @@ TIN TỐT: codebase của bạn **đã có sẵn desktop agent webhook** (`webho
 
 | Nguồn | Trạng thái trong code | Còn lấy thêm được? |
 |-------|----------------------|--------------------|
-| `/api/oauth/usage` (per-seat OAuth) | Đang dùng (collector) | **Gần như đã vét sạch** — chỉ còn enterprise spending limit (chưa Anthropic expose) |
-| `/v1/organizations/usage_report/claude_code` (Admin Analytics) | **Đã viết `getClaudeCodeUsage()` + test, NHƯNG chưa gọi ở đâu** | **Mỏ vàng chưa khai thác** — token/cost theo model, LOC, commits, PR, tool accept/reject |
+| `/api/oauth/usage` (per-seat OAuth) | Đang dùng (collector) | **CÓ** — raw_response thật chứa 7 window + 2 sub-field extra_usage đang bị bỏ (xem §"Kết quả fetch thật") |
+| `/v1/organizations/usage_report/claude_code` (Admin Analytics) | Client đã viết nhưng `ANTHROPIC_ADMIN_KEY` **trống** | ❌ **LOẠI BỎ** — không có admin key, không truy cập được |
 | Local session JSONL (desktop agent) | Đang gửi token/model/cache | **Nguồn DUY NHẤT** cho breakdown trong ảnh (context >150k, subagent, per-skill) |
+
+---
+
+## ⭐ Kết quả fetch THẬT (2026-06-09, chỉ dùng OAuth token, 0 rủi ro block)
+
+Phương pháp an toàn: usage đọc từ `raw_response` đã lưu trong DB (**0 API call**); profile gọi đúng 1 lần `/api/oauth/profile` (endpoint app vốn đã dùng). Không đụng admin key (không có). Không probe endpoint lạ.
+
+### `/api/oauth/usage` — response thật có NHIỀU window hơn code đang trích
+
+Code chỉ trích 4 window + extra_usage. Response thật (seat "TK Đạt"):
+
+```jsonc
+{
+  "five_hour":           { "utilization": 3,  "resets_at": "..." },  // ✅ đang lưu
+  "seven_day":           { "utilization": 62, "resets_at": "..." },  // ✅ đang lưu
+  "seven_day_sonnet":    { "utilization": 21, "resets_at": "..." },  // ✅ đang lưu
+  "seven_day_opus":      null,                                       // ✅ đang lưu
+  "seven_day_oauth_apps": null,        // ❌ CHƯA trích — usage của OAuth apps
+  "seven_day_cowork":     null,        // ❌ CHƯA trích — Claude "cowork"
+  "seven_day_omelette":   null,        // ❌ codename nội bộ (null)
+  "tangelo":              null,        // ❌ codename nội bộ (null)
+  "iguana_necktie":       null,        // ❌ codename nội bộ (null)
+  "omelette_promotional": null,        // ❌ codename nội bộ (null)
+  "cinder_cove":          null,        // ❌ codename nội bộ (null)
+  "extra_usage": {
+    "is_enabled": false, "monthly_limit": null, "used_credits": null, "utilization": null,
+    "currency": null,          // ❌ CHƯA trích
+    "disabled_reason": null    // ❌ CHƯA trích
+  }
+}
+```
+
+→ Toàn bộ đã nằm trong `raw_response` (lưu sẵn). Trích thêm = chỉ thêm cột, **không cần gọi API mới**. Các codename (tangelo, cinder_cove...) là flag nội bộ Anthropic, đang null — **đừng build feature lên chúng** (YAGNI), giữ trong raw_response là đủ.
+
+### `/api/oauth/profile` — response thật có ~14 field chưa cache
+
+```jsonc
+{
+  "account": {
+    "uuid": "...",                    // ❌ chưa cache
+    "full_name": "...",               // ✅
+    "display_name": "...",            // ✅
+    "email": "dattqh@inet.vn",        // ❌ chưa cache (đã có seat.email)
+    "has_claude_max": false,          // ✅
+    "has_claude_pro": false,          // ✅
+    "created_at": "2026-03-20T..."    // ❌ chưa cache — tuổi tài khoản
+  },
+  "organization": {
+    "uuid": "...",                              // ❌
+    "name": "iNET SOFTWARE COMPANY LIMITED",    // ✅
+    "organization_type": "claude_team",         // ✅
+    "billing_type": "stripe_subscription",      // ✅
+    "rate_limit_tier": "default_claude_max_5x", // ✅
+    "seat_tier": "team_tier_1",                 // ❌ CHƯA cache — hạng seat ⭐
+    "has_extra_usage_enabled": false,           // ❌ CHƯA cache ⭐
+    "subscription_status": "active",            // ✅
+    "subscription_created_at": "2026-03-20T...",// ❌ chưa cache — tuổi sub
+    "cc_onboarding_flags": {},                  // ❌ (rỗng)
+    "claude_code_trial_ends_at": null,          // ❌ chưa cache — theo dõi trial
+    "claude_code_trial_duration_days": null,    // ❌ chưa cache
+    "payment_auth_hosted_invoice_url": null     // ❌ nhạy cảm, bỏ qua
+  },
+  "application": { "uuid": "...", "name": "Claude Code", "slug": "claude-code" }, // luôn = Claude Code
+  "enabled_plugins": []                          // ❌ chưa cache — plugin bật
+}
+```
+
+### Khuyến nghị field NÊN bổ sung (tất cả từ data đang về sẵn, 0 call mới)
+
+| Field | Nguồn | Lý do |
+|-------|-------|-------|
+| `organization.seat_tier` | profile | Hạng seat (team_tier_1) — phân loại seat |
+| `organization.has_extra_usage_enabled` | profile | Org có bật extra usage không |
+| `organization.subscription_created_at` | profile | Tuổi subscription |
+| `account.created_at` | profile | Tuổi tài khoản |
+| `claude_code_trial_ends_at` + `_duration_days` | profile | Theo dõi trial sắp hết hạn |
+| `enabled_plugins` | profile | Plugin đang bật |
+| `extra_usage.currency` + `disabled_reason` | usage | Đơn vị tiền + lý do tắt extra usage |
+| (window `seven_day_oauth_apps`, `seven_day_cowork`) | usage | Tuỳ chọn — đang null, trích khi cần |
+
+**Bỏ qua (YAGNI/nhạy cảm):** các codename usage (tangelo, cinder_cove, omelette...), `cc_onboarding_flags`, `payment_auth_hosted_invoice_url`, `application.*`, `account.uuid`/`org.uuid` (trừ khi cần đối soát).
 
 ---
 

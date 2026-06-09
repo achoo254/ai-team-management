@@ -14,6 +14,10 @@ export const config = {
     adminKey: process.env.ANTHROPIC_ADMIN_KEY || '',
     version: process.env.ANTHROPIC_VERSION || '2023-06-01',
     oauthClientId: process.env.ANTHROPIC_OAUTH_CLIENT_ID || '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
+    // User-Agent for OAuth-token calls. A `claude-cli/...` prefix routes requests
+    // into the generous rate-limit bucket Claude Code uses; the default `node` UA
+    // lands in an aggressive bucket (persistent 429s). Set to match `claude --version`.
+    oauthUserAgent: process.env.ANTHROPIC_OAUTH_USER_AGENT || 'claude-cli/2.0.1 (external, cli)',
   },
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',

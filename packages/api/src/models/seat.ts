@@ -21,13 +21,22 @@ export interface ISeat extends Document {
   profile: {
     account_name: string | null
     display_name: string | null
+    account_uuid: string | null
+    account_created_at: Date | null
     org_name: string | null
+    org_uuid: string | null
     org_type: string | null
     billing_type: string | null
     rate_limit_tier: string | null
+    seat_tier: string | null
     subscription_status: string | null
+    subscription_created_at: Date | null
     has_claude_max: boolean
     has_claude_pro: boolean
+    has_extra_usage_enabled: boolean
+    trial_ends_at: Date | null
+    trial_duration_days: number | null
+    enabled_plugins: unknown[]
     fetched_at: Date | null
   } | null
   /** Member IDs captured at soft-delete time — used to restore members on undelete */
@@ -64,13 +73,22 @@ const seatSchema = new Schema<ISeat>(
       type: {
         account_name: { type: String, default: null },
         display_name: { type: String, default: null },
+        account_uuid: { type: String, default: null },
+        account_created_at: { type: Date, default: null },
         org_name: { type: String, default: null },
+        org_uuid: { type: String, default: null },
         org_type: { type: String, default: null },
         billing_type: { type: String, default: null },
         rate_limit_tier: { type: String, default: null },
+        seat_tier: { type: String, default: null },
         subscription_status: { type: String, default: null },
+        subscription_created_at: { type: Date, default: null },
         has_claude_max: { type: Boolean, default: false },
         has_claude_pro: { type: Boolean, default: false },
+        has_extra_usage_enabled: { type: Boolean, default: false },
+        trial_ends_at: { type: Date, default: null },
+        trial_duration_days: { type: Number, default: null },
+        enabled_plugins: { type: [Schema.Types.Mixed], default: [] },
         fetched_at: { type: Date, default: null },
       },
       default: null,

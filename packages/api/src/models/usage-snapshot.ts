@@ -11,11 +11,17 @@ export interface IUsageSnapshot extends Document {
   seven_day_sonnet_resets_at: Date | null
   seven_day_opus_pct: number | null
   seven_day_opus_resets_at: Date | null
+  seven_day_oauth_apps_pct: number | null
+  seven_day_oauth_apps_resets_at: Date | null
+  seven_day_cowork_pct: number | null
+  seven_day_cowork_resets_at: Date | null
   extra_usage: {
     is_enabled: boolean
     monthly_limit: number | null
     used_credits: number | null
     utilization: number | null
+    currency: string | null
+    disabled_reason: string | null
   }
   fetched_at: Date
 }
@@ -31,11 +37,17 @@ const usageSnapshotSchema = new Schema<IUsageSnapshot>({
   seven_day_sonnet_resets_at: { type: Date, default: null },
   seven_day_opus_pct: { type: Number, default: null },
   seven_day_opus_resets_at: { type: Date, default: null },
+  seven_day_oauth_apps_pct: { type: Number, default: null },
+  seven_day_oauth_apps_resets_at: { type: Date, default: null },
+  seven_day_cowork_pct: { type: Number, default: null },
+  seven_day_cowork_resets_at: { type: Date, default: null },
   extra_usage: {
     is_enabled: { type: Boolean, default: false },
     monthly_limit: { type: Number, default: null },
     used_credits: { type: Number, default: null },
     utilization: { type: Number, default: null },
+    currency: { type: String, default: null },
+    disabled_reason: { type: String, default: null },
   },
   fetched_at: { type: Date, default: Date.now, required: true },
 })
