@@ -79,23 +79,40 @@ describe('POST /api/devices', () => {
     expect(createDeviceMock).toHaveBeenCalledOnce()
   })
 
-  it('400 when device_name is empty', async () => {
+  // device_name/hostname are optional at creation: the web client registers a
+  // device with an empty body and the desktop app fills them in later via the
+  // webhook. The service applies 'Pending setup'/'pending' defaults. So a blank
+  // or missing field is normalized to undefined, not rejected.
+  it('normalizes blank device_name to undefined (service applies default)', async () => {
+    createDeviceMock.mockResolvedValue({
+      device: { toJSON: () => ({ _id: 'd1', device_name: 'Pending setup' }) },
+      plaintext_api_key: 'dsk_x',
+    })
     const res = await fetch(`${baseUrl}/api/devices`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ device_name: '   ', hostname: 'host' }),
     })
-    expect(res.status).toBe(400)
-    expect(createDeviceMock).not.toHaveBeenCalled()
+    expect(res.status).toBe(201)
+    expect(createDeviceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ device_name: undefined, hostname: 'host' }),
+    )
   })
 
-  it('400 when hostname is missing', async () => {
+  it('allows missing hostname (service applies default)', async () => {
+    createDeviceMock.mockResolvedValue({
+      device: { toJSON: () => ({ _id: 'd1', device_name: 'laptop' }) },
+      plaintext_api_key: 'dsk_x',
+    })
     const res = await fetch(`${baseUrl}/api/devices`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ device_name: 'laptop' }),
     })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(201)
+    expect(createDeviceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ device_name: 'laptop', hostname: undefined }),
+    )
   })
 
   it('400 when fields exceed 200 chars', async () => {
