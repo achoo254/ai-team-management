@@ -30,3 +30,8 @@ repomix-output.xml
 *.pen
 *.docx
 data/
+
+# ctxsync-secrets: env & Claude transient — NEVER commit
+.env.*
+!.env.example
+.claude/agent-memory/
