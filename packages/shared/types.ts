@@ -180,7 +180,6 @@ export interface WatchedSeat {
 export interface UsageSnapshot {
   _id: string
   seat_id: string
-  raw_response?: Record<string, unknown>
   five_hour_pct: number | null
   five_hour_resets_at: string | null
   seven_day_pct: number | null

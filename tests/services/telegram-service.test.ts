@@ -97,7 +97,6 @@ describe("telegram-service", () => {
       const { seat } = await seedBaseData();
       await UsageSnapshot.create({
         seat_id: seat._id,
-        raw_response: {},
         five_hour_pct: 75,
         seven_day_pct: 50,
         fetched_at: new Date(),

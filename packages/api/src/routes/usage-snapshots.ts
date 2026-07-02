@@ -39,11 +39,11 @@ router.post('/collect/:seatId', authenticate, validateObjectId('seatId'), requir
 })
 
 // GET /api/usage-snapshots — query snapshots (scoped to user's seats)
-// Query: ?seatId=&from=ISO&to=ISO&limit=50&offset=0&includeRaw=true
+// Query: ?seatId=&from=ISO&to=ISO&limit=50&offset=0
 router.get('/', authenticate, async (req, res) => {
   try {
     const allowed = await getAllowedSeatIds(req.user!)
-    const { seatId, from, to, limit = '50', offset = '0', includeRaw } = req.query
+    const { seatId, from, to, limit = '50', offset = '0' } = req.query
     const filter: Record<string, unknown> = {}
 
     if (seatId && mongoose.Types.ObjectId.isValid(seatId as string)) {
@@ -64,8 +64,9 @@ router.get('/', authenticate, async (req, res) => {
       filter.fetched_at = dateFilter
     }
 
-    // Exclude raw_response by default to reduce payload size
-    const projection = includeRaw === 'true' ? {} : { raw_response: 0 }
+    // raw_response is no longer stored; still projected out to strip it from
+    // any legacy documents until the cleanup migration has run everywhere.
+    const projection = { raw_response: 0 }
 
     const [snapshots, total] = await Promise.all([
       UsageSnapshot.find(filter, projection)

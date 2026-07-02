@@ -2,7 +2,6 @@ import mongoose, { Schema, type Document } from 'mongoose'
 
 export interface IUsageSnapshot extends Document {
   seat_id: mongoose.Types.ObjectId
-  raw_response: Record<string, unknown>
   five_hour_pct: number | null
   five_hour_resets_at: Date | null
   seven_day_pct: number | null
@@ -28,7 +27,6 @@ export interface IUsageSnapshot extends Document {
 
 const usageSnapshotSchema = new Schema<IUsageSnapshot>({
   seat_id: { type: Schema.Types.ObjectId, ref: 'Seat', required: true },
-  raw_response: { type: Schema.Types.Mixed, required: true },
   five_hour_pct: { type: Number, default: null },
   five_hour_resets_at: { type: Date, default: null },
   seven_day_pct: { type: Number, default: null },

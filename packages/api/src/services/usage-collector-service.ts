@@ -83,7 +83,6 @@ async function fetchSeatUsage(seat: {
 
   const createdSnapshot = await UsageSnapshot.create({
     seat_id: seat._id,
-    raw_response: raw,
     five_hour_pct: fiveHour.pct,
     five_hour_resets_at: fiveHour.resetsAt,
     seven_day_pct: sevenDay.pct,

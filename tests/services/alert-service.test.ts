@@ -46,7 +46,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
       const seat = await Seat.create({ email: "high@test.com", label: "High" });
       const user = await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 80 }]);
       await UsageSnapshot.create({
-        seat_id: seat._id, raw_response: {},
+        seat_id: seat._id,
         five_hour_pct: 90, seven_day_pct: 50, fetched_at: new Date(),
       });
 
@@ -62,7 +62,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
       const seat = await Seat.create({ email: "multi@test.com", label: "Multi" });
       const user = await createWatcher([{ seat_id: String(seat._id), threshold_7d_pct: 85 }]);
       await UsageSnapshot.create({
-        seat_id: seat._id, raw_response: {},
+        seat_id: seat._id,
         five_hour_pct: 40, seven_day_pct: 70, seven_day_sonnet_pct: 95, seven_day_opus_pct: 50,
         fetched_at: new Date(),
       });
@@ -79,7 +79,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
       const userA = await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 80 }]);
       const userB = await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 95 }]);
       await UsageSnapshot.create({
-        seat_id: seat._id, raw_response: {},
+        seat_id: seat._id,
         five_hour_pct: 90, fetched_at: new Date(),
       });
 
@@ -100,7 +100,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
         message: "Existing", metadata: {}, read_by: [], notified_at: new Date(),
       });
       await UsageSnapshot.create({
-        seat_id: seat._id, raw_response: {}, five_hour_pct: 95, fetched_at: new Date(),
+        seat_id: seat._id, five_hour_pct: 95, fetched_at: new Date(),
       });
 
       const result = await checkSnapshotAlerts();
@@ -111,7 +111,7 @@ describe("alert-service: checkSnapshotAlerts()", () => {
       const seat = await Seat.create({ email: "off@test.com", label: "Off" });
       await createWatcher([{ seat_id: String(seat._id), threshold_5h_pct: 50 }], { alerts_enabled: false });
       await UsageSnapshot.create({
-        seat_id: seat._id, raw_response: {}, five_hour_pct: 90, fetched_at: new Date(),
+        seat_id: seat._id, five_hour_pct: 90, fetched_at: new Date(),
       });
 
       const result = await checkSnapshotAlerts();
