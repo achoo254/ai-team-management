@@ -7,8 +7,10 @@
 //   - max_memory_restart: PM2 gracefully restarts the process past this RSS, so
 //     V8/glibc memory that is freed-but-not-returned-to-OS gets reclaimed instead
 //     of ratcheting up to a high-water mark and staying there.
-//   - --max-old-space-size: hard-caps the V8 old heap as a backstop below the
-//     restart threshold (native firebase-admin/gRPC adds ~200MB on top).
+//   - NODE_OPTIONS=--max-old-space-size: hard-caps the V8 old heap as a backstop
+//     below the restart threshold (native firebase-admin/gRPC adds ~200MB on top).
+//     Set via NODE_OPTIONS, not node_args: PM2 fork mode does not apply node_args
+//     to the interpreter, but node always honors NODE_OPTIONS at startup.
 //   - MALLOC_ARENA_MAX: glibc defaults to 8×CPU malloc arenas for a threaded
 //     process, which massively inflates anonymous RSS; 2 keeps fragmentation low.
 //   - NODE_ENV=production: enables Express/Mongoose production code paths.
@@ -18,11 +20,11 @@ module.exports = {
       name: 'ai',
       script: './index.js',
       exec_mode: 'fork',
-      node_args: '--max-old-space-size=640',
       max_memory_restart: '800M',
       env: {
         NODE_ENV: 'production',
         MALLOC_ARENA_MAX: '2',
+        NODE_OPTIONS: '--max-old-space-size=640',
       },
     },
   ],
