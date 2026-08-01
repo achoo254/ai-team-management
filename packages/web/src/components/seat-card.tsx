@@ -60,8 +60,8 @@ export function SeatCard({ seat, isAdmin, currentUserId, canManage, allUsers, on
             )}
             {canManage && (
               <>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(seat)}><Pencil className="h-3.5 w-3.5" /></Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onDelete(seat)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(seat)} title="Sửa seat"><Pencil className="h-3.5 w-3.5" /></Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onDelete(seat)} title="Xoá seat"><Trash2 className="h-3.5 w-3.5" /></Button>
               </>
             )}
             {isAdmin && onTransfer && (
