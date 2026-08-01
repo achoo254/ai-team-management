@@ -28,9 +28,11 @@
     "@vitest/coverage-v8": "^4.1.2",
     "eslint": "^9",
     "jsdom": "^29.0.1",
+    "mongodb-memory-server": "^11.2.0",
     "mongoose": "^9.3.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-router": "^7.13.2",
     "typescript": "^5",
     "vitest": "^4.1.2"
   }

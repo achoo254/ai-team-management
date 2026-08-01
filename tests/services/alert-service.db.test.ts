@@ -5,12 +5,13 @@ import { UsageSnapshot } from "@/models/usage-snapshot";
 import { Alert } from "@/models/alert";
 import { checkSnapshotAlerts } from "@/services/alert-service";
 
-// Mock telegram + fcm to avoid actual sends
+// Mock telegram + fcm to avoid actual sends. alert-service attaches .catch()
+// to both return values, so the mocks must resolve rather than return undefined.
 vi.mock("@/services/telegram-service", () => ({
-  sendAlertToUser: vi.fn(),
+  sendAlertToUser: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/services/fcm-service", () => ({
-  sendPushToUser: vi.fn(),
+  sendPushToUser: vi.fn().mockResolvedValue(undefined),
 }));
 
 interface WatchEntry { seat_id: string; threshold_5h_pct?: number; threshold_7d_pct?: number }

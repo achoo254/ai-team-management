@@ -19,9 +19,16 @@ function fakeSeat(n: number, label: string, email = `seat${n}@company.vn`) {
 
 // ── Mocks (hoisted before imports) ────────────────────────────────────────────
 
-vi.mock('../../packages/api/src/services/bld-metrics-service.js', () => ({
+vi.mock('../../packages/api/src/services/metrics-scope.js', () => ({
   getSeatsInScope: vi.fn(),
+}))
+
+vi.mock('../../packages/api/src/services/seat-cost.js', () => ({
   getMonthlyCostUsd: vi.fn().mockReturnValue(125),
+}))
+
+vi.mock('../../packages/api/src/services/cycle-utilization-service.js', () => ({
+  computeFleetCycleUtilization: vi.fn(),
 }))
 
 vi.mock('../../packages/api/src/models/usage-snapshot.js', () => ({
@@ -35,14 +42,35 @@ vi.mock('../../packages/api/src/models/usage-snapshot.js', () => ({
 
 // ── Imports (after mocks) ─────────────────────────────────────────────────────
 
-import {
-  getSeatsInScope,
-} from '../../packages/api/src/services/bld-metrics-service.js'
+import { getSeatsInScope } from '../../packages/api/src/services/metrics-scope.js'
+import { computeFleetCycleUtilization } from '../../packages/api/src/services/cycle-utilization-service.js'
 import { UsageSnapshot } from '../../packages/api/src/models/usage-snapshot.js'
 import { computeSeatStats } from '../../packages/api/src/services/bld-seat-stats-service.js'
-import type { MetricsScope } from '../../packages/api/src/services/bld-metrics-service.js'
+import type { MetricsScope } from '../../packages/api/src/services/metrics-scope.js'
 
 const ADMIN_SCOPE: MetricsScope = { type: 'admin' }
+
+/** topWaste is priced off completed cycles, so drive it through the cycle
+ *  service rather than the live snapshot aggregation. */
+function mockCycleUtil(entries: Array<{ n: number; avgPct: number | null }>) {
+  vi.mocked(computeFleetCycleUtilization).mockResolvedValue({
+    seats: entries.map(e => ({
+      seat_id: fakeId(e.n),
+      seat_label: `Seat ${e.n}`,
+      completed: e.avgPct == null
+        ? []
+        : [{ resets_at: '2026-07-29T00:00:00.000Z', peak_pct: e.avgPct, sample_count: 2016 }],
+      lastCyclePct: e.avgPct,
+      avgPct: e.avgPct,
+    })),
+    avgUtilPct: null,
+    lastCycleUtilPct: null,
+    prevCycleUtilPct: null,
+    cycleDeltaPp: null,
+    seatsWithData: entries.filter(e => e.avgPct != null).length,
+    cyclesRequested: 4,
+  })
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +80,7 @@ describe('computeSeatStats', () => {
     vi.mocked(UsageSnapshot.find).mockReturnValue({
       lean: vi.fn().mockResolvedValue([]),
     } as never)
+    mockCycleUtil([])
   })
 
   it('returns empty response when no company seats', async () => {
@@ -64,18 +93,17 @@ describe('computeSeatStats', () => {
     expect(result.degradationWatch).toHaveLength(0)
   })
 
-  it('topWaste sorted by wasteUsd desc — lowest util = highest waste', async () => {
+  it('topWaste sorted by wasteUsd desc — lowest cycle util = highest waste', async () => {
     const seats = [1, 2, 3].map(n => fakeSeat(n, `Seat ${n}`))
     vi.mocked(getSeatsInScope).mockResolvedValue(seats as never)
+    vi.mocked(UsageSnapshot.aggregate).mockResolvedValue([])
 
-    // Seat 1: 10% util → 90% waste, Seat 2: 90% → 10%, Seat 3: 50% → 50%
-    vi.mocked(UsageSnapshot.aggregate)
-      .mockResolvedValueOnce([
-        { _id: fakeId(1), seven_day_pct: 10 },
-        { _id: fakeId(2), seven_day_pct: 90 },
-        { _id: fakeId(3), seven_day_pct: 50 },
-      ])
-      .mockResolvedValueOnce([]) // 7d-ago
+    // Cycle util — Seat 1: 10% → 90% waste, Seat 2: 90% → 10%, Seat 3: 50% → 50%
+    mockCycleUtil([
+      { n: 1, avgPct: 10 },
+      { n: 2, avgPct: 90 },
+      { n: 3, avgPct: 50 },
+    ])
 
     const result = await computeSeatStats(ADMIN_SCOPE)
 
@@ -87,6 +115,33 @@ describe('computeSeatStats', () => {
     const last = result.topWaste[result.topWaste.length - 1]
     expect(last.seatLabel).toBe('Seat 2')
     expect(last.wasteUsd).toBeCloseTo(12.5)
+  })
+
+  it('topWaste ignores seats without a completed cycle', async () => {
+    const seats = [1, 2].map(n => fakeSeat(n, `Seat ${n}`))
+    vi.mocked(getSeatsInScope).mockResolvedValue(seats as never)
+    vi.mocked(UsageSnapshot.aggregate).mockResolvedValue([])
+
+    mockCycleUtil([
+      { n: 1, avgPct: 60 },
+      { n: 2, avgPct: null }, // brand-new seat — no finished cycle yet
+    ])
+
+    const result = await computeSeatStats(ADMIN_SCOPE)
+
+    expect(result.topWaste).toHaveLength(1)
+    expect(result.topWaste[0].seatLabel).toBe('Seat 1')
+  })
+
+  it('topWaste never reports negative waste when a seat exceeds 100%', async () => {
+    vi.mocked(getSeatsInScope).mockResolvedValue([fakeSeat(1, 'Seat 1')] as never)
+    vi.mocked(UsageSnapshot.aggregate).mockResolvedValue([])
+    mockCycleUtil([{ n: 1, avgPct: 105 }])
+
+    const result = await computeSeatStats(ADMIN_SCOPE)
+
+    expect(result.topWaste[0].wasteUsd).toBe(0)
+    expect(result.topWaste[0].wastePct).toBe(0)
   })
 
   it('burndownRisk: seat with 3+ consecutive days ≥80% is included', async () => {
@@ -178,10 +233,8 @@ describe('computeSeatStats', () => {
 
     // getSeatsInScope resolves to seat1 only (simulating DB lookup by id)
     vi.mocked(getSeatsInScope).mockResolvedValue([seat1] as never)
-
-    vi.mocked(UsageSnapshot.aggregate)
-      .mockResolvedValueOnce([{ _id: fakeId(1), seven_day_pct: 20 }]) // current — 80% waste
-      .mockResolvedValueOnce([]) // 7d-ago
+    vi.mocked(UsageSnapshot.aggregate).mockResolvedValue([])
+    mockCycleUtil([{ n: 1, avgPct: 20 }]) // 20% cycle util → 80% waste
 
     const result = await computeSeatStats(userScope)
 
@@ -210,10 +263,8 @@ describe('computeSeatStats', () => {
     // getSeatsInScope resolves to only the opted-in seat (simulating DB filter).
     const overviewSeat = { ...fakeSeat(10, 'Overview Seat'), include_in_overview: true }
     vi.mocked(getSeatsInScope).mockResolvedValue([overviewSeat] as never)
-
-    vi.mocked(UsageSnapshot.aggregate)
-      .mockResolvedValueOnce([{ _id: fakeId(10), seven_day_pct: 40 }])
-      .mockResolvedValueOnce([])
+    vi.mocked(UsageSnapshot.aggregate).mockResolvedValue([])
+    mockCycleUtil([{ n: 10, avgPct: 40 }])
 
     const result = await computeSeatStats(ADMIN_SCOPE)
 
