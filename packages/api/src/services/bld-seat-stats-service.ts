@@ -10,7 +10,9 @@
 
 import mongoose from 'mongoose'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
-import { getSeatsInScope, getMonthlyCostUsd, type MetricsScope } from './bld-metrics-service.js'
+import { getSeatsInScope, type MetricsScope } from './metrics-scope.js'
+import { getMonthlyCostUsd } from './seat-cost.js'
+import { computeFleetCycleUtilization } from './cycle-utilization-service.js'
 import type {
   SeatWasteEntry,
   BurndownSeat,
@@ -147,18 +149,22 @@ export async function computeSeatStats(scope: MetricsScope = { type: 'admin' }):
   const oldSnapMap = new Map(oldSnaps.map(s => [s.seat_id, s.seven_day_pct]))
 
   // ── topWaste: top 5 by wasteUsd desc ──────────────────────────────────────
+  // Priced off COMPLETED cycles. Ranking on the live seven_day_pct would just
+  // rank seats by how recently their cycle reset.
 
-  const wasteList: SeatWasteEntry[] = currentSnaps.map(s => {
-    const wastePct = 100 - s.seven_day_pct
-    const wasteUsd = (wastePct / 100) * MONTHLY_COST_USD
-    return {
-      seatId: s.seat_id,
-      seatLabel: seatLabelMap.get(s.seat_id) ?? s.seat_id,
-      utilPct: s.seven_day_pct,
-      wasteUsd,
-      wastePct,
-    }
-  })
+  const cycles = await computeFleetCycleUtilization(seats)
+  const wasteList: SeatWasteEntry[] = cycles.seats
+    .filter(s => s.avgPct != null)
+    .map(s => {
+      const wastePct = Math.max(0, 100 - s.avgPct!)
+      return {
+        seatId: s.seat_id,
+        seatLabel: seatLabelMap.get(s.seat_id) ?? s.seat_id,
+        utilPct: s.avgPct!,
+        wasteUsd: (wastePct / 100) * MONTHLY_COST_USD,
+        wastePct,
+      }
+    })
   wasteList.sort((a, b) => b.wasteUsd - a.wasteUsd)
   const topWaste = wasteList.slice(0, 5)
 

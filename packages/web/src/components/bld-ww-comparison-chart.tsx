@@ -83,7 +83,9 @@ export function BldWwComparisonChart({ data }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">So sánh tuần / tuần (8 tuần gần nhất)</CardTitle>
+        <CardTitle className="text-base">
+          So sánh theo chu kỳ quota ({data.length} chu kỳ đã kết thúc gần nhất)
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={220}>

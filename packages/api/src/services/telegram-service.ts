@@ -106,7 +106,7 @@ function buildEfficiencySection(eff: FleetEfficiency, seatResetMap: Map<string, 
       .map(w => `${esc(w.seat_label)} (${w.projected_pct}%)`)
       .join(', ')
     const more = eff.waste.seats.length > 3 ? ` +${eff.waste.seats.length - 3}` : ''
-    msg += `🟡 Lãng phí:   ${eff.waste.seats.length} seats — ${names}${more} (~$${Math.round(eff.waste.total_waste_usd)}/chu kỳ)\n`
+    msg += `🟡 Lãng phí:   ${eff.waste.seats.length} seats — ${names}${more} (~$${Math.round(eff.waste.total_waste_usd_monthly)}/tháng)\n`
   } else {
     msg += `🟡 Lãng phí:   0 seats\n`
   }
@@ -118,17 +118,44 @@ function buildEfficiencySection(eff: FleetEfficiency, seatResetMap: Map<string, 
   return msg
 }
 
-/** Build overview section from fleet KPIs */
-function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | null>): string {
+/** Build overview section from fleet KPIs.
+ *
+ *  Two clearly separated numbers: what already happened (completed cycles) and
+ *  what the running cycle is heading for. They must never be mixed — reporting
+ *  a mid-cycle counter as "waste" makes the figure swing with the clock. */
+export function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | null>): string {
   let msg = `── <b>TỔNG QUAN</b> ──────────────\n`
-  msg += `📈 Tận dụng TB 7 ngày: <b>${Math.round(kpis.utilPct)}%</b>`
-  if (kpis.wwDelta !== 0) {
-    const sign = kpis.wwDelta > 0 ? '+' : ''
-    msg += ` (so tuần trước: ${sign}${kpis.wwDelta.toFixed(1)}%)`
+
+  if (kpis.cycleUtilPct != null) {
+    msg += `📈 Tận dụng TB ${kpis.cyclesConsidered} chu kỳ: <b>${Math.round(kpis.cycleUtilPct)}%</b>`
+    if (kpis.lastCycleUtilPct != null) {
+      msg += ` (chu kỳ gần nhất ${Math.round(kpis.lastCycleUtilPct)}%`
+      if (kpis.wwDelta != null) {
+        const sign = kpis.wwDelta > 0 ? '+' : ''
+        msg += `, ${sign}${kpis.wwDelta.toFixed(1)} điểm %`
+      }
+      msg += `)`
+    }
+    msg += `\n`
+  } else {
+    msg += `📈 Tận dụng: <i>chưa đủ một chu kỳ hoàn tất</i>\n`
   }
-  msg += `\n`
-  msg += `💸 Lãng phí ước tính: <b>$${Math.round(kpis.wasteUsd)}</b>/$${Math.round(kpis.totalCostUsd)}/tháng\n`
+
+  if (kpis.wasteUsd != null) {
+    msg += `💸 Lãng phí thực tế: <b>$${Math.round(kpis.wasteUsd)}</b>/$${Math.round(kpis.totalCostUsd)}/tháng\n`
+  }
+
+  // Chi tiết lãng phí dự phóng nằm ở mục HIỆU QUẢ SỬ DỤNG bên dưới — không lặp ở đây.
+  if (kpis.projectedUtilPct != null) {
+    msg += `🔮 Chu kỳ đang chạy: dự kiến đạt <b>${Math.round(kpis.projectedUtilPct)}%</b>\n`
+  }
+
   msg += `💺 Tổng: ${kpis.billableCount} seats\n`
+
+  const missing = kpis.staleSeatCount + kpis.noDataSeatCount
+  if (missing > 0) {
+    msg += `⚠️ ${missing} seat thiếu dữ liệu (không tính vào số trên)\n`
+  }
 
   if (kpis.efficiency) {
     msg += `\n` + buildEfficiencySection(kpis.efficiency, seatResetMap)
