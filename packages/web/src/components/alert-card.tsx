@@ -53,10 +53,18 @@ function ExpandedMetadata({ alert }: { alert: Alert }) {
       );
     }
     case "token_failure":
+      // Only a rejected refresh token (hard_fail) actually needs a human to
+      // re-import. Everything else clears itself on the next collection tick.
       return m.error ? (
         <div className="pt-2 border-t border-border/50">
           <code className="block text-[11px] text-muted-foreground break-all">{m.error}</code>
-          <p className="text-[11px] text-amber-600 mt-1">Cần re-import credential</p>
+          {m.hard_fail === true ? (
+            <p className="text-[11px] text-amber-600 mt-1">Cần re-import credential</p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Lỗi tạm thời — hệ thống sẽ tự thử lại
+            </p>
+          )}
         </div>
       ) : null;
     case "usage_exceeded":

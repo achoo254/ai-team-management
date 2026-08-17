@@ -119,6 +119,9 @@ export interface AlertMetadata {
   credits_used?: number
   credits_limit?: number
   error?: string
+  /** token_failure: true when the refresh token itself was rejected and only a
+   *  re-import recovers it. False/absent means a transient fetch error. */
+  hard_fail?: boolean
   delta?: number
   budget?: number
   user_id?: string

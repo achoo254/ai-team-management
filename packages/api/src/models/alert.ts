@@ -6,6 +6,8 @@ export type AlertWindowDb = '5h' | '7d' | null
 export interface IAlert extends Document {
   user_id: Types.ObjectId | null
   seat_id: Types.ObjectId
+  /** Seat label captured at alert time — keeps the feed readable after a rename or delete */
+  seat_label: string | null
   type: AlertTypeDb
   window: AlertWindowDb
   message: string
@@ -20,6 +22,7 @@ const alertSchema = new Schema<IAlert>(
   {
     user_id: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     seat_id: { type: Schema.Types.ObjectId, ref: 'Seat', required: true },
+    seat_label: { type: String, default: null },
     type: { type: String, required: true, enum: ['rate_limit', 'token_failure', 'usage_exceeded', 'session_waste', '7d_risk', 'unexpected_activity', 'unexpected_idle', 'quota_forecast', 'fast_burn'] },
     window: { type: String, enum: ['5h', '7d', null], default: null },
     message: { type: String, required: true },

@@ -133,6 +133,38 @@ describe("alert-service: checkSnapshotAlerts()", () => {
       const alert = await Alert.findOne({ user_id: user._id, type: "token_failure" });
       expect(alert).not.toBeNull();
       expect(alert!.metadata).toMatchObject({ error: "invalid_grant" });
+      // Snapshot the label so the feed stays readable after a rename or delete.
+      expect(alert!.seat_label).toBe("Fail");
+    });
+
+    it("marks a fetch error as soft while the refresh token still works", async () => {
+      // token_active stays true when only the usage fetch failed — the refresh
+      // token was never rejected, so this must not be reported as unrecoverable.
+      const seat = await Seat.create({
+        email: "soft@test.com", label: "Soft",
+        token_active: true, last_fetch_error: "HTTP 401: authentication_error",
+      });
+      const user = await createWatcher([{ seat_id: String(seat._id) }]);
+
+      await checkSnapshotAlerts();
+
+      const alert = await Alert.findOne({ user_id: user._id, type: "token_failure" });
+      expect(alert!.metadata).toMatchObject({ hard_fail: false });
+      expect(alert!.message).not.toContain("cần đăng nhập lại");
+    });
+
+    it("marks a rejected refresh token as a hard failure", async () => {
+      const seat = await Seat.create({
+        email: "hard@test.com", label: "Hard",
+        token_active: false, last_fetch_error: "HTTP 400: invalid_grant",
+      });
+      const user = await createWatcher([{ seat_id: String(seat._id) }]);
+
+      await checkSnapshotAlerts();
+
+      const alert = await Alert.findOne({ user_id: user._id, type: "token_failure" });
+      expect(alert!.metadata).toMatchObject({ hard_fail: true });
+      expect(alert!.message).toContain("cần đăng nhập lại");
     });
 
     it("skips user when token_failure_enabled=false", async () => {
