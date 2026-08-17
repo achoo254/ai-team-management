@@ -34,16 +34,9 @@ export function isEmptyUsageResponse(
   return fiveHour.resetsAt === null && sevenDay.resetsAt === null
 }
 
-/** Fetch usage for a single seat using oauth_credential */
-async function fetchSeatUsage(seat: {
-  _id: import('mongoose').Types.ObjectId
-  oauth_credential: { access_token: string }
-  label: string
-  owner_id?: import('mongoose').Types.ObjectId | null
-}): Promise<'skipped' | void> {
-  const token = decrypt(seat.oauth_credential.access_token)
-
-  const res = await fetch(API_URL, {
+/** Request the usage endpoint with a given access token. */
+function requestUsage(token: string) {
+  return fetch(API_URL, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -53,6 +46,34 @@ async function fetchSeatUsage(seat: {
     },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   })
+}
+
+/** Fetch usage for a single seat using oauth_credential */
+async function fetchSeatUsage(seat: {
+  _id: import('mongoose').Types.ObjectId
+  oauth_credential: { access_token: string }
+  label: string
+  owner_id?: import('mongoose').Types.ObjectId | null
+}): Promise<'skipped' | void> {
+  const token = decrypt(seat.oauth_credential.access_token)
+
+  let res = await requestUsage(token)
+
+  // A successful refresh revokes the previous access token immediately, so a 401
+  // can mean "this request raced a refresh", not "the credential is dead". The
+  // cron now runs refresh before collection, but a manual refresh or an operator
+  // re-import can still land mid-flight. Re-read the seat once: if the stored
+  // token actually changed, the old one was superseded — retry with the new one
+  // rather than reporting a token failure.
+  if (res.status === 401) {
+    const current = await Seat.findById(seat._id).select('+oauth_credential').lean()
+    const storedToken = current?.oauth_credential?.access_token
+    const rotatedToken = storedToken ? decrypt(storedToken) : null
+    if (rotatedToken && rotatedToken !== token) {
+      console.warn(`[Collector] ⟳ ${seat.label}: token rotated mid-request, retrying`)
+      res = await requestUsage(rotatedToken)
+    }
+  }
 
   if (!res.ok) {
     const body = await res.text()
