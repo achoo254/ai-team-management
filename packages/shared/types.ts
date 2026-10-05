@@ -119,6 +119,9 @@ export interface AlertMetadata {
   credits_used?: number
   credits_limit?: number
   error?: string
+  /** token_failure: true when the refresh token itself was rejected and only a
+   *  re-import recovers it. False/absent means a transient fetch error. */
+  hard_fail?: boolean
   delta?: number
   budget?: number
   user_id?: string
@@ -316,28 +319,55 @@ export interface FleetEfficiency {
   overload: Array<{ seat_id: string; seat_label: string; hours_early: number }>
   waste: {
     seats: Array<{ seat_id: string; seat_label: string; projected_pct: number; waste_pct: number; waste_usd: number }>
+    /** Lãng phí dự phóng cho MỘT chu kỳ 7 ngày. */
     total_waste_usd: number
+    /** Cùng con số quy đổi ra/tháng — tầng trên khỏi tự nhân 30/7 rồi lệch đơn vị. */
+    total_waste_usd_monthly: number
   }
   unknown_count: number
   total_seats: number
+  /** TB dự phóng % lúc reset (đã cap 100) trên các seat phân loại được. */
+  projected_util_pct: number | null
 }
 
 export interface FleetKpis {
+  /** Quota tiêu thụ tới lúc này của chu kỳ ĐANG chạy. Đây là bộ đếm tích luỹ,
+   *  sẽ tiếp tục tăng tới mốc reset — không dùng để tính lãng phí. */
   utilPct: number
-  wasteUsd: number
+  /** TB đỉnh quota của các chu kỳ ĐÃ hoàn tất. Cơ sở của `wasteUsd`. */
+  cycleUtilPct: number | null
+  /** Đỉnh quota của chu kỳ hoàn tất gần nhất. */
+  lastCycleUtilPct: number | null
+  /** Số chu kỳ hoàn tất tham gia vào `cycleUtilPct` (0 = chưa đủ dữ liệu). */
+  cyclesConsidered: number
+  /** Lãng phí thực tế/tháng, cộng dồn theo từng seat có dữ liệu chu kỳ.
+   *  `null` khi chưa seat nào chạy hết một chu kỳ. */
+  wasteUsd: number | null
+  /** Dự phóng % quota đạt được lúc reset của chu kỳ đang chạy. */
+  projectedUtilPct: number | null
+  /** Lãng phí dự phóng/tháng của chu kỳ đang chạy. Cùng mô hình với `efficiency`
+   *  (mốc tối ưu 85%), nên hai con số không bao giờ mâu thuẫn. */
+  projectedWasteUsd: number | null
   totalCostUsd: number
   monthlyCostUsd: number
   billableCount: number
-  wwDelta: number
+  /** Chu kỳ hoàn tất gần nhất trừ chu kỳ trước đó, đơn vị ĐIỂM %.
+   *  `null` khi chưa có 2 chu kỳ hoàn tất. */
+  wwDelta: number | null
   /** Day-over-day delta: avg peak 5h today minus avg peak 5h yesterday (pp) */
   ddDelta: number | null
   worstForecast: BldWorstForecast | null
   /** Số seat đã đạt pct>=100 (đã hết quota 7 ngày). Phân biệt với "sắp hết". */
   exhaustedSeatCount: number
+  /** Seat có snapshot mới nhất quá cũ (collector đứt) — bị loại khỏi `utilPct`. */
+  staleSeatCount: number
+  /** Seat chưa có snapshot nào dùng được. */
+  noDataSeatCount: number
   /** 3-bucket efficiency classification (optimal/overload/waste) */
   efficiency: FleetEfficiency | null
 }
 
+/** Một điểm = một chu kỳ quota đã hoàn tất (không phải tuần lịch). */
 export interface WwHistoryPoint {
   week_start: string
   utilPct: number

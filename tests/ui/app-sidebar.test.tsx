@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
-// Mock react-router (project uses react-router, not next/navigation)
-vi.mock("react-router", () => ({
-  useLocation: () => ({ pathname: "/" }),
-  Link: ({ children, ...props }: any) => <a {...props}>{children}</a>,
-}));
+// react-router is used for real via MemoryRouter. A vi.mock factory does not
+// take effect for this dependency, so a mocked useLocation would silently fall
+// through to the real one and fail on the missing Router context.
 
 // SidebarProvider uses use-mobile which calls window.matchMedia — not in jsdom
 vi.mock("@/hooks/use-mobile", () => ({
@@ -38,11 +37,13 @@ const regularUser = {
   team: "mkt" as const,
 };
 
-function renderSidebar() {
+function renderSidebar(initialPath = "/") {
   return render(
-    <SidebarProvider>
-      <AppSidebar />
-    </SidebarProvider>
+    <MemoryRouter initialEntries={[initialPath]}>
+      <SidebarProvider>
+        <AppSidebar />
+      </SidebarProvider>
+    </MemoryRouter>
   );
 }
 
@@ -92,13 +93,26 @@ describe("AppSidebar", () => {
     expect(screen.getByText("alice@example.com")).toBeDefined();
   });
 
-  it("renders user team badge in footer", () => {
+  it("renders the user's role badge in the footer", () => {
     vi.mocked(useAuth).mockReturnValue({
       user: adminUser,
       loading: false,
       logout: vi.fn(),
     });
     renderSidebar();
-    expect(screen.getByText("dev")).toBeDefined();
+    expect(screen.getByText("admin")).toBeDefined();
+  });
+
+  it("marks the active route from the current location", () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: regularUser,
+      loading: false,
+      logout: vi.fn(),
+    });
+    renderSidebar("/seats");
+    // base-ui renders the state flag as a valueless `data-active` attribute,
+    // so presence — not value — is what marks the active item.
+    expect(screen.getByText("Seats").closest("a")).toHaveProperty("dataset.active");
+    expect(screen.getByText("Dashboard").closest("a")?.hasAttribute("data-active")).toBe(false);
   });
 });

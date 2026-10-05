@@ -1,5 +1,6 @@
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Clock, CalendarClock } from "lucide-react";
+import { AlertTriangle, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BldFleetDeltaCards } from "@/components/bld-fleet-delta-cards";
 import type { FleetKpis } from "@repo/shared/types";
 
 interface Props {
@@ -18,51 +19,65 @@ function utilBgColor(pct: number): string {
   return "bg-red-500";
 }
 
-function deltaIcon(delta: number) {
-  if (delta > 0.5) return <TrendingUp className="h-4 w-4 text-green-600" />;
-  if (delta < -0.5) return <TrendingDown className="h-4 w-4 text-red-500" />;
-  return <Minus className="h-4 w-4 text-muted-foreground" />;
-}
-
-function deltaColor(delta: number): string {
-  if (delta > 0.5) return "text-green-600";
-  if (delta < -0.5) return "text-red-500";
-  return "text-muted-foreground";
-}
-
 export function BldFleetKpiCards({ kpis }: Props) {
-  const { utilPct, wasteUsd, wwDelta, ddDelta, totalCostUsd, billableCount, worstForecast, exhaustedSeatCount } = kpis;
+  const {
+    utilPct, cycleUtilPct, lastCycleUtilPct, cyclesConsidered,
+    wasteUsd, projectedUtilPct, wwDelta, ddDelta, totalCostUsd,
+    billableCount, worstForecast, exhaustedSeatCount,
+    staleSeatCount, noDataSeatCount,
+  } = kpis;
   const exhaustedBadge = exhaustedSeatCount > 0 ? (
     <p className="mt-1 text-[11px] text-red-500/90">
       {exhaustedSeatCount} seat đã đầy quota
     </p>
   ) : null;
+  const missingSeats = staleSeatCount + noDataSeatCount;
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-      {/* Fleet Utilization */}
+      {/* Fleet Utilization — completed cycles */}
       <Card>
         <CardHeader className="pb-2 space-y-0.5">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             Mức sử dụng đội seat
           </CardTitle>
           <p className="text-[11px] text-muted-foreground/70 leading-snug">
-            TB quota 7 ngày của tất cả seat active. Càng cao = seat càng khai
-            thác hiệu quả
+            TB quota dùng hết trong {cyclesConsidered || "các"} chu kỳ đã kết
+            thúc. Càng cao = seat càng khai thác hiệu quả
           </p>
         </CardHeader>
         <CardContent>
-          <div className={`text-3xl font-bold ${utilColor(utilPct)}`}>
-            {utilPct.toFixed(1)}%
-          </div>
-          <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
-            <div
-              className={`h-1.5 rounded-full transition-all ${utilBgColor(utilPct)}`}
-              style={{ width: `${Math.min(utilPct, 100)}%` }}
-            />
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {billableCount} seat active · 70%+ khoẻ · dưới 50% là kém
+          {cycleUtilPct != null ? (
+            <>
+              <div className={`text-3xl font-bold ${utilColor(cycleUtilPct)}`}>
+                {cycleUtilPct.toFixed(1)}%
+              </div>
+              <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${utilBgColor(cycleUtilPct)}`}
+                  style={{ width: `${Math.min(cycleUtilPct, 100)}%` }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {lastCycleUtilPct != null
+                  ? `Chu kỳ gần nhất ${lastCycleUtilPct.toFixed(0)}% · `
+                  : ""}
+                {billableCount} seat active
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="text-3xl font-bold text-muted-foreground">—</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Chưa đủ một chu kỳ hoàn tất
+              </p>
+            </>
+          )}
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Chu kỳ đang chạy: đã dùng {utilPct.toFixed(0)}%
+            {projectedUtilPct != null
+              ? `, dự kiến đạt ${projectedUtilPct.toFixed(0)}%`
+              : ""}
           </p>
         </CardContent>
       </Card>
@@ -74,90 +89,26 @@ export function BldFleetKpiCards({ kpis }: Props) {
             Lãng phí / tháng
           </CardTitle>
           <p className="text-[11px] text-muted-foreground/70 leading-snug">
-            Phần chi phí không dùng tới. = (100% − mức sử dụng) × tổng chi phí
+            Phần quota đã trả tiền nhưng không dùng hết trong các chu kỳ đã kết
+            thúc
           </p>
         </CardHeader>
         <CardContent>
           <div className="text-3xl font-bold text-foreground">
-            ${wasteUsd.toFixed(0)}
+            {wasteUsd != null ? `$${wasteUsd.toFixed(0)}` : "—"}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             trên ${totalCostUsd.toFixed(0)} tổng chi phí
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            có thể thu hồi qua rebalance member
+            {missingSeats > 0
+              ? `${missingSeats} seat thiếu dữ liệu, chưa tính vào`
+              : "có thể thu hồi qua rebalance member"}
           </p>
         </CardContent>
       </Card>
 
-      {/* W/W Delta */}
-      <Card>
-        <CardHeader className="pb-2 space-y-0.5">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Thay đổi tuần
-          </CardTitle>
-          <p className="text-[11px] text-muted-foreground/70 leading-snug">
-            Chênh lệch mức sử dụng so với 7 ngày trước. Dương = tăng, âm = giảm
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div
-            className={`flex items-center gap-1 text-3xl font-bold ${deltaColor(wwDelta)}`}
-          >
-            {deltaIcon(wwDelta)}
-            <span>
-              {wwDelta >= 0 ? "+" : ""}
-              {wwDelta.toFixed(1)}%
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {wwDelta > 0.5
-              ? "Đội đang dùng nhiều hơn tuần trước"
-              : wwDelta < -0.5
-                ? "Đội đang dùng ít hơn tuần trước"
-                : "Mức sử dụng ổn định"}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Day/Day Delta */}
-      <Card>
-        <CardHeader className="pb-2 space-y-0.5">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Thay đổi ngày
-          </CardTitle>
-          <p className="text-[11px] text-muted-foreground/70 leading-snug">
-            So sánh peak 5h trung bình hôm nay với hôm qua. Phản ứng nhanh trong ngày
-          </p>
-        </CardHeader>
-        <CardContent>
-          {ddDelta != null ? (
-            <>
-              <div
-                className={`flex items-center gap-1 text-3xl font-bold ${deltaColor(ddDelta)}`}
-              >
-                <CalendarClock className="h-4 w-4" />
-                <span>
-                  {ddDelta >= 0 ? "+" : ""}
-                  {ddDelta.toFixed(1)}%
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {ddDelta > 5
-                  ? "Hôm nay dùng nhiều hơn hẳn"
-                  : ddDelta < -5
-                    ? "Hôm nay nhẹ hơn hôm qua"
-                    : "Tương đương hôm qua"}
-              </p>
-            </>
-          ) : (
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <CalendarClock className="h-5 w-5" />
-              <span className="text-sm font-medium">Chưa đủ dữ liệu</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <BldFleetDeltaCards wwDelta={wwDelta} ddDelta={ddDelta} />
 
       {/* Worst Forecast */}
       <Card>

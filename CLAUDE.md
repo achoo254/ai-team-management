@@ -74,10 +74,18 @@ Any Google account can log in. Admin role must be granted manually (DB flip).
 
 ## Testing
 
-- Vitest workspace with two environments: `tests/setup.ts` (node), `tests/setup-jsdom.ts` (browser/React).
-- `tests/api/` — API route + service tests (use in-memory Mongo via `tests/helpers/db-helper.ts`)
-- `tests/hooks/` + `tests/ui/` — React hooks + components (jsdom)
-- `tests/services/` — service logic
+Three Vitest projects, selected by path — every `tests/**/*.test.{ts,tsx}` file runs, no allowlist to maintain:
+
+| Project | Matches | Environment | Setup |
+|---|---|---|---|
+| `unit` | everything else | node | `tests/setup-jsdom.ts` |
+| `dom` | `tests/ui/`, `tests/hooks/` | jsdom | `tests/setup-jsdom.ts` |
+| `db` | `**/*.db.test.ts` | node | `+ tests/setup.ts` |
+
+- `tests/api/` — API route + service tests · `tests/services/` — service logic · `tests/ui/` + `tests/hooks/` — React (jsdom)
+- **A test needing MongoDB must be named `*.db.test.ts`.** The suffix *is* the registration — nothing else grants it a connection.
+- The `db` project boots an ephemeral in-memory mongod via `tests/helpers/db-helper.ts`. It **deliberately ignores `MONGO_URI`**: its hooks wipe every collection between tests and drop the database at the end, so it must never be able to reach a real deployment.
+- `tests/setup-jsdom.ts` also registers Testing Library's `cleanup` — auto-cleanup does not self-register while `globals: false`.
 
 ## Environment Variables
 

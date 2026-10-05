@@ -130,7 +130,10 @@ describe('classifyEfficiency', () => {
     expect(result.waste_pct).toBe(25) // 85 - 60
   })
 
-  it('classifies waste for stale seat (slope = 0, current = 40%)', () => {
+  it('returns unknown when the counter moved backwards', () => {
+    // safe_decreasing carries slope 0 because the upstream counter was
+    // corrected downwards, not because the seat stopped consuming. Projecting a
+    // flat line from it would report an active seat as waste.
     const { now, resetsAt } = makeTimeContext(72)
     const f = makeForecast({
       resets_at: resetsAt,
@@ -139,8 +142,23 @@ describe('classifyEfficiency', () => {
       slope_per_hour: 0,
     })
     const result = classifyEfficiency(f, now)
+    expect(result.bucket).toBe('unknown')
+    expect(result.projected_pct).toBeNull()
+    expect(result.waste_pct).toBeNull()
+  })
+
+  it('still classifies waste for a genuinely slow seat', () => {
+    const { now, resetsAt, hoursToReset } = makeTimeContext(72)
+    // 40% now, crawling just fast enough to reach 50% by reset
+    const f = makeForecast({
+      resets_at: resetsAt,
+      status: 'watch',
+      current_pct: 40,
+      slope_per_hour: 10 / hoursToReset,
+    })
+    const result = classifyEfficiency(f, now)
     expect(result.bucket).toBe('waste')
-    expect(result.projected_pct).toBe(40)
-    expect(result.waste_pct).toBe(45) // 85 - 40
+    expect(result.projected_pct).toBe(50)
+    expect(result.waste_pct).toBe(35) // 85 - 50
   })
 })

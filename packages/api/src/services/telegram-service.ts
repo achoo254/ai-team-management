@@ -5,14 +5,11 @@ import { User, type IUser } from '../models/user.js'
 import { UsageSnapshot } from '../models/usage-snapshot.js'
 import { decrypt, isEncryptionConfigured } from '../lib/encryption.js'
 import { computeFleetKpis } from './bld-metrics-service.js'
+import { buildAlertMessage, esc } from './telegram-alert-message.js'
 import type { FleetKpis, FleetEfficiency } from '@repo/shared/types'
 // AlertType imported from shared (same type used by alert-service + fcm-service)
 type AlertType = import('@repo/shared/types').AlertType
 
-/** Escape HTML special chars for Telegram */
-function esc(str: string | number): string {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 /** Build inline keyboard with app links. Appends ?seat=<id> when seatId provided for deep-linking. */
 function buildInlineKeyboard(seatId?: string) {
@@ -106,7 +103,7 @@ function buildEfficiencySection(eff: FleetEfficiency, seatResetMap: Map<string, 
       .map(w => `${esc(w.seat_label)} (${w.projected_pct}%)`)
       .join(', ')
     const more = eff.waste.seats.length > 3 ? ` +${eff.waste.seats.length - 3}` : ''
-    msg += `🟡 Lãng phí:   ${eff.waste.seats.length} seats — ${names}${more} (~$${Math.round(eff.waste.total_waste_usd)}/chu kỳ)\n`
+    msg += `🟡 Lãng phí:   ${eff.waste.seats.length} seats — ${names}${more} (~$${Math.round(eff.waste.total_waste_usd_monthly)}/tháng)\n`
   } else {
     msg += `🟡 Lãng phí:   0 seats\n`
   }
@@ -118,17 +115,44 @@ function buildEfficiencySection(eff: FleetEfficiency, seatResetMap: Map<string, 
   return msg
 }
 
-/** Build overview section from fleet KPIs */
-function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | null>): string {
+/** Build overview section from fleet KPIs.
+ *
+ *  Two clearly separated numbers: what already happened (completed cycles) and
+ *  what the running cycle is heading for. They must never be mixed — reporting
+ *  a mid-cycle counter as "waste" makes the figure swing with the clock. */
+export function buildOverviewSection(kpis: FleetKpis, seatResetMap: Map<string, Date | null>): string {
   let msg = `── <b>TỔNG QUAN</b> ──────────────\n`
-  msg += `📈 Tận dụng TB 7 ngày: <b>${Math.round(kpis.utilPct)}%</b>`
-  if (kpis.wwDelta !== 0) {
-    const sign = kpis.wwDelta > 0 ? '+' : ''
-    msg += ` (so tuần trước: ${sign}${kpis.wwDelta.toFixed(1)}%)`
+
+  if (kpis.cycleUtilPct != null) {
+    msg += `📈 Tận dụng TB ${kpis.cyclesConsidered} chu kỳ: <b>${Math.round(kpis.cycleUtilPct)}%</b>`
+    if (kpis.lastCycleUtilPct != null) {
+      msg += ` (chu kỳ gần nhất ${Math.round(kpis.lastCycleUtilPct)}%`
+      if (kpis.wwDelta != null) {
+        const sign = kpis.wwDelta > 0 ? '+' : ''
+        msg += `, ${sign}${kpis.wwDelta.toFixed(1)} điểm %`
+      }
+      msg += `)`
+    }
+    msg += `\n`
+  } else {
+    msg += `📈 Tận dụng: <i>chưa đủ một chu kỳ hoàn tất</i>\n`
   }
-  msg += `\n`
-  msg += `💸 Lãng phí ước tính: <b>$${Math.round(kpis.wasteUsd)}</b>/$${Math.round(kpis.totalCostUsd)}/tháng\n`
+
+  if (kpis.wasteUsd != null) {
+    msg += `💸 Lãng phí thực tế: <b>$${Math.round(kpis.wasteUsd)}</b>/$${Math.round(kpis.totalCostUsd)}/tháng\n`
+  }
+
+  // Chi tiết lãng phí dự phóng nằm ở mục HIỆU QUẢ SỬ DỤNG bên dưới — không lặp ở đây.
+  if (kpis.projectedUtilPct != null) {
+    msg += `🔮 Chu kỳ đang chạy: dự kiến đạt <b>${Math.round(kpis.projectedUtilPct)}%</b>\n`
+  }
+
   msg += `💺 Tổng: ${kpis.billableCount} seats\n`
+
+  const missing = kpis.staleSeatCount + kpis.noDataSeatCount
+  if (missing > 0) {
+    msg += `⚠️ ${missing} seat thiếu dữ liệu (không tính vào số trên)\n`
+  }
 
   if (kpis.efficiency) {
     msg += `\n` + buildEfficiencySection(kpis.efficiency, seatResetMap)
@@ -468,92 +492,7 @@ export async function sendAlertToUser(
 ): Promise<void> {
   if (!user.telegram_bot_token || !user.telegram_chat_id || !isEncryptionConfigured()) return
 
-  let msg: string
-  switch (type) {
-    case 'rate_limit': {
-      const win = String(metadata.window ?? metadata.session ?? '')
-      const pct = metadata.max_pct ?? metadata.pct
-      const threshold = metadata.threshold
-      const resetsAt = metadata.resets_at ? new Date(metadata.resets_at as string).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''
-      msg = `🔴 <b>Rate Limit Warning</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Window: ${esc(win)} | Usage: <b>${esc(String(pct ?? ''))}%</b>`
-        + (threshold != null ? ` (ngưỡng ${esc(String(threshold))}%)` : '')
-        + (resetsAt ? `\nReset: ${esc(resetsAt)}` : '')
-      break
-    }
-    case 'token_failure':
-      msg = `⚠️ <b>Token Failure</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Error: <code>${esc(String(metadata.error ?? 'unknown'))}</code>\n`
-        + `→ Cần re-import credential`
-      break
-    case 'usage_exceeded':
-      if (metadata.next_user) {
-        msg = `📢 <b>Sắp đến lượt bạn</b>\n`
-          + `Seat: <b>${esc(seatLabel)}</b>\n`
-          + `User trước đã vượt budget — seat sắp sẵn sàng cho bạn`
-      } else {
-        msg = `🚫 <b>Usage Budget Exceeded</b>\n`
-          + `Seat: <b>${esc(seatLabel)}</b>\n`
-          + `User: ${esc(String(metadata.user_name ?? ''))}\n`
-          + `Usage: ${esc(String(metadata.delta ?? ''))}% / Budget: ${esc(String(metadata.budget ?? ''))}%\n`
-          + `Session: ${esc(String(metadata.session ?? ''))}\n`
-          + `→ Vui lòng dừng sử dụng ngay`
-      }
-      break
-    case 'session_waste':
-      msg = `⚠️ <b>Session lãng phí</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `User: ${esc(String(metadata.user_name ?? ''))}\n`
-        + `Thời gian: ${esc(String(metadata.duration ?? ''))}h nhưng chỉ dùng ${esc(String(metadata.delta ?? ''))}%\n`
-        + `→ Cân nhắc rút ngắn session hoặc nhường seat`
-      break
-    case '7d_risk':
-      msg = `🔴 <b>7d Usage Risk</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Hiện tại: ${esc(String(metadata.current_7d ?? ''))}%\n`
-        + `Dự kiến: ${esc(String(metadata.projected ?? ''))}% (còn ${esc(String(metadata.remaining_sessions ?? ''))} sessions)\n`
-        + `→ Cần giảm tải hoặc chuyển sang seat khác`
-      break
-    case 'quota_forecast': {
-      const daysFmt = metadata.hours_to_full ? (Number(metadata.hours_to_full) / 24).toFixed(1) : '?'
-      const slope = metadata.slope_per_hour ? Number(metadata.slope_per_hour).toFixed(1) : '?'
-      const resetsIn = metadata.resets_at
-        ? ((new Date(metadata.resets_at as string).getTime() - Date.now()) / 3600_000 / 24).toFixed(1)
-        : null
-      msg = `📈 <b>Quota Forecast Warning</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Hiện: ${esc(String(metadata.pct ?? ''))}% | Tăng: ${esc(slope)}%/h\n`
-        + `Dự kiến chạm 100% trong ~${esc(daysFmt)} ngày`
-        + (resetsIn ? `\nReset sau ${esc(resetsIn)} ngày` : '')
-      break
-    }
-    case 'fast_burn': {
-      const rate = metadata.burn_rate_per_hour ?? metadata.velocity ?? metadata.pct
-      const mins = metadata.minutes_to_full ?? (metadata.eta_hours != null ? Math.round(Number(metadata.eta_hours) * 60) : null)
-      msg = `⚡ <b>Fast Burn Alert</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Tiêu hao: ${esc(String(rate ?? ''))}%/h\n`
-        + `Hiện: ${esc(String(metadata.pct ?? ''))}%`
-        + (mins != null ? ` | Còn ~${esc(String(mins))} phút` : '')
-      break
-    }
-    case 'unexpected_activity':
-      msg = `🟡 <b>Hoạt động ngoài dự kiến</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Seat đang hoạt động ngoài giờ dự kiến`
-      break
-    case 'unexpected_idle':
-      msg = `🟡 <b>Rảnh ngoài dự kiến</b>\n`
-        + `Seat: <b>${esc(seatLabel)}</b>\n`
-        + `Seat không hoạt động trong giờ dự kiến`
-      break
-    default:
-      msg = `ℹ️ <b>${esc(type)}</b>\nSeat: <b>${esc(seatLabel)}</b>`
-      break
-  }
-
+  const msg = buildAlertMessage(type, seatLabel, metadata)
   const token = decrypt(user.telegram_bot_token)
   await sendMessageWithBot(token, user.telegram_chat_id, msg, user.telegram_topic_id ?? undefined, seatId)
 }

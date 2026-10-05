@@ -65,14 +65,22 @@ describe("QuotaForecastBar — 5h", () => {
     expect(screen.getByText(/Chưa có dữ liệu/)).toBeTruthy();
   });
 
-  it("renders safe label for low pct", () => {
-    render(<QuotaForecastBar type="5h" data={{ current_pct: 10, status: "safe" }} />);
-    expect(screen.getByText(/Còn nhiều/)).toBeTruthy();
+  // For the 5h window the goal is to USE the quota, so a high percentage is
+  // the good outcome — the labels rank utilization, not danger.
+  it.each([
+    [10, "Rất thấp"],
+    [30, "Thấp"],
+    [60, "Khá"],
+    [85, "Tận dụng tốt"],
+  ])("labels %i%% as %s", (pct, label) => {
+    render(<QuotaForecastBar type="5h" data={{ current_pct: pct, status: "safe" }} />);
+    expect(screen.getByText(new RegExp(label))).toBeTruthy();
   });
 
-  it("renders critical label for high pct", () => {
-    render(<QuotaForecastBar type="5h" data={{ current_pct: 85, status: "critical" }} />);
-    expect(screen.getByText(/Cao/)).toBeTruthy();
+  it("shows the percentage alongside the label", () => {
+    render(<QuotaForecastBar type="5h" data={{ current_pct: 85, status: "safe" }} />);
+    // The value and the "%" are separate text nodes; match the wrapping element.
+    expect(screen.getByText("85%")).toBeTruthy();
   });
 });
 

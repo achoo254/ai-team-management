@@ -24,7 +24,8 @@ function fmtUsd(v: number): string { return `$${v.toFixed(0)}`; }
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
-function sign(v: number): string { return v >= 0 ? `+${v.toFixed(1)}%` : `${v.toFixed(1)}%`; }
+/** Deltas between two percentages are percentage points, not percent. */
+function signPp(v: number): string { return `${v >= 0 ? "+" : ""}${v.toFixed(1)} điểm %`; }
 
 function kpiColor(label: string, value: number): string {
   if (label === "utilPct") return value >= 70 ? "#22c55e" : value >= 50 ? "#eab308" : "#ef4444";
@@ -41,6 +42,7 @@ function suggestionText(s: RebalanceSuggestion): string {
 export function generateOverviewHtml(data: ExportData): string {
   const { kpis, wwHistory, ddHistory, seatStats, suggestions } = data;
   const now = new Date().toLocaleString("vi-VN", { dateStyle: "full", timeStyle: "short" });
+  const missingSeats = kpis.staleSeatCount + kpis.noDataSeatCount;
 
   // Build WW history table rows
   const wwRows = wwHistory.map(p =>
@@ -111,22 +113,27 @@ export function generateOverviewHtml(data: ExportData): string {
 <div class="kpi-grid">
   <div class="kpi">
     <div class="kpi-label">Mức sử dụng đội seat</div>
-    <div class="kpi-value" style="color:${kpiColor("utilPct", kpis.utilPct)}">${fmtPct(kpis.utilPct)}</div>
-    <div class="kpi-sub">${kpis.billableCount} seat active · ${kpis.utilPct >= 70 ? "khoẻ" : kpis.utilPct >= 50 ? "TB" : "kém"}</div>
+    <div class="kpi-value" style="color:${kpis.cycleUtilPct != null ? kpiColor("utilPct", kpis.cycleUtilPct) : "#94a3b8"}">${kpis.cycleUtilPct != null ? fmtPct(kpis.cycleUtilPct) : "—"}</div>
+    <div class="kpi-sub">${kpis.cycleUtilPct != null ? `TB ${kpis.cyclesConsidered} chu kỳ đã kết thúc · ${kpis.billableCount} seat active` : "Chưa đủ một chu kỳ hoàn tất"}</div>
   </div>
   <div class="kpi">
     <div class="kpi-label">Lãng phí / tháng</div>
-    <div class="kpi-value">${fmtUsd(kpis.wasteUsd)}</div>
-    <div class="kpi-sub">trên ${fmtUsd(kpis.totalCostUsd)} tổng chi phí</div>
+    <div class="kpi-value">${kpis.wasteUsd != null ? fmtUsd(kpis.wasteUsd) : "—"}</div>
+    <div class="kpi-sub">trên ${fmtUsd(kpis.totalCostUsd)} tổng chi phí${missingSeats > 0 ? ` · ${missingSeats} seat thiếu dữ liệu` : ""}</div>
   </div>
   <div class="kpi">
-    <div class="kpi-label">Thay đổi tuần</div>
-    <div class="kpi-value" style="color:${kpiColor("wwDelta", kpis.wwDelta)}">${sign(kpis.wwDelta)}</div>
-    <div class="kpi-sub">${kpis.wwDelta >= 0 ? "Dùng nhiều hơn tuần trước" : "Dùng ít hơn tuần trước"}</div>
+    <div class="kpi-label">Chu kỳ đang chạy</div>
+    <div class="kpi-value">${kpis.projectedUtilPct != null ? fmtPct(kpis.projectedUtilPct) : "—"}</div>
+    <div class="kpi-sub">đã dùng ${fmtPct(kpis.utilPct)}${kpis.projectedUtilPct != null ? " · dự kiến đạt khi reset" : ""}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Thay đổi chu kỳ</div>
+    <div class="kpi-value" style="color:${kpis.wwDelta != null ? kpiColor("wwDelta", kpis.wwDelta) : "#94a3b8"}">${kpis.wwDelta != null ? signPp(kpis.wwDelta) : "—"}</div>
+    <div class="kpi-sub">${kpis.wwDelta != null ? (kpis.wwDelta >= 0 ? "Dùng nhiều hơn chu kỳ trước" : "Dùng ít hơn chu kỳ trước") : "Cần 2 chu kỳ hoàn tất"}</div>
   </div>
   <div class="kpi">
     <div class="kpi-label">Thay đổi ngày</div>
-    <div class="kpi-value" style="color:${kpiColor("ddDelta", kpis.ddDelta ?? 0)}">${kpis.ddDelta != null ? sign(kpis.ddDelta) : "N/A"}</div>
+    <div class="kpi-value" style="color:${kpiColor("ddDelta", kpis.ddDelta ?? 0)}">${kpis.ddDelta != null ? signPp(kpis.ddDelta) : "N/A"}</div>
     <div class="kpi-sub">${kpis.ddDelta != null ? (kpis.ddDelta >= 0 ? "Hôm nay dùng nhiều hơn" : "Hôm nay dùng ít hơn") : "Chưa đủ dữ liệu"}</div>
   </div>
   ${kpis.worstForecast ? `<div class="kpi">
@@ -136,9 +143,9 @@ export function generateOverviewHtml(data: ExportData): string {
   </div>` : ""}
 </div>
 
-<h2>Xu hướng tuần / tuần</h2>
+<h2>Xu hướng theo chu kỳ quota</h2>
 <table>
-  <thead><tr><th>Tuần bắt đầu</th><th>Sử dụng</th><th>Lãng phí</th></tr></thead>
+  <thead><tr><th>Chu kỳ bắt đầu</th><th>Sử dụng</th><th>Lãng phí</th></tr></thead>
   <tbody>${wwRows || '<tr><td colspan="3" class="empty">Chưa có dữ liệu</td></tr>'}</tbody>
 </table>
 

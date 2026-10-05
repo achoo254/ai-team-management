@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock config before importing service — anthropic-service reads config at module load time
-vi.mock("@/lib/config", () => ({
+// Mock config before importing service — anthropic-service destructures config
+// at module load time. Must mock the exact specifier the service imports
+// ('../config.js'), not an alias: a different module id would leave the real
+// config in place and the assertions would silently read empty strings.
+vi.mock("../../packages/api/src/config.js", () => ({
   config: {
     anthropic: {
       baseUrl: "https://api.anthropic.com",

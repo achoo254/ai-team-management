@@ -20,24 +20,34 @@ export default [
       },
     },
     rules: {
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      // `_` marks a deliberately ignored binding — argument, variable, or the
+      // error of a catch block we intentionally swallow.
+      "no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
     },
   },
   {
-    // CommonJS files (.cjs) — deploy configs, Claude hooks. Provide Node CJS globals.
+    // Claude Code hooks run as CommonJS under Node.
     files: ["**/*.cjs"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {
-        module: "readonly",
         require: "readonly",
+        module: "writable",
+        exports: "writable",
         __dirname: "readonly",
         __filename: "readonly",
-        exports: "writable",
+        Buffer: "readonly",
       },
     },
   },
   {
-    ignores: ["**/dist/", "**/node_modules/", "**/.next/"],
+    ignores: ["**/dist/", "**/node_modules/", "**/.next/", "**/coverage/"],
   },
 ];

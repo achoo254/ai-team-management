@@ -58,26 +58,36 @@ describe('getMonthlyCostUsd', () => {
 
 // ── Billable cost math ────────────────────────────────────────────────────────
 
+/** Mirrors computeFleetKpis: waste is summed per seat that has completed-cycle
+ *  data, so a seat we know nothing about contributes $0 rather than reading as
+ *  100% wasted. */
+function wasteFromCycleUtil(seatAvgPcts: number[], monthlyCost: number): number {
+  return seatAvgPcts.reduce((sum, pct) => sum + monthlyCost * Math.max(0, 1 - pct / 100), 0)
+}
+
 describe('billable cost math', () => {
-  it('wasteUsd = 0 when utilPct = 100', () => {
-    const totalCostUsd = 3 * 125
-    const utilPct = 100
-    const wasteUsd = totalCostUsd * (1 - utilPct / 100)
-    expect(wasteUsd).toBe(0)
+  it('no waste when every seat burns its full cycle quota', () => {
+    expect(wasteFromCycleUtil([100, 100, 100], 125)).toBe(0)
   })
 
-  it('wasteUsd = totalCostUsd when utilPct = 0', () => {
-    const totalCostUsd = 3 * 125
-    const utilPct = 0
-    const wasteUsd = totalCostUsd * (1 - utilPct / 100)
-    expect(wasteUsd).toBe(totalCostUsd)
+  it('full cost is wasted when no seat consumes anything', () => {
+    expect(wasteFromCycleUtil([0, 0, 0], 125)).toBe(3 * 125)
   })
 
-  it('wasteUsd computation at 60% util', () => {
-    const totalCostUsd = 4 * 125 // 4 seats
-    const utilPct = 60
-    const wasteUsd = totalCostUsd * (1 - utilPct / 100)
-    expect(wasteUsd).toBeCloseTo(200) // 500 * 0.4
+  it('prices each seat on its own cycle utilization', () => {
+    // 90% + 50% used → 0.1 + 0.5 of a seat wasted
+    expect(wasteFromCycleUtil([90, 50], 125)).toBeCloseTo(75)
+  })
+
+  it('seats without completed-cycle data contribute nothing', () => {
+    const withData = [80, 80]
+    // Two more seats exist but have no data; they must not be priced as waste.
+    expect(wasteFromCycleUtil(withData, 125)).toBeCloseTo(50)
+    expect(wasteFromCycleUtil(withData, 125)).toBeLessThan(4 * 125)
+  })
+
+  it('never returns negative waste when a seat overshoots 100%', () => {
+    expect(wasteFromCycleUtil([105], 125)).toBe(0)
   })
 
   it('totalCostUsd = billableCount * monthlyCost', () => {

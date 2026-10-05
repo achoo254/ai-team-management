@@ -91,6 +91,7 @@ async function insertIfNewPerUser(
   const alert = await Alert.create({
     user_id: user._id,
     seat_id: seatId,
+    seat_label: seatLabel,
     type,
     window,
     message,
@@ -126,6 +127,7 @@ async function insertIfNewSeatWide(
   const alert = await Alert.create({
     user_id: null,
     seat_id: seatId,
+    seat_label: seatLabel,
     type,
     window: null,
     message,

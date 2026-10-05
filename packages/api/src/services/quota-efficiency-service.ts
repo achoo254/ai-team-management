@@ -1,4 +1,5 @@
 import type { SeatForecast } from './quota-forecast-service.js'
+import { getCycleCostUsd, cycleUsdToMonthly } from './seat-cost.js'
 
 // ── Efficiency classification ────────────────────────────────────────────────
 
@@ -7,9 +8,6 @@ const MIN_HOURS_FOR_CLASSIFICATION = 24
 
 /** Projected pct at reset >= this = optimal */
 const OPTIMAL_THRESHOLD_PCT = 85
-
-/** Flat cost per seat per month (USD) */
-export const SEAT_MONTHLY_COST_USD = 125
 
 export type SeatEfficiencyBucket = 'optimal' | 'overload' | 'waste' | 'unknown'
 
@@ -26,10 +24,16 @@ export interface FleetEfficiency {
   overload: Array<{ seat_id: string; seat_label: string; hours_early: number }>
   waste: {
     seats: Array<{ seat_id: string; seat_label: string; projected_pct: number; waste_pct: number; waste_usd: number }>
+    /** Waste for one 7-day cycle. */
     total_waste_usd: number
+    /** Same waste expressed per month, so callers never re-derive the ratio. */
+    total_waste_usd_monthly: number
   }
   unknown_count: number
   total_seats: number
+  /** Fleet mean of projected-at-reset pct (capped at 100) across classifiable
+   *  seats. Null when no seat can be projected yet. */
+  projected_util_pct: number | null
 }
 
 /** Classify a single seat into efficiency bucket based on projected pct at reset. Pure function. */
@@ -37,6 +41,11 @@ export function classifyEfficiency(f: SeatForecast, now: Date): SeatEfficiencyRe
   const UNKNOWN: SeatEfficiencyResult = { bucket: 'unknown', projected_pct: null, waste_pct: null, hours_early: null }
 
   if (f.status === 'collecting' || !f.resets_at) return UNKNOWN
+
+  // safe_decreasing carries slope_per_hour = 0 because the counter moved
+  // backwards (upstream correction), not because the seat stopped consuming.
+  // Projecting a flat line from it would mislabel an active seat as waste.
+  if (f.status === 'safe_decreasing') return UNKNOWN
 
   const resetsAt = new Date(f.resets_at)
   const hoursToReset = (resetsAt.getTime() - now.getTime()) / 3600_000
@@ -75,15 +84,18 @@ export function computeFleetEfficiency(
   const result: FleetEfficiency = {
     optimal_count: 0,
     overload: [],
-    waste: { seats: [], total_waste_usd: 0 },
+    waste: { seats: [], total_waste_usd: 0, total_waste_usd_monthly: 0 },
     unknown_count: 0,
     total_seats: forecasts.length,
+    projected_util_pct: null,
   }
 
-  const costPerCycle = SEAT_MONTHLY_COST_USD * (7 / 30)
+  const costPerCycle = getCycleCostUsd()
+  const projections: number[] = []
 
   for (const f of forecasts) {
     const eff = classifyEfficiency(f, now)
+    if (eff.projected_pct != null) projections.push(eff.projected_pct)
     switch (eff.bucket) {
       case 'optimal':
         result.optimal_count++
@@ -111,6 +123,10 @@ export function computeFleetEfficiency(
     }
   }
 
+  result.waste.total_waste_usd_monthly = Math.round(cycleUsdToMonthly(result.waste.total_waste_usd))
   result.waste.total_waste_usd = Math.round(result.waste.total_waste_usd)
+  result.projected_util_pct = projections.length > 0
+    ? projections.reduce((s, v) => s + v, 0) / projections.length
+    : null
   return result
 }

@@ -78,14 +78,15 @@ async function start() {
     checkAndSendScheduledReports().catch(console.error)
   }, { timezone: 'Asia/Ho_Chi_Minh' })
 
-  // Cron: Every 5 min — check and refresh expiring OAuth tokens
-  cron.schedule('*/5 * * * *', () => {
-    console.log('[Cron] Checking token expiry...')
-    checkAndRefreshExpiring().catch(console.error)
-  }, { timezone: 'Asia/Ho_Chi_Minh' })
-
-  // Cron: Every 5 min — collect usage snapshots, then check alerts
+  // Cron: Every 5 min — refresh expiring tokens, collect usage, then check alerts.
+  // These three MUST stay in one sequential job. Anthropic revokes the previous
+  // access token the moment a refresh succeeds, so a collector running
+  // concurrently still holds a token that dies mid-flight and comes back as
+  // HTTP 401 — indistinguishable from a genuinely dead credential, and it
+  // raised false "token failure" alerts on ~62% of all refreshes.
   cron.schedule('*/5 * * * *', async () => {
+    console.log('[Cron] Checking token expiry...')
+    await checkAndRefreshExpiring().catch(console.error)
     console.log('[Cron] Triggering usage collection...')
     await collectAllUsage().catch(console.error)
     console.log('[Cron] Checking snapshot alerts...')

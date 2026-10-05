@@ -1,7 +1,16 @@
 // Setup file for jsdom environment (hooks + UI tests).
 // Also loaded in node environment — all DOM operations are guarded by typeof window.
 // Does NOT connect to MongoDB — that is handled by setup.ts with a node-env guard.
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
+
+// Testing Library auto-cleanup only self-registers when `globals: true`. This
+// workspace runs with `globals: false`, so without an explicit hook every
+// render stacks up in the same document and queries start reporting
+// "Found multiple elements" from a previous test's markup.
+if (typeof window !== "undefined") {
+  const { cleanup } = await import("@testing-library/react");
+  afterEach(cleanup);
+}
 
 // sonner is a toast library that requires a DOM portal — mock it out entirely
 vi.mock("sonner", () => ({
