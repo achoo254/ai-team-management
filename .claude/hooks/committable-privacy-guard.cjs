@@ -78,6 +78,39 @@ function isCommittable(filePath) {
   }
 }
 
+/**
+ * Whether the file sits under a directory this machine's user lets the AI read
+ * without asking: one absolute path per line in <AGENTKIT_HOME>/privacy-allow-dirs
+ * (default ~/.agentkit; lines starting with # are comments). The list lives
+ * outside the repo, so a machine without it keeps the guard unchanged.
+ */
+function isInUserAllowedDir(filePath) {
+  const fs = require('fs');
+  const os = require('os');
+  const home = process.env.AGENTKIT_HOME || path.join(os.homedir(), '.agentkit');
+  let lines;
+  try {
+    lines = fs.readFileSync(path.join(home, 'privacy-allow-dirs'), 'utf8').split(/\r?\n/);
+  } catch (_) {
+    return false;
+  }
+  const realOrSelf = (p) => {
+    try {
+      return fs.realpathSync(p);
+    } catch (_) {
+      return p;
+    }
+  };
+  const target = realOrSelf(path.resolve(filePath));
+  return lines
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && path.isAbsolute(line) && !/(^|[\\/])\.\.([\\/]|$)/.test(line))
+    .some((dir) => {
+      const relative = path.relative(realOrSelf(dir), target);
+      return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+    });
+}
+
 function targetPath(toolInput) {
   if (!toolInput) return '';
   return toolInput.file_path || toolInput.path || '';
@@ -134,6 +167,9 @@ ${JSON.stringify(promptData, null, 2)}
 
     // Not a sensitive-named file → allow.
     if (!filePath || !isPrivacySensitive(filePath)) process.exit(0);
+
+    // Under a directory the user allow-listed on this machine → allow.
+    if (isInUserAllowedDir(filePath)) process.exit(0);
 
     // Committable (not gitignored) → allow freely.
     if (isCommittable(filePath)) {
